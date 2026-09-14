@@ -1,0 +1,40 @@
+{
+  "name": "codex-moa",
+  "version": "0.19.0",
+  "description": "Codex-orchestrated mixture of agents for KimiCode, ZCode, and DeepSeekHarness.",
+  "author": {
+    "name": "Flipped929"
+  },
+  "homepage": "https://github.com/Flipped929/codex-moa",
+  "repository": "https://github.com/Flipped929/codex-moa",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "moa",
+    "mixture-of-agents",
+    "kimi",
+    "glm",
+    "deepseek",
+    "deepseek-harness"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Codex MOA",
+    "shortDescription": "Orchestrate KimiCode, ZCode, and DeepSeekHarness from Codex.",
+    "longDescription": "Codex MOA keeps Codex as the captain while delegating execution to KimiCode and ZCode and independent audit to DeepSeekHarness. It uses structured task contracts, isolated worktrees, blackboard artifacts, and cost-aware scheduling.",
+    "developerName": "Flipped929",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Plan a heterogeneous multi-agent review for this task.",
+      "Audit the current diff with DeepSeekHarness.",
+      "Implement this task through the codex-moa workflow."
+    ],
+    "brandColor": "#22C55E"
+  }
+}

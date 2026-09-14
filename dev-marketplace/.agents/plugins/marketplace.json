@@ -1,0 +1,20 @@
+{
+  "name": "codex-moa-local",
+  "interface": {
+    "displayName": "Codex MOA Local"
+  },
+  "plugins": [
+    {
+      "name": "codex-moa",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex-moa"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

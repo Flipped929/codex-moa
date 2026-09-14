@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "codex-moa": {
+      "command": "node",
+      "args": [
+        "./mcp/server.bundle.mjs",
+        "--stdio"
+      ],
+      "cwd": ".",
+      "tool_timeout_sec": 1800
+    }
+  }
+}

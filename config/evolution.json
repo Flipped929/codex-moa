@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "audit": {
+    "avoidCaptainFamily": true,
+    "strict": false,
+    "preferredByCaptainFamily": {
+      "deepseek": [
+        "GLM-5.3",
+        "kimi-k3"
+      ],
+      "zhipu": [
+        "DeepSeek-flash",
+        "kimi-k3"
+      ],
+      "moonshot": [
+        "GLM-5.3",
+        "DeepSeek-flash"
+      ],
+      "openai": [
+        "GLM-5.3",
+        "DeepSeek-flash"
+      ]
+    }
+  },
+  "routing": {
+    "preferFastForMediumReview": true,
+    "quotaLowThreshold": 10,
+    "experiment": {
+      "id": "medium-review-tier",
+      "enabled": true,
+      "minSamples": 8,
+      "rollbackMargin": 0.15,
+      "control": {
+        "weight": 50,
+        "policyOverrides": {
+          "preferFastForMediumReview": true
+        }
+      },
+      "challenger": {
+        "weight": 50,
+        "policyOverrides": {
+          "preferFastForMediumReview": false
+        }
+      }
+    }
+  },
+  "timeouts": {
+    "fastMs": 900000,
+    "deepMs": 1200000
+  },
+  "reasoning": {
+    "defaultByLevel": {
+      "L0": "off",
+      "L1": "low",
+      "L2": "high",
+      "L3": "max"
+    },
+    "auditByStakes": {
+      "medium": "high",
+      "high": "max"
+    },
+    "architectByLevel": {
+      "L2": "high",
+      "L3": "max"
+    },
+    "vision": "high",
+    "quotaDowngradeBelow": 10
+  }
+}

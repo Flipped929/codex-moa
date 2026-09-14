@@ -1,0 +1,49 @@
+{
+  "name": "codex-moa",
+  "version": "0.19.0",
+  "description": "Codex orchestrated mixture-of-agents for KimiCode, ZCode, and DeepSeekHarness",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "doctor": "node scripts/doctor.mjs",
+    "mcp": "node mcp/server.mjs --stdio",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "build": "esbuild mcp/server.mjs --bundle --platform=node --format=esm --target=node20 --outfile=mcp/server.bundle.mjs",
+    "upgrade-check": "node scripts/upgrade-check.mjs",
+    "verify": "npm run build && npm test && npm run upgrade-check",
+    "quota": "node scripts/quota-refresh.mjs",
+    "claudebar:install": "node scripts/install-claudebar-extension.mjs",
+    "claudebar:install:write": "node scripts/install-claudebar-extension.mjs --write",
+    "ccswitch:snapshot": "node scripts/ccswitch-snapshot.mjs",
+    "ccswitch:skill": "node scripts/ccswitch-sync-skill.mjs",
+    "ccswitch:skill:write": "node scripts/ccswitch-sync-skill.mjs --write",
+    "evolve": "node scripts/evolve.mjs",
+    "evolve:status": "node scripts/evolve.mjs status",
+    "evolve:propose": "node scripts/evolve.mjs propose",
+    "ccswitch:reasoning": "node scripts/ccswitch-reasoning-audit.mjs",
+    "ccswitch:routing": "node scripts/ccswitch-routing-audit.mjs",
+    "ccswitch:patch-reasoning": "node scripts/ccswitch-patch-reasoning.mjs",
+    "ccswitch:patch-reasoning:write": "node scripts/ccswitch-patch-reasoning.mjs --write",
+    "ccswitch:limits": "node scripts/ccswitch-limits-audit.mjs",
+    "ccswitch:patch-metadata": "node scripts/ccswitch-patch-reasoning.mjs",
+    "ccswitch:patch-metadata:write": "node scripts/ccswitch-patch-reasoning.mjs --write",
+    "acp:smoke": "node scripts/acp-smoke.mjs",
+    "dashboard": "node scripts/moa-dashboard.mjs",
+    "control": "node scripts/moa-control.mjs",
+    "health": "node scripts/health.mjs",
+    "retention": "node scripts/retention.mjs",
+    "patch:metrics": "node scripts/patch-metrics.mjs",
+    "provider:recovery": "node scripts/provider-recovery.mjs"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^1.4.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.6.5"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
+  }
+}

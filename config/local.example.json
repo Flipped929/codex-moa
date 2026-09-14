@@ -1,0 +1,72 @@
+{
+  "commands": {
+    "kimi": {
+      "command": "kimi",
+      "args": []
+    },
+    "zcode": {
+      "command": "node",
+      "args": [
+        "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"
+      ]
+    },
+    "dsh": {
+      "command": "dsh",
+      "args": []
+    }
+  },
+  "profiles": {
+    "dsh": {
+      "fast": "codex-dsh-audit-fast",
+      "deep": "codex-dsh-audit-deep"
+    }
+  },
+  "zcode": {
+    "desktopConfig": "~/.zcode/v2/config.json",
+    "settingsPath": "~/.zcode/v2/setting.json",
+    "cliConfig": "~/.zcode/cli/config.json",
+    "provider": "",
+    "headlessProvider": "builtin:bigmodel-coding-plan",
+    "headlessHome": "~/.codex-moa/zcode-home"
+  },
+  "worktrees": {
+    "cleanup": "clean_success",
+    "staleAfterHours": 168
+  },
+  "budgets": {
+    "enforce": true,
+    "maxTokens": 2000000,
+    "maxEstimatedUsd": 20,
+    "maxDurationMs": 3600000,
+    "maxContextUsed": 500000
+  },
+  "retention": {
+    "enabled": true,
+    "blackboard": {
+      "maxAgeDays": 30,
+      "maxTasks": 1000
+    },
+    "jobs": {
+      "maxAgeDays": 14,
+      "maxJobs": 500
+    },
+    "worktrees": {
+      "maxAgeDays": 14,
+      "onlyClean": true
+    },
+    "costLedger": {
+      "maxAgeDays": 365,
+      "maxEntries": 100000
+    },
+    "routingHistory": {
+      "maxEntriesPerExperiment": 500
+    }
+  },
+  "providerHealth": {
+    "failureThreshold": 3,
+    "baseOpenMs": 60000,
+    "maxOpenMs": 3600000,
+    "latencyWarningMs": 10000,
+    "windowSize": 100
+  }
+}

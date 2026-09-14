@@ -1,0 +1,89 @@
+{
+  "blackboardDir": "~/.codex-moa/blackboard",
+  "defaultCwd": ".",
+  "defaultTimeoutMs": 900000,
+  "maxConcurrentSeats": 3,
+  "maxOutputChars": 24000,
+  "commands": {
+    "kimi": {
+      "command": "kimi",
+      "args": []
+    },
+    "zcode": {
+      "command": "node",
+      "args": [
+        "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"
+      ]
+    },
+    "dsh": {
+      "command": "dsh",
+      "args": []
+    }
+  },
+  "profiles": {
+    "dsh": {
+      "fast": "headless",
+      "deep": "headless"
+    }
+  },
+  "safety": {
+    "externalAgentsEnabled": true,
+    "allowWriteByDefault": false,
+    "stripSecretEnv": true,
+    "redactLogs": true
+  },
+  "zcode": {
+    "desktopConfig": "~/.zcode/v2/config.json",
+    "settingsPath": "~/.zcode/v2/setting.json",
+    "cliConfig": "~/.zcode/cli/config.json",
+    "provider": "",
+    "headlessProvider": "",
+    "headlessHome": "~/.codex-moa/zcode-home"
+  },
+  "quota": {
+    "snapshotPath": "~/.codex-moa/quota.json",
+    "zaiRegion": "bigmodel-cn",
+    "maxAgeMs": 300000,
+    "refreshOnRun": true
+  },
+  "worktrees": {
+    "cleanup": "never",
+    "staleAfterHours": 168
+  },
+  "budgets": {
+    "enforce": true,
+    "maxTokens": null,
+    "maxEstimatedUsd": null,
+    "maxDurationMs": null,
+    "maxContextUsed": null
+  },
+  "retention": {
+    "enabled": true,
+    "blackboard": {
+      "maxAgeDays": 14,
+      "maxTasks": 500
+    },
+    "jobs": {
+      "maxAgeDays": 7,
+      "maxJobs": 200
+    },
+    "worktrees": {
+      "maxAgeDays": 7,
+      "onlyClean": true
+    },
+    "costLedger": {
+      "maxAgeDays": 180,
+      "maxEntries": 50000
+    },
+    "routingHistory": {
+      "maxEntriesPerExperiment": 200
+    }
+  },
+  "providerHealth": {
+    "failureThreshold": 3,
+    "baseOpenMs": 60000,
+    "maxOpenMs": 3600000,
+    "latencyWarningMs": 10000,
+    "windowSize": 100
+  }
+}

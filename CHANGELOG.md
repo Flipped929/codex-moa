@@ -1,0 +1,163 @@
+# Changelog
+
+## 0.19.0
+
+- Added retention/compaction planning and application for blackboard, jobs, worktrees, cost ledger, and routing history.
+- Protected active jobs and running seats from retention.
+- Added patch acceptance metrics for check/apply/revert, conflicts, acceptance rate, and per-seat/per-model performance.
+- Added provider circuit breaker state with exponential backoff.
+- Added provider error classification for auth, rate-limit, timeout, server, and provider-business errors.
+- Added p50/p95 provider latency tracking and half-open recovery probes.
+- Added `moa_retention`, `moa_patch_metrics`, and `moa_provider_recovery`.
+
+## 0.18.0
+
+- Added task-level budget enforcement for tokens, estimated USD, wall time, and peak context.
+- Budget checks run before DAG layers and repair rounds; unstarted nodes are blocked on violation.
+- Added provider health-aware routing for automatic plans.
+- Critical/inactive providers are replaced with healthy same-tier models when possible.
+- Added `allowUnhealthy` and `respectHealth` controls for automatic dispatch.
+- Added budget, provider-routing, and enforcement tests.
+
+## 0.17.0
+
+- Added structured execution and audit result parsing, including fenced JSON support.
+- Added normalized AuditorFinding records with P0/P1/P2 severity, evidence, and recommendations.
+- Navigator now consumes structured audit blocks, parse errors, conflict markers, and partial writes.
+- Added bounded repair rounds after auditor blocks, with executor repair and auditor re-check.
+- Checkpoint nodes now preserve per-round result history.
+- Expanded tests for structured parsing and repair-round orchestration.
+
+## 0.16.0
+
+- Added worktree state inspection with tracked/untracked/deleted files, conflict markers, diff size, and partial-write detection.
+- Added binary patch check/apply/revert operations and `moa_worktrees`.
+- Added worktree cleanup/prune controls and the `worktrees.cleanup` policy.
+- Added a generic locked JSON store with schema migrations.
+- Migrated seat registry, control requests, routing experiments, and continuity sessions to atomic read-modify-write updates.
+- Added concurrent-update and migration tests.
+
+## 0.15.0
+
+- Added persisted async job handles: `moa_start`, `moa_job_status`, `moa_job_wait`, and `moa_job_cancel`.
+- Added a detached job worker with job/input/log files under `~/.codex-moa/jobs`.
+- Added graceful job cancellation that marks unstarted DAG nodes and interrupts active ACP/ZCode seats.
+- Added ACP `usage_update` collection and unified context usage in seat results and the cost ledger.
+- Added ZCode isolated `headlessHome` support so codex-moa does not overwrite the TUI/GUI CLI config.
+- Added CI verification on Node 20 and Node 22.
+
+## 0.14.0
+
+- Added real ACP end-to-end smoke coverage and fixed Kimi/DSH cancellation through `session/cancel`.
+- Added a ZCode Protocol bridge so the ZCode app-server participates through the same seat contract as native ACP seats.
+- Added Task DAG checkpoint persistence, partial-run recovery, and `resume=true` execution.
+- Added a cost ledger over tokens, duration, quota context, and optional configured USD rates.
+- Added provider health aggregation and the `moa_health` MCP tool.
+- Added deterministic routing A/B experiments with sample thresholds, success-rate comparison, and automatic rollback to control.
+- Added `moa_interrupt`, persisted control requests, and a local visual dashboard with per-seat cancellation.
+- Expanded the ClaudeBar extension with quota, cost, runtime metrics, and Navigator/provider status sections.
+- Added ACP, ZCode Protocol, checkpoint/resume, cost/health, routing experiment, and control-store tests.
+
+## 0.13.0
+
+- Updated CC Switch integration for v3.20.3 native Responses direct mode.
+- Added direct/proxy transport detection for Codex live and provider configurations.
+- Added `ccswitch:routing` and routing audits in `moa_ccswitch`, `moa_models`, and `moa_doctor`.
+- Extended the metadata patch to repair stale Kimi/GLM upstream-format metadata and the GLM Responses endpoint.
+- Migrated the expired DeepSeek V4.1 Flash alias to the current official `deepseek-flash` model ID.
+- Kept local-routing compatibility for providers that still expose Chat Completions or Anthropic Messages.
+
+## 0.12.0
+
+- Added optional ACP persistent seat runtime for Kimi, DSH, and ZCode.
+- Added Task DAG nodes, edges, and execution layers.
+- Added package and user Role/Roster registries.
+- Added ACP process listing in `moa_seats`.
+- Added persistent session resume metadata.
+- Added token usage extraction into seat results and the seat registry.
+
+## 0.11.0
+
+- Added persistent Seat Registry.
+- Added Git worktree isolation and automatic diff capture.
+- Added context-pack generation and `moa_context`.
+- Added Navigator run review.
+- Added Memory distillation.
+- Added `moa_seats`.
+
+## 0.10.0
+
+- Added durable Task Memory Capsules independent of context compaction.
+- Added `moa_memory` load/remember/list actions.
+- Added automatic memory-pack injection and episode recording.
+- Added structured decisions, facts, files, tests, failed attempts, and open questions.
+
+## 0.9.0
+
+- Added model context/output capability metadata and balanced runtime budgets.
+- Extended the idempotent CC Switch metadata patch to fill provider context/output gaps.
+- Added Kimi, ZCode, and DSH budget enforcement.
+- Added `continuityKey` session persistence.
+- Added Kimi/ZCode session resume and same-model continuity protection.
+- Added limits and continuity documentation.
+
+## 0.8.0
+
+- Added unified reasoning effort selection and enforcement.
+- Added reasoning capability mapping for all five models.
+- Added CC Switch reasoning completeness audit.
+- Added per-harness enforcement for Kimi, ZCode, and DSH.
+- Added task-, role-, stakes-, and quota-aware effort selection.
+- Added idempotent CC Switch reasoning metadata patch with database backup.
+
+## 0.7.0
+
+- Added human-gated self-evolution proposals.
+- Added evolution event and outcome ledger.
+- Added terminal-only approval, apply, and rollback gates so Codex cannot self-approve.
+- Added `moa_evolve` and `npm run evolve:*` commands.
+- Restricted automatic evolution to `config/evolution.json`.
+- Added policy-driven cross-family audit routing.
+
+## 0.6.0
+
+- Codex-selected model is now treated as the captain contract.
+- Added `moa_captain` and captain metadata in plan/run results.
+- Added same-family audit warnings and optional strict enforcement.
+- Added explicit `captainModel` support.
+- Added captain fallback resolution from Codex config and CC Switch.
+
+## 0.5.0
+
+- Added read-only CC Switch provider/model and Skill integration.
+- Added `moa_ccswitch`.
+- Added `ccswitch:snapshot` and `ccswitch:skill` workflows.
+- Added credentials-safe tests for CC Switch metadata.
+
+## 0.4.0
+
+- Added unified KimiCode, Z.ai/GLM, and DeepSeek quota refresh.
+- Added `moa_quota` and quota awareness in planning/delegation.
+- Added ClaudeBar menu-bar/Notch extension integration.
+- Added quota documentation and parser tests.
+
+## 0.3.0
+
+- Added MCP `--health` and `moa_compat`.
+- Added `npm run upgrade-check` for Codex upgrades.
+- Added upgrade-safety documentation.
+- Kept the plugin manifest minimal and independent of Codex internals.
+
+## 0.2.0
+
+- Added a canonical registry for the five available sub-agent models.
+- Added `moa_models` and `moa_delegate`.
+- Codex can now assign exact models per sub-agent.
+- KimiCode models are passed through `-m`.
+- ZCode models are enforced by synchronizing provider and `provider/model` into `~/.zcode/cli/config.json`.
+- DSH audit seats enforce `DeepSeek-flash` through the dedicated profile.
+- Added ZCode provider/model resolution tests.
+
+## 0.1.0
+
+- Initial Codex plugin, MCP server, adapters, routing, blackboard, and tests.

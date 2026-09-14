@@ -1,0 +1,218 @@
+{
+  "models": {
+    "kimi-k3": {
+      "id": "kimi-k3",
+      "displayName": "Kimi K3",
+      "harness": "kimi",
+      "providerModel": "kimi-code/k3",
+      "family": "moonshot",
+      "tier": "deep",
+      "capabilities": [
+        "text",
+        "image",
+        "video",
+        "long-context",
+        "tool-use"
+      ],
+      "reasoning": {
+        "supported": [
+          "low",
+          "high",
+          "max"
+        ],
+        "default": "high",
+        "canDisable": false
+      },
+      "limits": {
+        "contextWindow": 1048576,
+        "maxOutputTokens": 131072,
+        "recommendedContextTokens": 262144,
+        "recommendedOutputTokens": 16384
+      }
+    },
+    "kimi-2.8": {
+      "id": "kimi-2.8",
+      "displayName": "Kimi 2.8 For Coding",
+      "harness": "kimi",
+      "providerModel": "kimi-code/kimi-for-coding",
+      "family": "moonshot",
+      "tier": "fast",
+      "capabilities": [
+        "text",
+        "image",
+        "long-context",
+        "tool-use"
+      ],
+      "reasoning": {
+        "supported": [
+          "high"
+        ],
+        "default": "high",
+        "canDisable": false
+      },
+      "limits": {
+        "contextWindow": 262144,
+        "maxOutputTokens": 131072,
+        "recommendedContextTokens": 131072,
+        "recommendedOutputTokens": 16384
+      }
+    },
+    "GLM-5.3": {
+      "id": "GLM-5.3",
+      "displayName": "GLM-5.3",
+      "harness": "zcode",
+      "providerModel": "GLM-5.3",
+      "family": "zhipu",
+      "tier": "deep",
+      "capabilities": [
+        "text",
+        "long-context",
+        "tool-use"
+      ],
+      "reasoning": {
+        "supported": [
+          "low",
+          "high",
+          "max"
+        ],
+        "default": "max",
+        "canDisable": false
+      },
+      "limits": {
+        "contextWindow": 1000000,
+        "maxOutputTokens": 128000,
+        "recommendedContextTokens": 262144,
+        "recommendedOutputTokens": 32768
+      }
+    },
+    "GLM-5.3-flash": {
+      "id": "GLM-5.3-flash",
+      "displayName": "GLM-5.3-Flash",
+      "harness": "zcode",
+      "providerModel": "GLM-5.3-Flash",
+      "family": "zhipu",
+      "tier": "fast",
+      "capabilities": [
+        "text",
+        "image",
+        "video",
+        "file",
+        "long-context",
+        "tool-use"
+      ],
+      "reasoning": {
+        "supported": [
+          "low",
+          "high",
+          "max"
+        ],
+        "default": "max",
+        "canDisable": false
+      },
+      "limits": {
+        "contextWindow": 1000000,
+        "maxOutputTokens": 128000,
+        "recommendedContextTokens": 131072,
+        "recommendedOutputTokens": 16384
+      }
+    },
+    "DeepSeek-flash": {
+      "id": "DeepSeek-flash",
+      "displayName": "DeepSeek V4.1 Flash",
+      "harness": "dsh",
+      "providerModel": "deepseek-flash",
+      "family": "deepseek",
+      "tier": "fast",
+      "capabilities": [
+        "text",
+        "image",
+        "long-context",
+        "tool-use",
+        "audit"
+      ],
+      "reasoning": {
+        "supported": [
+          "off",
+          "low",
+          "high",
+          "max"
+        ],
+        "default": "high",
+        "canDisable": true
+      },
+      "limits": {
+        "contextWindow": 1000000,
+        "maxOutputTokens": 384000,
+        "recommendedContextTokens": 262144,
+        "recommendedOutputTokens": 32768
+      }
+    }
+  },
+  "aliases": {
+    "k3": "kimi-k3",
+    "kimi-k3": "kimi-k3",
+    "kimi-code/k3": "kimi-k3",
+    "kimi 2.8": "kimi-2.8",
+    "kimi-2.8": "kimi-2.8",
+    "kimi-for-coding": "kimi-2.8",
+    "kimi-code/kimi-for-coding": "kimi-2.8",
+    "glm-5.3": "GLM-5.3",
+    "zai/glm-5.3": "GLM-5.3",
+    "glm-5.3-flash": "GLM-5.3-flash",
+    "zai/glm-5.3-flash": "GLM-5.3-flash",
+    "deepseek-flash": "DeepSeek-flash",
+    "deepseek-v4-flash": "DeepSeek-flash",
+    "deepseek-v4.1-flash": "DeepSeek-flash",
+    "deepseek-v4.1": "DeepSeek-flash"
+  },
+  "tiers": {
+    "fast": {
+      "kimi": "kimi-2.8",
+      "zcode": "GLM-5.3-flash",
+      "dsh": "DeepSeek-flash"
+    },
+    "deep": {
+      "kimi": "kimi-k3",
+      "zcode": "GLM-5.3",
+      "dsh": "DeepSeek-flash"
+    }
+  },
+  "seats": {
+    "zcode-executor-fast": {
+      "harness": "zcode",
+      "modelTier": "fast",
+      "mode": "edit",
+      "role": "executor"
+    },
+    "zcode-executor-deep": {
+      "harness": "zcode",
+      "modelTier": "deep",
+      "mode": "build",
+      "role": "executor"
+    },
+    "kimi-architect": {
+      "harness": "kimi",
+      "modelTier": "deep",
+      "mode": "plan",
+      "role": "architect"
+    },
+    "kimi-vision": {
+      "harness": "kimi",
+      "modelTier": "deep",
+      "mode": "plan",
+      "role": "vision"
+    },
+    "dsh-auditor-fast": {
+      "harness": "dsh",
+      "modelTier": "fast",
+      "mode": "plan",
+      "role": "auditor"
+    },
+    "dsh-auditor-deep": {
+      "harness": "dsh",
+      "modelTier": "deep",
+      "mode": "plan",
+      "role": "auditor"
+    }
+  }
+}

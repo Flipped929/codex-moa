@@ -1,0 +1,1 @@
+{"name":"executor","description":"Code execution seat","defaults":{"mode":"edit","modelTier":"fast","runtime":"cli"}}

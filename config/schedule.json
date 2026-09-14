@@ -1,0 +1,26 @@
+{
+  "timezone": "Asia/Shanghai",
+  "deepseek": {
+    "peakWeekdays": [
+      {
+        "start": "09:00",
+        "end": "12:00"
+      },
+      {
+        "start": "14:00",
+        "end": "18:00"
+      }
+    ],
+    "offPeakMultiplier": 0.5
+  },
+  "glmNightCampaign": {
+    "name": "GLM-5.3-Flash 夜间畅用活动",
+    "startDate": "2026-09-03",
+    "endDate": "2026-09-20",
+    "startTime": "23:00",
+    "endTime": "09:00",
+    "model": "GLM-5.3-Flash",
+    "zcodeQuotaMultiplier": 0,
+    "otherAgentQuotaMultiplier": 2
+  }
+}

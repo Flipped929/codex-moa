@@ -1,0 +1,8 @@
+.DS_Store
+node_modules/
+config/local.json
+config/models.local.json
+config/schedule.local.json
+*.log
+.coverage/
+config/evolution.local.json

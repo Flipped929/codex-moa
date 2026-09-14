@@ -1,0 +1,164 @@
+import { existsSync } from "node:fs";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+import { runCommand } from "./process.mjs";
+
+function expandHome(value) {
+  if (typeof value !== "string") return value;
+  if (value === "~") return homedir();
+  if (value.startsWith("~/")) return resolve(homedir(), value.slice(2));
+  return resolve(value);
+}
+
+export async function gitRoot(cwd) {
+  const result = await runCommand({ command: "git", args: ["rev-parse", "--show-toplevel"], cwd, timeoutMs: 10000 });
+  return result.ok ? result.stdout.trim() : null;
+}
+
+export async function currentHead(cwd) {
+  const result = await runCommand({ command: "git", args: ["rev-parse", "HEAD"], cwd, timeoutMs: 10000 });
+  return result.ok ? result.stdout.trim() : null;
+}
+
+function worktreeRoot(repo) {
+  const hash = createHash("sha256").update(resolve(repo)).digest("hex").slice(0, 12);
+  return join(expandHome("~/.codex-moa/worktrees"), hash);
+}
+
+export async function createWorktree({ cwd, taskId, seat }) {
+  const repo = await gitRoot(cwd);
+  if (!repo) return { supported: false, repo: null, path: null };
+  const path = join(worktreeRoot(repo), taskId, seat);
+  await mkdir(join(worktreeRoot(repo), taskId), { recursive: true });
+  if (existsSync(path)) return { supported: true, repo, path, baseCommit: await currentHead(repo), existing: true };
+  const result = await runCommand({
+    command: "git",
+    args: ["worktree", "add", "--detach", path, "HEAD"],
+    cwd: repo,
+    timeoutMs: 120000
+  });
+  if (!result.ok && !existsSync(path)) throw new Error(result.stderr || `git worktree add failed with exit ${result.code}`);
+  return { supported: true, repo, path, baseCommit: await currentHead(repo) };
+}
+
+function parseStatus(output) {
+  const lines = String(output ?? "").split(/\r?\n/).filter(Boolean);
+  const changedFiles = [];
+  const untrackedFiles = [];
+  const deletedFiles = [];
+  for (const line of lines) {
+    const code = line.slice(0, 2);
+    const path = line.slice(3).trim();
+    if (!path) continue;
+    if (code === "??") untrackedFiles.push(path);
+    else changedFiles.push(path);
+    if (code.includes("D")) deletedFiles.push(path);
+  }
+  return { changedFiles, untrackedFiles, deletedFiles };
+}
+
+export async function captureWorktreeDiff(path) {
+  if (!path || !existsSync(path)) return "";
+  const status = await runCommand({ command: "git", args: ["status", "--porcelain=v1", "--untracked-files=all"], cwd: path, timeoutMs: 30000 });
+  const parsed = parseStatus(status.stdout);
+  if (parsed.untrackedFiles.length > 0) {
+    await runCommand({ command: "git", args: ["add", "-N", "--", ...parsed.untrackedFiles], cwd: path, timeoutMs: 30000 });
+  }
+  const result = await runCommand({ command: "git", args: ["diff", "--binary", "HEAD"], cwd: path, timeoutMs: 30000, maxOutputBytes: 16 * 1024 * 1024 });
+  if (parsed.untrackedFiles.length > 0) {
+    await runCommand({ command: "git", args: ["reset", "-q", "--", "."], cwd: path, timeoutMs: 30000 });
+  }
+  return result.stdout || "";
+}
+
+export async function inspectWorktree(path, { baseCommit = null, resultStatus = "done", diff = null } = {}) {
+  if (!path || !existsSync(path)) {
+    return { exists: false, clean: false, changedFiles: [], untrackedFiles: [], deletedFiles: [], diffBytes: 0, partialWrite: false, hasConflicts: false };
+  }
+  const status = await runCommand({ command: "git", args: ["status", "--porcelain=v1", "--untracked-files=all"], cwd: path, timeoutMs: 30000 });
+  const parsed = parseStatus(status.stdout);
+  const patch = diff ?? await captureWorktreeDiff(path);
+  const partialWrite = Boolean(status.stdout.trim()) && ["failed", "error", "cancelled"].includes(resultStatus);
+  return {
+    exists: true,
+    clean: !status.stdout.trim(),
+    head: await currentHead(path),
+    baseCommit,
+    changedFiles: parsed.changedFiles,
+    untrackedFiles: parsed.untrackedFiles,
+    deletedFiles: parsed.deletedFiles,
+    diffBytes: Buffer.byteLength(patch, "utf8"),
+    partialWrite,
+    hasConflicts: /^(<{7}|={7}|>{7})/m.test(patch),
+    statusCode: status.code
+  };
+}
+
+export async function writeDiffArtifact(root, seat, diff) {
+  if (!diff) return null;
+  const path = join(root, "artifacts", `${seat}.patch`);
+  await mkdir(join(root, "artifacts"), { recursive: true });
+  await writeFile(path, diff, { encoding: "utf8", mode: 0o600 });
+  await chmod(path, 0o600).catch(() => {});
+  return path;
+}
+
+export async function checkPatch({ cwd, patchPath }) {
+  const repo = await gitRoot(cwd);
+  if (!repo) return { ok: false, error: "Not a Git repository" };
+  const result = await runCommand({ command: "git", args: ["apply", "--check", "--binary", resolve(patchPath)], cwd: repo, timeoutMs: 60000 });
+  return { ok: result.ok, repo, stdout: result.stdout, error: result.ok ? null : result.stderr };
+}
+
+export async function applyPatch({ cwd, patchPath, threeWay = false }) {
+  const repo = await gitRoot(cwd);
+  if (!repo) return { ok: false, error: "Not a Git repository" };
+  const args = ["apply", "--binary", ...(threeWay ? ["--3way"] : []), resolve(patchPath)];
+  const result = await runCommand({ command: "git", args, cwd: repo, timeoutMs: 120000 });
+  return { ok: result.ok, repo, stdout: result.stdout, error: result.ok ? null : result.stderr };
+}
+
+export async function revertPatch({ cwd, patchPath }) {
+  const repo = await gitRoot(cwd);
+  if (!repo) return { ok: false, error: "Not a Git repository" };
+  const check = await runCommand({ command: "git", args: ["apply", "-R", "--check", "--binary", resolve(patchPath)], cwd: repo, timeoutMs: 60000 });
+  if (!check.ok) return { ok: false, repo, error: check.stderr };
+  const result = await runCommand({ command: "git", args: ["apply", "-R", "--binary", resolve(patchPath)], cwd: repo, timeoutMs: 120000 });
+  return { ok: result.ok, repo, stdout: result.stdout, error: result.ok ? null : result.stderr };
+}
+
+export async function listWorktrees(cwd) {
+  const repo = await gitRoot(cwd);
+  if (!repo) return [];
+  const result = await runCommand({ command: "git", args: ["worktree", "list", "--porcelain"], cwd: repo, timeoutMs: 30000 });
+  if (!result.ok) return [];
+  const records = result.stdout.trim().split(/\r?\n\r?\n/).filter(Boolean);
+  return records.map((record) => {
+    const entry = {};
+    for (const line of record.split(/\r?\n/)) {
+      const [key, ...parts] = line.split(" ");
+      if (key === "worktree") entry.path = parts.join(" ");
+      else if (key === "HEAD") entry.head = parts[0];
+      else if (key === "branch") entry.branch = parts.join(" ");
+      else if (key === "detached") entry.detached = true;
+    }
+    return entry;
+  });
+}
+
+export async function removeWorktree(path, { repo = null, force = false } = {}) {
+  if (!path || !existsSync(path)) return { removed: false, error: "Worktree does not exist" };
+  const args = ["worktree", "remove", ...(force ? ["--force"] : []), path];
+  const result = await runCommand({ command: "git", args, cwd: repo ?? path, timeoutMs: 60000 });
+  return { removed: result.ok, path, error: result.ok ? null : (result.stderr || `exit ${result.code}`) };
+}
+
+export async function pruneWorktrees(cwd, { dryRun = true, expire = null } = {}) {
+  const repo = await gitRoot(cwd);
+  if (!repo) return { ok: false, error: "Not a Git repository" };
+  const args = ["worktree", "prune", "--verbose", ...(dryRun ? ["--dry-run"] : []), ...(expire ? ["--expire", expire] : [])];
+  const result = await runCommand({ command: "git", args, cwd: repo, timeoutMs: 60000 });
+  return { ok: result.ok, repo, dryRun, stdout: result.stdout, error: result.ok ? null : result.stderr };
+}

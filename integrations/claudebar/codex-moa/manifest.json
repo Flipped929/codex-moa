@@ -1,0 +1,80 @@
+{
+  "id": "codex-moa",
+  "name": "Codex MOA",
+  "version": "0.19.0",
+  "description": "Quota, cost, seat, worktree, memory, Navigator, and provider health for codex-moa.",
+  "icon": "brain.head.profile",
+  "colors": {
+    "primary": "#22C55E",
+    "gradient": [
+      "#22C55E",
+      "#0EA5E9"
+    ]
+  },
+  "dashboardURL": "http://127.0.0.1:3737",
+  "statusPageURL": "http://127.0.0.1:3737/api/status",
+  "config": [
+    {
+      "id": "root",
+      "label": "Codex MOA Root",
+      "type": "path",
+      "required": true,
+      "default": ".",
+      "helpText": "Project root containing scripts/claudebar-probe.mjs."
+    },
+    {
+      "id": "deepseekBudget",
+      "label": "DeepSeek Budget (CNY)",
+      "type": "number",
+      "required": false,
+      "default": "100",
+      "helpText": "Used only to calculate the DeepSeek balance percentage in ClaudeBar."
+    },
+    {
+      "id": "costBudget",
+      "label": "Estimated Cost Budget (USD)",
+      "type": "number",
+      "required": false,
+      "default": "100",
+      "helpText": "Display-only budget for the codex-moa cost ledger. Unknown provider rates remain unpriced."
+    }
+  ],
+  "sections": [
+    {
+      "id": "quota",
+      "type": "quotaGrid",
+      "probe": {
+        "command": "node \"$CLAUDEBAR_ROOT/scripts/claudebar-probe.mjs\" --section quotas",
+        "interval": 300,
+        "timeout": 30
+      }
+    },
+    {
+      "id": "runtime",
+      "type": "metricsRow",
+      "probe": {
+        "command": "node \"$CLAUDEBAR_ROOT/scripts/claudebar-probe.mjs\" --section metrics",
+        "interval": 30,
+        "timeout": 30
+      }
+    },
+    {
+      "id": "status",
+      "type": "statusBanner",
+      "probe": {
+        "command": "node \"$CLAUDEBAR_ROOT/scripts/claudebar-probe.mjs\" --section status",
+        "interval": 30,
+        "timeout": 30
+      }
+    },
+    {
+      "id": "cost",
+      "type": "costUsage",
+      "probe": {
+        "command": "node \"$CLAUDEBAR_ROOT/scripts/claudebar-probe.mjs\" --section cost",
+        "interval": 300,
+        "timeout": 30
+      }
+    }
+  ]
+}

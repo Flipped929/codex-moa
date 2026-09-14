@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "currency": "USD",
+  "note": "Rates are intentionally null until verified. The ledger always records tokens and duration; add local rates in config/pricing.local.json to enable estimated USD.",
+  "models": {
+    "kimi-k3": { "inputPerMillion": null, "outputPerMillion": null, "billing": "subscription" },
+    "kimi-2.8": { "inputPerMillion": null, "outputPerMillion": null, "billing": "subscription" },
+    "GLM-5.3": { "inputPerMillion": null, "outputPerMillion": null, "billing": "subscription" },
+    "GLM-5.3-flash": { "inputPerMillion": null, "outputPerMillion": null, "billing": "subscription" },
+    "DeepSeek-flash": { "inputPerMillion": null, "outputPerMillion": null, "billing": "balance" }
+  }
+}

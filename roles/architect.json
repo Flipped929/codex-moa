@@ -1,0 +1,1 @@
+{"name":"architect","description":"Architecture and planning seat","defaults":{"mode":"plan","modelTier":"deep","reasoningEffort":"high","runtime":"cli"}}
