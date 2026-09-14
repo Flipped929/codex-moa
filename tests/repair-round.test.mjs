@@ -64,6 +64,7 @@ test("auditor block triggers a bounded repair round", async () => {
       stakes: "medium",
       worktree: false,
       respectQuota: false,
+      respectHealth: false,
       routingExperiment: false,
       contextPack: false
     }, { config, models, schedule: {}, policy, adapterFor });

@@ -207,30 +207,32 @@ export async function runMoA(input, deps = {}) {
   let providerHealth = null;
   if (input.respectHealth !== false && !input.assignments?.length && !input.seats?.length) {
     const healthSnapshot = input.quotaSnapshot ?? await readQuotaSnapshot(config);
-    providerHealth = summarizeProviderHealth({
-      snapshot: healthSnapshot,
-      ledger: await readCostLedger(),
-      lowThreshold: policy.routing?.quotaLowThreshold ?? 10,
-      circuitState: await readProviderState(),
-      config
-    });
-    healthRouting = applyProviderHealthRouting(plan.seats, {
-      health: providerHealth,
-      modelsConfig: models,
-      captain,
-      allowUnhealthy: input.allowUnhealthy === true
-    });
-    if (healthRouting.blocked.length > 0) {
-      throw new Error(`Refusing to dispatch unhealthy provider(s): ${healthRouting.blocked.map((item) => `${item.model}(${item.provider}:${item.status})`).join(", ")}. Configure a healthy provider or set allowUnhealthy=true.`);
-    }
-    for (const node of plan.graph?.nodes ?? []) {
-      const seat = plan.seats.find((item) => item.seat === node.id);
-      if (seat) {
-        node.model = seat.model;
-        node.harness = seat.harness;
+    if (healthSnapshot) {
+      providerHealth = summarizeProviderHealth({
+        snapshot: healthSnapshot,
+        ledger: await readCostLedger(),
+        lowThreshold: policy.routing?.quotaLowThreshold ?? 10,
+        circuitState: await readProviderState(),
+        config
+      });
+      healthRouting = applyProviderHealthRouting(plan.seats, {
+        health: providerHealth,
+        modelsConfig: models,
+        captain,
+        allowUnhealthy: input.allowUnhealthy === true
+      });
+      if (healthRouting.blocked.length > 0) {
+        throw new Error(`Refusing to dispatch unhealthy provider(s): ${healthRouting.blocked.map((item) => `${item.model}(${item.provider}:${item.status})`).join(", ")}. Configure a healthy provider or set allowUnhealthy=true.`);
       }
+      for (const node of plan.graph?.nodes ?? []) {
+        const seat = plan.seats.find((item) => item.seat === node.id);
+        if (seat) {
+          node.model = seat.model;
+          node.harness = seat.harness;
+        }
+      }
+      plan.healthRouting = healthRouting;
     }
-    plan.healthRouting = healthRouting;
   }
   if (checkpoint) {
     const knownSeats = new Set(Object.keys(checkpoint.nodes ?? {}));
