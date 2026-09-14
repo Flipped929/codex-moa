@@ -1,5 +1,7 @@
 # codex-moa
 
+**English** | [简体中文](README.zh-CN.md)
+
 Codex MOA keeps Codex as the captain while delegating work to three heterogeneous agent harnesses:
 
 - **KimiCode** for architecture, long context, vision, and second opinions.
