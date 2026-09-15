@@ -6,13 +6,13 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import * as z from "zod/v4";
 import { runAudit, runMoA } from "../src/orchestrator.mjs";
 import { doctor } from "../src/lib/doctor.mjs";
-import { loadModels, loadSchedule, pluginRoot } from "../src/lib/config.mjs";
-import { redactText } from "../src/lib/redact.mjs";
+import { loadModels, loadPricing, loadSchedule, pluginRoot } from "../src/lib/config.mjs";
+import { redactText, redactValue } from "../src/lib/redact.mjs";
 import { listModels } from "../src/lib/models.mjs";
 import { modelQuota, readQuotaSnapshot, refreshQuota } from "../src/lib/quota.mjs";
 import { bindModelsToCcSwitch, ccSwitchSkillStatus, ccswitchReasoningAudit, ccswitchRoutingAudit, readCcSwitchSnapshot } from "../src/lib/ccswitch.mjs";
 import { auditConflict, resolveCaptain } from "../src/lib/captain.mjs";
-import { analyzeEvolution, createProposal, getProposal, listProposals, proposeFromEvidence, recordOutcome } from "../src/lib/evolution.mjs";
+import { analyzeEvolution, applyProposal, createProposal, getProposal, listProposals, proposeFromEvidence, recordOutcome, rollbackProposal, updateProposalStatus } from "../src/lib/evolution.mjs";
 import { buildMemoryPack, distillMemory, listMemories, loadMemory, remember } from "../src/lib/memory.mjs";
 import { listSeats, readSeatRegistry, seatRegistryPath } from "../src/lib/seat-registry.mjs";
 import { cancelAcpSeats, listAcpSeats } from "../src/lib/acp-seat.mjs";
@@ -21,15 +21,18 @@ import { getScheduleState } from "../src/lib/scheduler.mjs";
 import { listControlRequests, readControlStore, requestCancellation } from "../src/lib/control-store.mjs";
 import { buildStatusSummary } from "../src/lib/status-summary.mjs";
 import { routingExperimentStatus } from "../src/lib/routing-experiment.mjs";
-import { listJobs, publicJob, readJob, requestJobCancellation, startJob, waitForJob } from "../src/lib/jobs.mjs";
+import { listJobs, pauseJob, publicJob, readJob, requestJobCancellation, resumeJob, startJob, steerJob, waitForJob } from "../src/lib/jobs.mjs";
+import { assertInteractiveRun } from "../src/lib/interactive-run.mjs";
 import { createTaskId } from "../src/lib/blackboard.mjs";
 import { applyPatch, checkPatch, inspectWorktree, listWorktrees, pruneWorktrees, removeWorktree, revertPatch } from "../src/lib/worktree.mjs";
 import { applyRetention, planRetention } from "../src/lib/retention.mjs";
 import { readPatchMetrics, recordPatchEvent, summarizePatchMetrics } from "../src/lib/patch-metrics.mjs";
 import { providerCircuitStatus, readProviderState, recoverProviders } from "../src/lib/provider-state.mjs";
+import { readMoAMode, resolveMoAMode, setMoAMode } from "../src/lib/moa-mode.mjs";
 
-const MODEL_IDS = ["kimi-k3", "kimi-2.8", "GLM-5.3", "GLM-5.3-flash", "DeepSeek-flash"];
+const MODEL_IDS = ["kimi-k3", "kimi-2.8", "kimi-k2.8", "GLM-5.3", "GLM-5.3-flash", "DeepSeek-flash"];
 const modelSchema = z.enum(MODEL_IDS);
+const orchestrationModeSchema = z.enum(["off", "auto", "force"]);
 const roleSchema = z.enum(["executor", "architect", "reviewer", "auditor", "vision", "researcher"]);
 const reasoningEffortSchema = z.enum(["off", "low", "medium", "high", "xhigh", "max"]);
 const budgetSchema = z.object({
@@ -41,6 +44,7 @@ const budgetSchema = z.object({
 }).optional();
 const assignmentSchema = z.object({
   model: modelSchema,
+  harness: z.enum(["kimi", "zcode", "dsh"]).optional(),
   role: roleSchema.optional().default("executor"),
   mode: z.enum(["plan", "edit", "build"]).optional(),
   runtime: z.enum(["cli", "acp"]).optional().default("cli"),
@@ -103,16 +107,33 @@ const server = new McpServer({
 
 function textResult(value) {
   return {
-    content: [{ type: "text", text: JSON.stringify(value, null, 2) }]
+    content: [{ type: "text", text: JSON.stringify(redactValue(value), null, 2) }]
   };
 }
 
 function errorResult(error) {
   return {
     isError: true,
-    content: [{ type: "text", text: error?.stack ?? String(error) }]
+    content: [{ type: "text", text: redactText(error?.stack ?? String(error)) }]
   };
 }
+
+server.registerTool("moa_mode", {
+  title: "Codex MOA Mode",
+  description: "Read or persist the orchestration mode: off keeps work in the Codex captain, auto delegates by task complexity, and force delegates even simple tasks.",
+  inputSchema: {
+    action: z.enum(["status", "set"]).optional().default("status"),
+    mode: orchestrationModeSchema.optional()
+  }
+}, async ({ action, mode }) => {
+  try {
+    if (action === "status") return textResult(await readMoAMode());
+    if (!mode) throw new Error("mode is required when action=set");
+    return textResult(await setMoAMode(mode));
+  } catch (error) {
+    return errorResult(error);
+  }
+});
 
 server.registerTool("moa_compat", {
   title: "Codex MOA Compatibility",
@@ -128,15 +149,16 @@ server.registerTool("moa_compat", {
 
 server.registerTool("moa_evolve", {
   title: "Codex MOA Evolution",
-  description: "Propose, inspect, approve, apply, or roll back policy evolution. Applying always requires explicit confirmation.",
+  description: "Analyze, propose, inspect, approve, apply, or roll back policy evolution. Approval and application require exact user-confirmation strings.",
   inputSchema: {
-    action: z.enum(["status", "record", "propose", "list", "get"]),
+    action: z.enum(["status", "record", "optimize", "propose", "list", "get", "approve", "reject", "apply", "rollback"]),
     taskId: z.string().optional(),
     accepted: z.boolean().optional(),
     testsPassed: z.boolean().optional(),
     quality: z.number().min(0).max(10).optional(),
     notes: z.string().optional(),
     proposalId: z.string().optional(),
+    confirmation: z.string().optional(),
     draft: z.object({
       title: z.string(),
       problem: z.string(),
@@ -163,7 +185,7 @@ server.registerTool("moa_evolve", {
         notes: input.notes
       }));
     }
-    if (input.action === "propose") {
+    if (input.action === "optimize" || input.action === "propose") {
       if (input.draft) return textResult(await createProposal(input.draft));
       return textResult(await proposeFromEvidence());
     }
@@ -172,7 +194,18 @@ server.registerTool("moa_evolve", {
       if (!input.proposalId) throw new Error("proposalId is required for get");
       return textResult(await getProposal(input.proposalId));
     }
-    throw new Error(`Unsupported evolution action: ${input.action}. Approval and application are terminal-only.`);
+    if (["approve", "reject", "apply", "rollback"].includes(input.action) && !input.proposalId) {
+      throw new Error(`proposalId is required for ${input.action}`);
+    }
+    if (input.action === "approve") {
+      return textResult(await updateProposalStatus(input.proposalId, "approved", input.confirmation, `APPROVE ${input.proposalId}`));
+    }
+    if (input.action === "reject") {
+      return textResult(await updateProposalStatus(input.proposalId, "rejected", input.confirmation, `REJECT ${input.proposalId}`));
+    }
+    if (input.action === "apply") return textResult(await applyProposal(input.proposalId, input.confirmation));
+    if (input.action === "rollback") return textResult(await rollbackProposal(input.proposalId, input.confirmation));
+    throw new Error(`Unsupported evolution action: ${input.action}`);
   } catch (error) {
     return errorResult(error);
   }
@@ -478,6 +511,7 @@ server.registerTool("moa_plan", {
   inputSchema: {
     task: z.string().min(1).describe("Task goal and acceptance criteria."),
     captainModel: z.string().optional().describe("Codex main model currently selected by the user."),
+    orchestrationMode: orchestrationModeSchema.optional(),
     continuityKey: z.string().optional(),
     memoryKey: z.string().optional(),
     stakes: z.enum(["low", "medium", "high"]).optional().default("medium"),
@@ -502,12 +536,14 @@ server.registerTool("moa_plan", {
   try {
     const { planMoA } = await import("../src/lib/router.mjs");
     const captain = await resolveCaptain({ captainModel: input.captainModel });
-    const plan = planMoA({ ...input, captain });
+    const orchestration = await resolveMoAMode(input.orchestrationMode);
+    const plan = planMoA({ ...input, captain, orchestrationMode: orchestration.mode });
     const models = loadModels();
     const auditWarnings = auditConflict(captain, plan.seats, models);
     const snapshot = await readQuotaSnapshot();
     const result = {
       ...plan,
+      orchestration,
       captain,
       auditWarnings: auditWarnings.map((item) => ({
         type: item.reason,
@@ -532,6 +568,7 @@ server.registerTool("moa_start", {
     resume: z.boolean().optional().default(false),
     routingExperiment: z.boolean().optional().default(true),
     captainModel: z.string().optional(),
+    orchestrationMode: orchestrationModeSchema.optional(),
     continuityKey: z.string().optional(),
     memoryKey: z.string().optional(),
     stakes: z.enum(["low", "medium", "high"]).optional().default("medium"),
@@ -572,7 +609,8 @@ server.registerTool("moa_start", {
 }, async (input) => {
   try {
     const taskId = input.taskId ?? createTaskId("moa-job");
-    return textResult(publicJob(await startJob({ input: { ...input, taskId }, taskId })));
+    const job = publicJob(await startJob({ input: { ...input, taskId }, taskId }));
+    return textResult({ ...job, kind: "job", canSteer: true, nextPollAfterMs: 5000 });
   } catch (error) {
     return errorResult(error);
   }
@@ -598,10 +636,10 @@ server.registerTool("moa_job_status", {
 
 server.registerTool("moa_job_wait", {
   title: "Wait for Codex MOA Job",
-  description: "Wait for a background job to reach a terminal state.",
+  description: "Wait briefly for a background job to reach a settled state; use status between waits.",
   inputSchema: {
     jobId: z.string(),
-    timeoutMs: z.number().int().positive().max(300000).optional().default(30000)
+    timeoutMs: z.number().int().positive().max(10000).optional().default(5000)
   }
 }, async ({ jobId, timeoutMs }) => {
   try {
@@ -609,6 +647,30 @@ server.registerTool("moa_job_wait", {
   } catch (error) {
     return errorResult(error);
   }
+});
+
+server.registerTool("moa_job_steer", {
+  title: "Steer Codex MOA Job",
+  description: "Persist an operator message for delivery at the next safe DAG boundary.",
+  inputSchema: { jobId: z.string(), message: z.string().min(1) }
+}, async ({ jobId, message }) => {
+  try { return textResult(await steerJob(jobId, message)); } catch (error) { return errorResult(error); }
+});
+
+server.registerTool("moa_job_pause", {
+  title: "Pause Codex MOA Job",
+  description: "Request a safe pause and stop the active external seat. The checkpoint can be resumed later.",
+  inputSchema: { jobId: z.string(), reason: z.string().optional().default("operator request") }
+}, async ({ jobId, reason }) => {
+  try { return textResult(await pauseJob(jobId, reason)); } catch (error) { return errorResult(error); }
+});
+
+server.registerTool("moa_job_resume", {
+  title: "Resume Codex MOA Job",
+  description: "Resume a paused background job from its checkpoint.",
+  inputSchema: { jobId: z.string() }
+}, async ({ jobId }) => {
+  try { return textResult(publicJob(await resumeJob(jobId))); } catch (error) { return errorResult(error); }
 });
 
 server.registerTool("moa_job_cancel", {
@@ -636,6 +698,7 @@ server.registerTool("moa_run", {
     resume: z.boolean().optional().default(false),
     routingExperiment: z.boolean().optional().default(true),
     captainModel: z.string().optional().describe("Codex main model currently selected by the user."),
+    orchestrationMode: orchestrationModeSchema.optional(),
     continuityKey: z.string().optional(),
     memoryKey: z.string().optional(),
     stakes: z.enum(["low", "medium", "high"]).optional().default("medium"),
@@ -671,6 +734,7 @@ server.registerTool("moa_run", {
   }
 }, async (input) => {
   try {
+    assertInteractiveRun(input);
     return textResult(await runMoA(input));
   } catch (error) {
     return errorResult(error);
@@ -710,6 +774,7 @@ server.registerTool("moa_delegate", {
     resume: z.boolean().optional().default(false),
     routingExperiment: z.boolean().optional().default(true),
     captainModel: z.string().optional(),
+    orchestrationMode: orchestrationModeSchema.optional(),
     allowWrite: z.boolean().optional().default(false),
     respectQuota: z.boolean().optional().default(true),
     allowDepleted: z.boolean().optional().default(false),
@@ -722,6 +787,7 @@ server.registerTool("moa_delegate", {
   }
 }, async (input) => {
   try {
+    assertInteractiveRun(input);
     return textResult(await runMoA({ ...input, stakes: "high", mode: "implement" }));
   } catch (error) {
     return errorResult(error);
@@ -782,8 +848,22 @@ server.registerTool("moa_schedule", {
 }, async ({ at }) => {
   try {
     const schedule = loadSchedule();
+    const pricing = loadPricing();
     const date = at ? new Date(at) : new Date();
-    return textResult({ at: date.toISOString(), state: getScheduleState(date, schedule) });
+    const state = getScheduleState(date, schedule);
+    return textResult({
+      at: date.toISOString(),
+      state,
+      pricing: {
+        currency: pricing.currency,
+        deepSeekFlash: {
+          billing: pricing.models?.["DeepSeek-flash"]?.billing ?? null,
+          period: state.deepSeekPricing,
+          activeRates: pricing.models?.["DeepSeek-flash"]?.rates?.[state.deepSeekPricing] ?? null,
+          verifiedAt: pricing.models?.["DeepSeek-flash"]?.verifiedAt ?? null
+        }
+      }
+    });
   } catch (error) {
     return errorResult(error);
   }

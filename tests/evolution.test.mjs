@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { applyProposal, createProposal, getProposal, rollbackProposal, updateProposalStatus } from "../src/lib/evolution.mjs";
+import { analyzeEvolution, applyProposal, createProposal, getProposal, rollbackProposal, updateProposalStatus } from "../src/lib/evolution.mjs";
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "codex-moa-evolution-"));
@@ -61,4 +61,48 @@ test("rejects unsafe evolution policy keys", async () => {
     }, paths),
     /Unsafe policy key/
   );
+});
+
+test("allows reasoning policy proposals", async () => {
+  const { paths } = await fixture();
+  const proposal = await createProposal({
+    title: "Tune audit effort",
+    problem: "Repeated audit misses",
+    policyPatch: { reasoning: { auditByStakes: { high: "max" } } }
+  }, paths);
+  assert.equal(proposal.policyPatch.reasoning.auditByStakes.high, "max");
+});
+
+test("rejects proposal path traversal", async () => {
+  const { paths } = await fixture();
+  await assert.rejects(() => getProposal("../../outside", paths), /Invalid proposal ID/);
+});
+
+test("deduplicates active proposals with the same policy patch", async () => {
+  const { paths } = await fixture();
+  const first = await createProposal({
+    title: "First wording",
+    problem: "Repeated warning",
+    policyPatch: { audit: { avoidCaptainFamily: true } }
+  }, paths);
+  const second = await createProposal({
+    title: "Second wording",
+    problem: "Same policy change",
+    policyPatch: { audit: { avoidCaptainFamily: true } }
+  }, paths);
+  assert.equal(second.id, first.id);
+  assert.equal(second.deduplicated, true);
+  assert.ok(Date.parse(first.expiresAt) > Date.parse(first.createdAt));
+});
+
+test("evolution analysis marks low-sample rates as descriptive", async () => {
+  const { paths } = await fixture();
+  await import("node:fs/promises").then(({ writeFile }) => writeFile(paths.events, `${JSON.stringify({
+    type: "task_completed",
+    results: [{ seat: "executor", requestedModel: "GLM-5.3-flash", status: "done", timedOut: false }]
+  })}\n`, "utf8"));
+  const analysis = await analyzeEvolution(paths);
+  assert.equal(analysis.seats.executor.successRate, 1);
+  assert.equal(analysis.seats.executor.sampleSufficient, false);
+  assert.equal(analysis.evidencePolicy.minimumSamples, 3);
 });

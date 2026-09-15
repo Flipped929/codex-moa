@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile, writeFile, mkdir, rename, chmod } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -17,6 +18,13 @@ function unique(values) {
   return [...new Set(values.filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim()))];
 }
 
+function normalizeReasoningLevel(value) {
+  const level = String(value ?? "").trim().toLowerCase();
+  if (["none", "disabled", "disable"].includes(level)) return "off";
+  if (["minimal", "minimum"].includes(level)) return "low";
+  return level;
+}
+
 function extractModelEntries(settingsConfig) {
   let parsed = null;
   try { parsed = JSON.parse(settingsConfig || "{}"); } catch {}
@@ -26,19 +34,19 @@ function extractModelEntries(settingsConfig) {
       entries.push({
         id: model?.model ?? null,
         name: model?.displayName ?? null,
-        levels: unique(model?.reasoningLevels ?? []),
-        defaultLevel: model?.defaultReasoningLevel ?? null,
+        levels: unique(model?.reasoningLevels ?? []).map(normalizeReasoningLevel),
+        defaultLevel: model?.defaultReasoningLevel ? normalizeReasoningLevel(model.defaultReasoningLevel) : null,
         contextWindow: model?.contextWindow ?? null,
         maxTokens: model?.maxOutputTokens ?? model?.maxTokens ?? null
       });
     }
     for (const model of parsed.models ?? []) {
-      const levels = unique(Object.keys(model?.thinkingLevelMap ?? {}));
+      const levels = unique(Object.keys(model?.thinkingLevelMap ?? {})).map(normalizeReasoningLevel);
       entries.push({
         id: model?.id ?? null,
         name: model?.name ?? null,
         levels: levels.length > 0 ? levels : model?.reasoning ? ["high"] : [],
-        defaultLevel: model?.defaultEffort ?? null,
+        defaultLevel: model?.defaultEffort ? normalizeReasoningLevel(model.defaultEffort) : null,
         contextWindow: model?.contextWindow ?? null,
         maxTokens: model?.maxTokens ?? null
       });
@@ -198,6 +206,33 @@ function codexPaths() {
   };
 }
 
+function toSnapshotProvider(provider) {
+  const meta = parseJsonObject(provider.meta);
+  const apiFormat = typeof meta.apiFormat === "string" ? meta.apiFormat : null;
+  return {
+    id: provider.id,
+    appType: provider.app_type,
+    name: provider.name,
+    category: provider.category,
+    isCurrent: Boolean(provider.is_current),
+    apiFormat,
+    meta: {
+      apiFormat,
+      promptCacheRouting: meta.promptCacheRouting ?? null,
+      codexChatReasoning: Boolean(meta.codexChatReasoning)
+    },
+    transport: extractCodexTransport(provider.settings_config, apiFormat),
+    models: extractModelHints(provider.settings_config),
+    modelEntries: extractModelEntries(provider.settings_config)
+  };
+}
+
+const PROVIDER_SNAPSHOT_SQL = `
+    SELECT id, app_type, name, category, is_current, settings_config, meta
+    FROM providers
+    ORDER BY app_type, is_current DESC, sort_index, name
+  `;
+
 export async function readCcSwitchSnapshot() {
   const paths = ccSwitchPaths();
   if (!existsSync(paths.database) || !existsSync(paths.settings)) {
@@ -217,26 +252,7 @@ export async function readCcSwitchSnapshot() {
     ORDER BY name
   `);
 
-  const safeProviders = providers.map((provider) => {
-    const meta = parseJsonObject(provider.meta);
-    const apiFormat = typeof meta.apiFormat === "string" ? meta.apiFormat : null;
-    return {
-      id: provider.id,
-      appType: provider.app_type,
-      name: provider.name,
-      category: provider.category,
-      isCurrent: Boolean(provider.is_current),
-      apiFormat,
-      meta: {
-        apiFormat,
-        promptCacheRouting: meta.promptCacheRouting ?? null,
-        codexChatReasoning: Boolean(meta.codexChatReasoning)
-      },
-      transport: extractCodexTransport(provider.settings_config, apiFormat),
-      models: extractModelHints(provider.settings_config),
-      modelEntries: extractModelEntries(provider.settings_config)
-    };
-  });
+  const safeProviders = providers.map(toSnapshotProvider);
   const current = {
     codex: settings.currentProviderCodex ?? null,
     claude: settings.currentProviderClaude ?? null
@@ -309,10 +325,11 @@ export function bindModelsToCcSwitch(snapshot, modelsConfig = loadModels()) {
       const bestScore = Math.max(0, ...matches.map((match) => match.score));
       if (bestScore > 0) {
         const matchedModels = unique(matches.filter((match) => match.score === bestScore).map((match) => match.hint));
-        const matchedReasoningLevels = unique((provider.modelEntries ?? [])
-          .filter((entry) => matchedModels.some((matched) => normalize(matched) === normalize(entry.id) || normalize(matched) === normalize(entry.name)))
-          .flatMap((entry) => entry.levels ?? []));
-        scored.push({ provider: { ...provider, matchedModels, matchedReasoningLevels }, score: bestScore });
+        const matchedEntries = (provider.modelEntries ?? [])
+          .filter((entry) => matchedModels.some((matched) => normalize(matched) === normalize(entry.id) || normalize(matched) === normalize(entry.name)));
+        const matchedReasoningLevels = unique(matchedEntries.flatMap((entry) => entry.levels ?? []));
+        const matchedReasoningDefaults = unique(matchedEntries.map((entry) => entry.defaultLevel ?? null));
+        scored.push({ provider: { ...provider, matchedModels, matchedReasoningLevels, matchedReasoningDefaults }, score: bestScore });
       }
     }
     const best = Math.max(0, ...scored.map((item) => item.score));
@@ -398,10 +415,16 @@ export function ccswitchReasoningAudit(snapshot, modelsConfig = loadModels()) {
     available: true,
     models: Object.fromEntries(listModels(modelsConfig).map((model) => {
       const configured = model.reasoning?.supported ?? [];
-      const ccswitchLevels = unique((bindings[model.id] ?? []).flatMap((provider) => provider.matchedReasoningLevels ?? []));
+      const providers = bindings[model.id] ?? [];
+      const selectedProvider = selectReasoningProvider(providers);
+      const ccswitchLevels = unique(selectedProvider?.matchedReasoningLevels ?? []);
       return [model.id, {
         configured,
         ccswitchLevels,
+        selectedProvider: selectedProvider ? { id: selectedProvider.id, name: selectedProvider.name, appType: selectedProvider.appType, isCurrent: selectedProvider.isCurrent } : null,
+        conflictingProviders: providers.filter((provider) => provider.id !== selectedProvider?.id)
+          .filter((provider) => JSON.stringify(unique(provider.matchedReasoningLevels ?? [])) !== JSON.stringify(ccswitchLevels))
+          .map((provider) => ({ id: provider.id, name: provider.name, levels: unique(provider.matchedReasoningLevels ?? []) })),
         missingInCcSwitch: configured.filter((level) => !ccswitchLevels.includes(level)),
         extraInCcSwitch: ccswitchLevels.filter((level) => !configured.includes(level)),
         complete: configured.every((level) => ccswitchLevels.includes(level))
@@ -432,6 +455,125 @@ export function ccSwitchSkillStatus(snapshot, skillName = "codex-moa") {
   if (!snapshot?.available) return { available: false, enabled: false };
   const skill = snapshot.skills.find((item) => item.directory === skillName || item.name === skillName);
   return skill ? { available: true, enabled: Boolean(skill.enabled.codex), skill } : { available: false, enabled: false };
+}
+
+function selectReasoningProvider(providers) {
+  const list = Array.isArray(providers) ? providers : [];
+  return [...list].sort((left, right) => {
+    const leftHasLevels = Number((left.matchedReasoningLevels?.length ?? 0) > 0 || (left.matchedReasoningDefaults?.length ?? 0) > 0);
+    const rightHasLevels = Number((right.matchedReasoningLevels?.length ?? 0) > 0 || (right.matchedReasoningDefaults?.length ?? 0) > 0);
+    if (leftHasLevels !== rightHasLevels) return rightHasLevels - leftHasLevels;
+    const leftCodex = Number(left.appType === "codex");
+    const rightCodex = Number(right.appType === "codex");
+    if (leftCodex !== rightCodex) return rightCodex - leftCodex;
+    return Number(right.isCurrent) - Number(left.isCurrent);
+  })[0] ?? null;
+}
+
+// ── cc-switch 作为思考等级唯一真源（用户裁决 2026-09-15）─────────────────────
+// 「所有由 cc-switch 管的模型，各 agent 请求思考等级要找 cc-switch」：
+// 可选档位与默认档位以 cc-switch 的 modelCatalog（codex 类）/ thinkingLevelMap（pi 类）为准，
+// 本地 config/models.json 仅在 cc-switch 未覆盖该模型时兜底。
+
+/** node:sqlite 的同步读（createRequire 拿到内置模块）；不可用/失败返回 null 交由上层兜底 */
+function querySqliteSync(dbPath, sql) {
+  try {
+    const require = createRequire(import.meta.url);
+    const { DatabaseSync } = require("node:sqlite");
+    const db = new DatabaseSync(dbPath, { readOnly: true });
+    const rows = db.prepare(sql).all().map((row) => ({ ...row }));
+    db.close();
+    return rows;
+  } catch {
+    return null;
+  }
+}
+
+/** 同步版快照：dispatch 路径（planMoA/runMoA 是同步解析模型表）不得异步读库 */
+export function readCcSwitchSnapshotSync() {
+  const paths = ccSwitchPaths();
+  if (!existsSync(paths.database) || !existsSync(paths.settings)) {
+    return { available: false, reason: "cc-switch data not found", paths };
+  }
+  const rows = querySqliteSync(paths.database, PROVIDER_SNAPSHOT_SQL);
+  if (!rows) return { available: false, reason: "node:sqlite unavailable", paths };
+  let settings = {};
+  try { settings = JSON.parse(readFileSync(paths.settings, "utf8")); } catch {}
+  return {
+    available: true,
+    paths,
+    settings: {
+      currentProviderCodex: settings.currentProviderCodex ?? null,
+      currentProviderClaude: settings.currentProviderClaude ?? null,
+      localProxyEnabled: Boolean(settings.enableLocalProxy)
+    },
+    providers: rows.map(toSnapshotProvider)
+  };
+}
+
+/** 模型 → 该模型在 cc-switch 声明的档位/默认档位（命中即覆盖本地表） */
+export function ccSwitchReasoningIndex(snapshot, modelsConfig = loadModels()) {
+  if (!snapshot?.available) return {};
+  const bindings = bindModelsToCcSwitch(snapshot, modelsConfig);
+  const index = {};
+  for (const [modelId, providers] of Object.entries(bindings)) {
+    const list = Array.isArray(providers) ? providers : [];
+    // Provider cards are independent authorities. Never union levels across
+    // cards, because the resulting set may not exist on any real endpoint.
+    const selected = selectReasoningProvider(list);
+    const levels = unique(selected?.matchedReasoningLevels ?? []);
+    const defaults = unique(selected?.matchedReasoningDefaults ?? []);
+    if (levels.length === 0 && defaults.length === 0) continue;
+    index[modelId] = {
+      levels,
+      defaultLevel: defaults[0] ?? null,
+      selectedProvider: selected ? { id: selected.id, name: selected.name, appType: selected.appType, isCurrent: selected.isCurrent } : null,
+      providers: list.map((provider) => ({ id: provider.id, name: provider.name, appType: provider.appType, isCurrent: provider.isCurrent })),
+      conflicts: list.filter((provider) => provider.id !== selected?.id)
+        .filter((provider) => JSON.stringify(unique(provider.matchedReasoningLevels ?? [])) !== JSON.stringify(levels))
+        .map((provider) => ({ id: provider.id, name: provider.name, levels: unique(provider.matchedReasoningLevels ?? []) }))
+    };
+  }
+  return index;
+}
+
+/**
+ * 把 cc-switch 的档位叠加到本地模型表上（纯函数：返回新表，不改入参）。
+ * cc-switch 给了档位 → 用它；只给了默认档位 → 默认值在本地档位内才采用；
+ * 两者都没给 → 整体保留本地表（未纳管的模型）。
+ */
+export function applyCcSwitchReasoning(modelsConfig = loadModels(), snapshot) {
+  const index = ccSwitchReasoningIndex(snapshot, modelsConfig);
+  const models = {};
+  const reasoningSources = {};
+  for (const [id, model] of Object.entries(modelsConfig.models ?? {})) {
+    const managed = index[id];
+    const localSupported = model.reasoning?.supported ?? [];
+    // cc-switch 没档位声明（或压根没纳管）→ 整个模型保留本地值
+    if (!managed || managed.levels.length === 0) {
+      models[id] = { ...model };
+      reasoningSources[id] = "local";
+      continue;
+    }
+    const supported = managed.levels;
+    // 已纳管的模型以 cc-switch 为准：显式默认（须合法）→ 否则取最高档
+    // （与 cc-switch 自身 apply_codex_reasoning_level_override 的回落一致）
+    const defaultLevel =
+      (managed.defaultLevel && supported.includes(managed.defaultLevel) ? managed.defaultLevel : null)
+      ?? supported[supported.length - 1]
+      ?? null;
+    models[id] = {
+      ...model,
+      reasoning: {
+        ...(model.reasoning ?? {}),
+        supported,
+        default: defaultLevel,
+        source: "cc-switch"
+      }
+    };
+    reasoningSources[id] = "cc-switch";
+  }
+  return { ...modelsConfig, models, reasoningSources };
 }
 
 export async function writeCcSwitchSnapshot(snapshot) {

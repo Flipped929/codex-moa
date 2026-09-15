@@ -1,1 +1,1 @@
-{"name":"reviewer","description":"Review and validation seat","defaults":{"mode":"plan","modelTier":"fast","reasoningEffort":"high","runtime":"cli"}}
+{"name": "reviewer", "description": "Review and validation seat", "defaults": {"mode": "plan", "modelTier": "fast", "runtime": "cli"}}

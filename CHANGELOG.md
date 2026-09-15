@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased
+
+- Make the ClaudeBar extension self-contained so a fresh installation can find its probe without a manually configured project root.
+- Prevent long synchronous MCP calls from monopolizing a Codex turn: write-enabled, ACP, remote, benchmark, multi-stage, and over-60-second work must use `moa_start`.
+- Add durable `moa_job_steer`, `moa_job_pause`, and `moa_job_resume` controls with checkpoint-safe delivery and ten-second maximum waits.
+- Allow Kimi K3/K2.8 and GLM 5.3/5.3 Flash to run through DeepSeekHarness while retaining KimiCode/ZCode as their native defaults.
+- Route non-urgent DeepSeekHarness audits to Kimi/GLM during DeepSeek peak pricing, while preserving DeepSeek for high-stakes independent audits.
+- Track DeepSeek V4.1 Flash peak/off-peak cache-hit, cache-miss, and output prices; treat zero currency balance as depleted.
+- Document explicit per-model task roles and quota/price routing rules.
+- Standardize all `$codex-moa` control words on English-only commands.
+- Add `$codex-moa optimize` plus exact-ID approve, reject, apply, and rollback commands.
+- Expose gated evolution mutations through MCP only for exact user-authored confirmation commands.
+- Deduplicate active self-optimization proposals by stable policy-patch fingerprint.
+- Add seat/model reliability rates with a three-run minimum-evidence marker.
+- Carry forward `pi-moa`'s proposal-first governance and `dsh-moa`'s capability-aware graceful-degradation principles without copying their runtime-specific implementations.
+
+- Added persistent `off` / `auto` / `force` orchestration mode and the `moa_mode` MCP tool.
+- Kept the active Codex conversation model as captain without restricting it to GPT.
+- Added `kimi-k2.8` alias and corrected Kimi K2.8 reasoning levels/default.
+- Stopped merging reasoning levels across independent CC Switch provider cards.
+- Required isolated managed worktrees for external writes and constrained worktree removal.
+- Redacted MCP result objects, filtered child-process secrets, allowlisted background-worker environment variables, and hardened the local dashboard against XSS/CSRF and remote binding.
+
+## 0.19.2
+
+- Hands-off reasoning (user ruling 2026-09-15): codex-moa no longer auto-specifies thinking levels. Task-policy effort derivation (`effortForTask`) and role `reasoningEffort` defaults were removed from seat planning; DSH home prep no longer falls back to `high` and leaves the source `settings.yaml` untouched unless an effort is explicitly requested. Explicit `input.reasoningEffort` / per-assignment `reasoningEffort` still work and are marked `reasoningSource: "explicit"`; everything else runs with `reasoningSource: "model-default"`.
+
+## 0.19.1
+
+- Made codex-moa strictly read-only against CC Switch (user ruling 2026-09-15): provider-card writes, codex catalog writes, live `config.toml` writes, and skill linking now throw via `assertCcSwitchReadOnly()`. The `:write` npm scripts were removed; `ccswitch:patch-reasoning` and `ccswitch:codex-effort` are read-only audits.
+- Made CC Switch the single source of truth for reasoning levels: the router, orchestrator, and captain now resolve per-model supported levels and defaults from CC Switch provider cards (`reasoningLevels`/`defaultReasoningLevel`/`thinkingLevelMap`), with `config/models.json` used only as fallback for unmanaged models.
+- Added `reasoningSources[modelId]` and `seat.reasoningSource` provenance, plus `CODEX_MOA_NO_CCSWITCH=1` to skip the overlay.
+- Fixed the CC Switch metadata patch to fill only missing reasoning and limit fields.
+- Preserved provider-supplied reasoning levels, defaults, custom levels, and user choices.
+- Removed Codex transport rewrites and routing metadata deletion. CC Switch presets and user settings remain authoritative for `apiFormat`, `base_url`, `wire_api`, and local-routing metadata.
+- Added `ccswitch:set-codex-effort` to persist a chosen Codex reasoning level in both the CC Switch provider card and live config, with backups.
+
 ## 0.19.0
 
 - Added retention/compaction planning and application for blackboard, jobs, worktrees, cost ledger, and routing history.

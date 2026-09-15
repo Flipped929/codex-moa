@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { buildStatusSummary } from "../src/lib/status-summary.mjs";
 import { listControlRequests, readControlStore, requestCancellation } from "../src/lib/control-store.mjs";
 
@@ -10,6 +11,10 @@ function option(name, fallback = null) {
 
 const host = option("--host", "127.0.0.1");
 const port = Number(option("--port", process.env.CODEX_MOA_DASHBOARD_PORT || 3737));
+if (!["127.0.0.1", "::1", "localhost"].includes(host)) {
+  throw new Error("The Codex MOA dashboard may only bind to a loopback address.");
+}
+const dashboardToken = process.env.CODEX_MOA_DASHBOARD_TOKEN || randomBytes(32).toString("hex");
 
 const html = `<!doctype html>
 <html lang="en">
@@ -36,29 +41,38 @@ code{color:#9ef0c5}.pill{padding:4px 8px;border-radius:999px;background:#17382c;
 <div class="section"><h2>Recent control requests</h2><div id="requests" class="card">Loading…</div></div>
 </main>
 <script>
+const dashboardToken=${JSON.stringify(dashboardToken)};
+function node(tag,text,className){const item=document.createElement(tag);if(text!==undefined)item.textContent=String(text);if(className)item.className=className;return item;}
+async function api(path,options={}){const headers={...(options.headers||{}),'x-codex-moa-token':dashboardToken};const response=await fetch(path,{...options,headers});if(!response.ok)throw new Error('Dashboard API '+response.status);return response.json();}
 async function load(){
-  const data=await fetch('/api/status').then(r=>r.json());
+  const data=await api('/api/status');
   document.getElementById('status').textContent=data.status.toUpperCase()+' · '+data.updatedAt;
   const cards=[['Active',data.seats.active],['Completed',data.seats.completed],['Jobs',data.jobs.active],['Worktrees',data.worktrees.count],['Memories',data.memory.count],['Providers',Object.entries(data.providerCounts).map(function(entry){return entry[0]+':'+entry[1];}).join(' ')||'none'],['Navigator',data.navigator?.verdict||'idle'],['Tokens',data.cost.totalTokens],['Cost',data.cost.estimatedUsd===null?'unpriced':'$'+data.cost.estimatedUsd.toFixed(4)]];
-  document.getElementById('cards').innerHTML=cards.map(function(card){
-    return '<div class="card"><div class="muted">'+card[0]+'</div><div class="value">'+card[1]+'</div></div>';
-  }).join('');
+  const cardsRoot=document.getElementById('cards');cardsRoot.replaceChildren();
+  cards.forEach(function(card){const wrapper=node('div',undefined,'card');wrapper.append(node('div',card[0],'muted'),node('div',card[1],'value'));cardsRoot.append(wrapper);});
   const active=data.seats.activeEntries||[];
-  document.getElementById('seats').innerHTML=active.length?active.map(function(s){
-    return '<div class="seat"><strong>'+s.seat+'</strong><span>'+(s.model||'')+'</span><span class="pill">'+s.status+'</span><code>'+(s.worktree||'main cwd')+'</code><button onclick="cancelSeat(\''+(s.taskId||'')+'\',\''+s.seat+'\')">Cancel</button></div>';
-  }).join(''):'<div class="muted">No active seats.</div>';
+  const seatsRoot=document.getElementById('seats');seatsRoot.replaceChildren();
+  if(!active.length)seatsRoot.append(node('div','No active seats.','muted'));
+  active.forEach(function(s){const row=node('div',undefined,'seat');const button=node('button','Cancel');button.addEventListener('click',()=>cancelSeat(s.taskId||'',s.seat));row.append(node('strong',s.seat),node('span',s.model||''),node('span',s.status,'pill'),node('code',s.worktree||'isolated/readonly'),button);seatsRoot.append(row);});
   const requests=data.controlRequests||[];
-  document.getElementById('requests').innerHTML=requests.length?requests.slice(0,12).map(function(r){
-    return '<div class="seat"><code>'+r.id+'</code><span>'+(r.seat||r.taskId||r.key)+'</span><span>'+r.status+'</span><span>'+(r.reason||'')+'</span><span></span></div>';
-  }).join(''):'<div class="muted">No control requests.</div>';
+  const requestsRoot=document.getElementById('requests');requestsRoot.replaceChildren();
+  if(!requests.length)requestsRoot.append(node('div','No control requests.','muted'));
+  requests.slice(0,12).forEach(function(r){const row=node('div',undefined,'seat');row.append(node('code',r.id),node('span',r.seat||r.taskId||r.key),node('span',r.status),node('span',r.reason||''),node('span',''));requestsRoot.append(row);});
 }
-async function cancelSeat(taskId,seat){await fetch('/api/cancel',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({taskId:taskId||null,seat,reason:'dashboard'})});await load();}
-load();setInterval(load,5000);
+async function cancelSeat(taskId,seat){await api('/api/cancel',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({taskId:taskId||null,seat,reason:'dashboard'})});await load();}
+load().catch(console.error);setInterval(()=>load().catch(console.error),5000);
 </script></body></html>`;
 
 function json(response, status, value) {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
   response.end(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function authorized(request) {
+  const supplied = String(request.headers["x-codex-moa-token"] ?? "");
+  const expected = Buffer.from(dashboardToken);
+  const actual = Buffer.from(supplied);
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
 const server = createServer(async (request, response) => {
@@ -69,14 +83,19 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (request.method === "GET" && request.url === "/api/status") {
+      if (!authorized(request)) return json(response, 403, { error: "forbidden" });
       const summary = await buildStatusSummary();
       const store = await readControlStore();
       json(response, 200, { ...summary, controlRequests: listControlRequests(store).slice(0, 50) });
       return;
     }
     if (request.method === "POST" && request.url === "/api/cancel") {
+      if (!authorized(request)) return json(response, 403, { error: "forbidden" });
       let body = "";
-      for await (const chunk of request) body += chunk;
+      for await (const chunk of request) {
+        body += chunk;
+        if (Buffer.byteLength(body) > 64 * 1024) return json(response, 413, { error: "request too large" });
+      }
       const target = body ? JSON.parse(body) : {};
       if (!target.taskId && !target.seat && !target.key) return json(response, 400, { error: "taskId, seat, or key is required" });
       const control = await requestCancellation({ ...target, reason: target.reason || "dashboard" });

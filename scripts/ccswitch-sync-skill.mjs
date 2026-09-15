@@ -1,10 +1,16 @@
 #!/usr/bin/env node
-import { existsSync, lstatSync, mkdirSync, readlinkSync, symlinkSync, unlinkSync } from "node:fs";
+/**
+ * codex-moa Skill 与 CC Switch 的对齐检查（只读）
+ *
+ * 用户裁决 2026-09-15：codex-moa 不写 CC Switch 的配置——包括 ~/.cc-switch/skills。
+ * 本脚本只报告当前链接状态与应当怎么做；实际链接请在 CC Switch 界面里启用 Skill。
+ */
+import { existsSync, lstatSync, readlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { assertCcSwitchReadOnly, readonlyResult } from "../src/lib/ccswitch-readonly.mjs";
 
-const write = process.argv.includes("--write");
-const force = process.argv.includes("--force");
+const requestedWrite = process.argv.includes("--write");
 const source = resolve("skills/moa");
 const targetDir = join(homedir(), ".cc-switch", "skills");
 const target = join(targetDir, "codex-moa");
@@ -14,26 +20,38 @@ if (!existsSync(source)) {
   process.exit(1);
 }
 
-if (!write) {
-  console.log(JSON.stringify({ mode: "dry-run", source, target }, null, 2));
-  console.log("Re-run with --write to link the Skill into cc-switch.");
-  process.exit(0);
-}
-
-mkdirSync(targetDir, { recursive: true });
-if (existsSync(target) || (() => { try { lstatSync(target); return true; } catch { return false; } })()) {
-  const current = (() => { try { return readlinkSync(target); } catch { return null; } })();
-  if (current === source) {
-    console.log(JSON.stringify({ ok: true, unchanged: target, source }, null, 2));
-    process.exit(0);
-  }
-  if (!force) {
-    console.error(`Target already exists: ${target}. Use --force to replace it.`);
+if (requestedWrite) {
+  try {
+    assertCcSwitchReadOnly("把 codex-moa Skill 软链进 ~/.cc-switch/skills");
+  } catch (error) {
+    console.error(error.message);
     process.exit(1);
   }
-  unlinkSync(target);
 }
 
-symlinkSync(source, target, "dir");
-console.log(JSON.stringify({ ok: true, linked: target, source }, null, 2));
-console.log("Open CC Switch and enable codex-moa for Codex.");
+let link = null;
+try {
+  link = readlinkSync(target);
+} catch {
+  link = null;
+}
+const targetExists = (() => {
+  try {
+    lstatSync(target);
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+console.log(JSON.stringify(readonlyResult({
+  mode: "read-only",
+  source,
+  target,
+  targetExists,
+  linkedTo: link,
+  aligned: targetExists && link === source,
+  action: targetExists && link === source
+    ? "已对齐，无需操作"
+    : `请在 CC Switch 界面里启用 codex-moa Skill（目标：${target} → ${source}）`
+}), null, 2));

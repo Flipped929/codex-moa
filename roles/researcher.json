@@ -1,1 +1,1 @@
-{"name":"researcher","description":"Research and long-context seat","defaults":{"mode":"plan","modelTier":"deep","reasoningEffort":"high","runtime":"cli"}}
+{"name": "researcher", "description": "Research and long-context seat", "defaults": {"mode": "plan", "modelTier": "deep", "runtime": "cli"}}

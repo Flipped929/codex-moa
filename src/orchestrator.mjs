@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { loadConfig, loadEvolutionPolicy, loadModels, loadPricing, loadSchedule } from "./lib/config.mjs";
+import { loadConfig, loadEvolutionPolicy, loadPricing, loadSchedule } from "./lib/config.mjs";
+import { loadEffectiveModels } from "./lib/effective-models.mjs";
 import { createWorkspace, writeJson, writeText, appendEvent } from "./lib/blackboard.mjs";
 import { redactText } from "./lib/redact.mjs";
 import { truncateMiddle } from "./lib/parser.mjs";
@@ -22,6 +23,7 @@ import { runAcpAdapter } from "./adapters/acp.mjs";
 import { checkpointPath, checkpointResultMap, completedSeatIds, createCheckpoint, mergeCheckpointIntoSeats, readCheckpoint, updateCheckpointNode, writeCheckpoint } from "./lib/task-checkpoint.mjs";
 import { makeCostEntry, readCostLedger, recordCostEntry } from "./lib/cost-ledger.mjs";
 import { evaluateRoutingRollback, readRoutingExperimentState, recordRoutingOutcome, routingExperimentDefinition, selectRoutingVariant } from "./lib/routing-experiment.mjs";
+import { resolveMoAMode } from "./lib/moa-mode.mjs";
 
 function auditorPrompt({ task, diff, files, context }) {
   return [
@@ -167,15 +169,27 @@ function allNodesDone(plan, checkpoint) {
   return (plan.graph?.nodes ?? []).every((node) => checkpoint.nodes?.[node.id]?.status === "done");
 }
 
+export function assertIsolatedExternalWrites({ allowWrite, worktree, seats }) {
+  if (!allowWrite) return;
+  if (worktree === false) {
+    throw new Error("External writes require an isolated git worktree; worktree=false is not allowed with allowWrite=true.");
+  }
+  const unsafe = (seats ?? []).filter((seat) => seat.role === "executor" && !seat.worktree?.path);
+  if (unsafe.length > 0) {
+    throw new Error(`External writes require isolated git worktrees. No worktree was created for: ${unsafe.map((seat) => seat.seat).join(", ")}`);
+  }
+}
+
 export async function runMoA(input, deps = {}) {
   const config = deps.config ?? loadConfig();
-  const models = deps.models ?? loadModels();
+  const models = deps.models ?? loadEffectiveModels();
   const schedule = deps.schedule ?? loadSchedule();
   const pricing = deps.pricing ?? loadPricing();
   const adapterFor = deps.adapterFor ?? ((seat) => seat.runtime === "acp" ? runAcpAdapter : getAdapter(seat.harness));
   const createWorktreeFn = deps.createWorktree ?? createWorktree;
   const captureDiff = deps.captureWorktreeDiff ?? captureWorktreeDiff;
   const captain = await resolveCaptain({ captainModel: input.captainModel });
+  const orchestration = await resolveMoAMode(input.orchestrationMode);
   const workspace = createWorkspace(config.blackboardDir, input.taskId);
   const manifestPath = join(workspace.dirs.root, "manifest.json");
   const eventsPath = join(workspace.dirs.root, "events.jsonl");
@@ -202,7 +216,7 @@ export async function runMoA(input, deps = {}) {
     state: experimentState,
     forceVariant: checkpoint?.plan?.routingExperiment?.variant ?? null
   }) : { enabled: false, id: null, variant: "control", policy, rationale: "routing experiment not eligible" };
-  const plan = planMoA({ ...input, captain, routingExperiment: route }, { models, schedule, policy: route.policy ?? policy });
+  const plan = planMoA({ ...input, captain, orchestrationMode: orchestration.mode, routingExperiment: route }, { models, schedule, policy: route.policy ?? policy });
   let healthRouting = null;
   let providerHealth = null;
   if (input.respectHealth !== false && !input.assignments?.length && !input.seats?.length) {
@@ -341,6 +355,7 @@ export async function runMoA(input, deps = {}) {
   }
 
   const allowWrite = input.allowWrite === true;
+  assertIsolatedExternalWrites({ allowWrite, worktree: input.worktree, seats: seatInputs });
   const runStartedAt = Date.now();
   const budgetPolicy = normalizeBudgetPolicy({ config, input });
   const budgetTotals = newBudgetTotals();
@@ -362,6 +377,15 @@ export async function runMoA(input, deps = {}) {
   const reportProgress = async (event) => {
     try { await deps.onProgress?.({ ...event, ...progressCounts() }); } catch {}
   };
+  const steeringContext = [];
+  const consumeSteering = async () => {
+    const messages = await deps.consumeSteering?.();
+    for (const item of messages ?? []) steeringContext.push(`[${item.id}] ${item.message}`);
+    if ((messages ?? []).length > 0) {
+      appendEvent(eventsPath, { type: "steering_applied", messages: messages.map((item) => item.id) });
+      await reportProgress({ type: "steering_applied", activeSeat: null });
+    }
+  };
   const runSeat = async (seat, layerIndex = 0, options = {}) => {
     const adapter = adapterFor(seat);
     const prompt = promptForSeat(seat, {
@@ -370,6 +394,7 @@ export async function runMoA(input, deps = {}) {
       files: input.files,
       context: [
         input.context,
+        steeringContext.length > 0 ? `## Operator steering (newest instructions)\n${steeringContext.join("\n")}` : null,
         options.extraContext,
         contextPack ? renderContextPack(contextPack) : null,
         memoryPack ? `## Prior memory (may be stale; verify against current workspace)\n${memoryPack}` : null
@@ -523,6 +548,7 @@ export async function runMoA(input, deps = {}) {
 
   const layers = plan.graph?.layers ?? [];
   for (let layerIndex = 0; layerIndex < layers.length; layerIndex += 1) {
+    await consumeSteering();
     const layer = layers[layerIndex];
     if (checkBudget().length > 0) {
       blockRemaining("budget exceeded", budgetViolations);
@@ -712,6 +738,7 @@ export async function runMoA(input, deps = {}) {
     resumed: hadCheckpoint,
     cancelled: cancellationRequested === true,
     level: plan.level,
+    orchestration,
     captain,
     auditWarnings,
     allowWrite,

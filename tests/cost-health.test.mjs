@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { makeCostEntry, normalizeUsage, readCostLedger, recordCostEntry, summarizeCostLedger } from "../src/lib/cost-ledger.mjs";
+import { estimateUsageCost, makeCostEntry, normalizeUsage, readCostLedger, recordCostEntry, summarizeCostLedger } from "../src/lib/cost-ledger.mjs";
 import { summarizeProviderHealth } from "../src/lib/provider-health.mjs";
 
 test("normalizes ACP and CLI token usage", () => {
@@ -18,6 +18,19 @@ test("normalizes ACP and CLI token usage", () => {
     contextWindow: null
   });
   assert.equal(normalizeUsage({ input_tokens: 20, output_tokens: 5, total_tokens: 25 }).totalTokens, 25);
+});
+
+test("prices DeepSeek cache hits and peak/off-peak windows separately", () => {
+  const pricing = { currency: "USD", models: { "DeepSeek-flash": { rates: {
+    peak: { cacheHitInputPerMillion: 0.006, cacheMissInputPerMillion: 0.3, outputPerMillion: 1.2 },
+    "off-peak": { cacheHitInputPerMillion: 0.003, cacheMissInputPerMillion: 0.15, outputPerMillion: 0.6 }
+  } } } };
+  const usage = { inputTokens: 1_000_000, cacheReadTokens: 500_000, outputTokens: 1_000_000 };
+  const peak = estimateUsageCost("DeepSeek-flash", usage, pricing, new Date("2026-09-14T02:00:00Z"));
+  const offPeak = estimateUsageCost("DeepSeek-flash", usage, pricing, new Date("2026-09-14T04:30:00Z"));
+  assert.equal(peak.pricingPeriod, "peak");
+  assert.equal(offPeak.pricingPeriod, "off-peak");
+  assert.equal(peak.estimatedUsd, offPeak.estimatedUsd * 2);
 });
 
 test("records and summarizes cost entries with provider health", async () => {

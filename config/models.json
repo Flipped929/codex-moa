@@ -4,7 +4,9 @@
       "id": "kimi-k3",
       "displayName": "Kimi K3",
       "harness": "kimi",
+      "supportedHarnesses": ["kimi", "dsh"],
       "providerModel": "kimi-code/k3",
+      "dsh": { "provider": "kimi-coding", "model": "k3" },
       "family": "moonshot",
       "tier": "deep",
       "capabilities": [
@@ -21,7 +23,8 @@
           "max"
         ],
         "default": "high",
-        "canDisable": false
+        "canDisable": false,
+        "inputAliases": { "medium": "high", "xhigh": "max" }
       },
       "limits": {
         "contextWindow": 1048576,
@@ -34,7 +37,9 @@
       "id": "kimi-2.8",
       "displayName": "Kimi 2.8 For Coding",
       "harness": "kimi",
+      "supportedHarnesses": ["kimi", "dsh"],
       "providerModel": "kimi-code/kimi-for-coding",
+      "dsh": { "provider": "kimi-coding", "model": "kimi-for-coding" },
       "family": "moonshot",
       "tier": "fast",
       "capabilities": [
@@ -45,15 +50,18 @@
       ],
       "reasoning": {
         "supported": [
-          "high"
+          "low",
+          "high",
+          "max"
         ],
-        "default": "high",
-        "canDisable": false
+        "default": "max",
+        "canDisable": false,
+        "inputAliases": { "medium": "high", "xhigh": "max" }
       },
       "limits": {
-        "contextWindow": 262144,
+        "contextWindow": 1048576,
         "maxOutputTokens": 131072,
-        "recommendedContextTokens": 131072,
+        "recommendedContextTokens": 262144,
         "recommendedOutputTokens": 16384
       }
     },
@@ -61,7 +69,9 @@
       "id": "GLM-5.3",
       "displayName": "GLM-5.3",
       "harness": "zcode",
+      "supportedHarnesses": ["zcode", "dsh"],
       "providerModel": "GLM-5.3",
+      "dsh": { "provider": "zai-coding-cn", "model": "glm-5.3" },
       "family": "zhipu",
       "tier": "deep",
       "capabilities": [
@@ -76,7 +86,8 @@
           "max"
         ],
         "default": "max",
-        "canDisable": false
+        "canDisable": false,
+        "inputAliases": { "medium": "high", "xhigh": "max" }
       },
       "limits": {
         "contextWindow": 1000000,
@@ -89,7 +100,9 @@
       "id": "GLM-5.3-flash",
       "displayName": "GLM-5.3-Flash",
       "harness": "zcode",
+      "supportedHarnesses": ["zcode", "dsh"],
       "providerModel": "GLM-5.3-Flash",
+      "dsh": { "provider": "zai-coding-cn", "model": "glm-5.3-flash" },
       "family": "zhipu",
       "tier": "fast",
       "capabilities": [
@@ -107,7 +120,8 @@
           "max"
         ],
         "default": "max",
-        "canDisable": false
+        "canDisable": false,
+        "inputAliases": { "medium": "high", "xhigh": "max" }
       },
       "limits": {
         "contextWindow": 1000000,
@@ -120,7 +134,9 @@
       "id": "DeepSeek-flash",
       "displayName": "DeepSeek V4.1 Flash",
       "harness": "dsh",
+      "supportedHarnesses": ["dsh"],
       "providerModel": "deepseek-flash",
+      "dsh": { "provider": "deepseek-official", "model": "deepseek-flash" },
       "family": "deepseek",
       "tier": "fast",
       "capabilities": [
@@ -138,7 +154,8 @@
           "max"
         ],
         "default": "high",
-        "canDisable": true
+        "canDisable": true,
+        "inputAliases": { "medium": "high", "xhigh": "high" }
       },
       "limits": {
         "contextWindow": 1000000,
@@ -154,6 +171,7 @@
     "kimi-code/k3": "kimi-k3",
     "kimi 2.8": "kimi-2.8",
     "kimi-2.8": "kimi-2.8",
+    "kimi-k2.8": "kimi-2.8",
     "kimi-for-coding": "kimi-2.8",
     "kimi-code/kimi-for-coding": "kimi-2.8",
     "glm-5.3": "GLM-5.3",

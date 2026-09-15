@@ -498,7 +498,11 @@ async function createSeat({ seat, config, allowWrite, timeoutMs }) {
       env.KIMI_MODEL_MAX_COMPLETION_TOKENS = String(seat.outputBudget);
     }
   } else if (seat.harness === "dsh") {
-    const dshHome = await prepareDshHome(seat.reasoningEffort ?? "high", { outputBudget: seat.outputBudget });
+    const dshHome = await prepareDshHome(seat.reasoningEffort ?? null, {
+      outputBudget: seat.outputBudget,
+      provider: seat.dsh?.provider,
+      model: seat.dsh?.model
+    });
     env.DSH_HOME = dshHome.home;
   } else if (seat.harness === "zcode") {
     const zcodeHome = await prepareZCodeHome(config);

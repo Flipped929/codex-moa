@@ -22,15 +22,19 @@ test("MCP server exposes expected tools", async () => {
       CODEX_MOA_CONTINUITY_PATH: join(root, "continuity.json"),
       CODEX_MOA_MEMORY_HOME: join(root, "memory"),
       CODEX_MOA_EVOLUTION_HOME: join(root, "evolution"),
+      CODEX_MOA_POLICY_PATH: join(root, "evolution-policy.json"),
       CODEX_MOA_CONTROL_PATH: join(root, "control.json"),
-      CODEX_MOA_ROUTING_EXPERIMENT_PATH: join(root, "routing.json")
+      CODEX_MOA_ROUTING_EXPERIMENT_PATH: join(root, "routing.json"),
+      CODEX_MOA_MODE_PATH: join(root, "mode.json")
     }
   });
   await client.connect(transport);
   try {
     const tools = await client.listTools();
     const names = tools.tools.map((tool) => tool.name).sort();
-    assert.deepEqual(names, ["moa_audit", "moa_captain", "moa_ccswitch", "moa_compat", "moa_context", "moa_delegate", "moa_doctor", "moa_evolve", "moa_health", "moa_interrupt", "moa_job_cancel", "moa_job_status", "moa_job_wait", "moa_memory", "moa_models", "moa_patch_metrics", "moa_plan", "moa_provider_recovery", "moa_quota", "moa_retention", "moa_run", "moa_schedule", "moa_seats", "moa_start", "moa_worktrees"]);
+    assert.deepEqual(names, ["moa_audit", "moa_captain", "moa_ccswitch", "moa_compat", "moa_context", "moa_delegate", "moa_doctor", "moa_evolve", "moa_health", "moa_interrupt", "moa_job_cancel", "moa_job_pause", "moa_job_resume", "moa_job_status", "moa_job_steer", "moa_job_wait", "moa_memory", "moa_mode", "moa_models", "moa_patch_metrics", "moa_plan", "moa_provider_recovery", "moa_quota", "moa_retention", "moa_run", "moa_schedule", "moa_seats", "moa_start", "moa_worktrees"]);
+    const mode = await client.callTool({ name: "moa_mode", arguments: { action: "status" } });
+    assert.equal(JSON.parse(mode.content[0].text).mode, "auto");
     const result = await client.callTool({
       name: "moa_plan",
       arguments: { task: "explain this function", stakes: "low" }
@@ -48,6 +52,20 @@ test("MCP server exposes expected tools", async () => {
     assert.equal(JSON.parse(captain.content[0].text).canonicalModel, "DeepSeek-flash");
     const evolution = await client.callTool({ name: "moa_evolve", arguments: { action: "status" } });
     assert.ok(JSON.parse(evolution.content[0].text).analysis);
+    const drafted = await client.callTool({
+      name: "moa_evolve",
+      arguments: {
+        action: "propose",
+        draft: { title: "MCP gated proposal", problem: "Test the approval gate", policyPatch: { timeouts: { deepMs: 1234 } } }
+      }
+    });
+    const proposalId = JSON.parse(drafted.content[0].text).id;
+    const premature = await client.callTool({ name: "moa_evolve", arguments: { action: "apply", proposalId, confirmation: `APPLY ${proposalId}` } });
+    assert.equal(premature.isError, true);
+    const approved = await client.callTool({ name: "moa_evolve", arguments: { action: "approve", proposalId, confirmation: `APPROVE ${proposalId}` } });
+    assert.equal(JSON.parse(approved.content[0].text).status, "approved");
+    const applied = await client.callTool({ name: "moa_evolve", arguments: { action: "apply", proposalId, confirmation: `APPLY ${proposalId}` } });
+    assert.equal(JSON.parse(applied.content[0].text).status, "applied");
     const memory = await client.callTool({ name: "moa_memory", arguments: { action: "load", memoryKey: "test-memory" } });
     assert.ok(JSON.parse(memory.content[0].text).pack !== undefined);
     const health = await client.callTool({ name: "moa_health", arguments: {} });

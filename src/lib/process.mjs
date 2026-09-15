@@ -5,7 +5,10 @@ export function buildEnv(extra = {}, stripSecretEnv = true) {
   const base = stripSecretEnv
     ? Object.fromEntries(Object.entries(process.env).filter(([key]) => !SECRET_ENV_RE.test(key)))
     : { ...process.env };
-  return { ...base, ...extra };
+  const safeExtra = stripSecretEnv
+    ? Object.fromEntries(Object.entries(extra).filter(([key]) => !SECRET_ENV_RE.test(key)))
+    : extra;
+  return { ...base, ...safeExtra };
 }
 
 function killTree(child, signal = "SIGTERM") {

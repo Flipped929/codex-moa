@@ -4,13 +4,16 @@ Codex main model selection is authoritative. `codex-moa` never changes the main 
 
 ## Resolution order
 
-The captain model is resolved in this order:
+The captain identity is resolved in this order:
 
 1. Explicit `captainModel` passed to an MCP tool.
-2. `CODEX_MOA_CAPTAIN_MODEL` environment variable.
-3. `model = "..."` from `~/.codex/config.toml`.
-4. The current Codex provider/model metadata read from CC Switch.
-5. `codex-selected` fallback.
+2. `codex-selected`, meaning the active Codex thread remains captain but its exact
+   page-level model is intentionally opaque to the MCP server.
+
+The global `~/.codex/config.toml`, environment variables, and CC Switch provider
+cards are not used to guess the captain model. They can differ from the model
+selected for the active Codex thread. CC Switch is still read to report the active
+provider, but provider metadata is not treated as proof of the page-level model.
 
 MCP stdio does not receive the current Codex session model by default, so explicit input is the most reliable option.
 

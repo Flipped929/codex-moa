@@ -6,7 +6,18 @@ import { dirname, join, resolve } from "node:path";
 import { requestCancellation } from "./control-store.mjs";
 import { pluginRoot } from "./config.mjs";
 
-const TERMINAL = new Set(["completed", "partial", "failed", "cancelled"]);
+const TERMINAL = new Set(["completed", "partial", "failed", "cancelled", "paused"]);
+const WORKER_ENV_KEYS = new Set(["PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TMP", "TEMP", "LANG", "LC_ALL", "TERM", "NO_COLOR", "FORCE_COLOR", "CODEX_HOME", "CC_SWITCH_HOME"]);
+const SECRET_ENV_RE = /(API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH|COOKIE)/i;
+
+export function buildJobWorkerEnv(source = process.env, overrides = {}) {
+  const env = {};
+  for (const [key, value] of Object.entries(source)) {
+    const allowed = WORKER_ENV_KEYS.has(key) || key.startsWith("LC_") || key.startsWith("XDG_") || key.startsWith("CODEX_MOA_");
+    if (allowed && !SECRET_ENV_RE.test(key) && typeof value === "string") env[key] = value;
+  }
+  return { ...env, ...overrides };
+}
 
 function expandHome(value) {
   if (typeof value !== "string") return value;
@@ -70,12 +81,14 @@ export function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${rand
     taskId,
     status: "queued",
     cancelRequested: false,
+    pauseRequested: false,
     createdAt: now,
     updatedAt: now,
     startedAt: null,
     finishedAt: null,
     pid: null,
     progress: { phase: "queued", completed: 0, total: 0, activeSeat: null },
+    control: { revision: 0, messages: [] },
     input: publicInput(input),
     resultSummary: null,
     error: null
@@ -160,6 +173,7 @@ export function publicJob(job) {
     taskId: job.taskId,
     status: job.status,
     cancelRequested: job.cancelRequested === true,
+    pauseRequested: job.pauseRequested === true,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
     startedAt: job.startedAt,
@@ -170,15 +184,17 @@ export function publicJob(job) {
     error: job.error,
     logPath: jobLogPath(job.jobId),
     inputPath: jobInputPath(job.jobId),
-    input: job.input
+    input: job.input,
+    control: {
+      revision: Number(job.control?.revision ?? 0),
+      pendingMessages: (job.control?.messages ?? []).filter((item) => item.status === "pending").length,
+      deliveredMessages: (job.control?.messages ?? []).filter((item) => item.status === "delivered").length,
+      lastMessageId: job.control?.messages?.at(-1)?.id ?? null
+    }
   };
 }
 
-export async function startJob({ input, jobId, taskId }) {
-  assertJobInputSupported(input);
-  const record = createJobRecord({ jobId, taskId, input });
-  await writeJob(record);
-  await atomicWrite(jobInputPath(record.jobId), publicInput(input));
+async function spawnJobWorker(record) {
   const workerPath = join(pluginRoot, "scripts", "moa-job-worker.mjs");
   const logHandle = await open(jobLogPath(record.jobId), "a", 0o600);
   const { spawn } = await import("node:child_process");
@@ -186,11 +202,73 @@ export async function startJob({ input, jobId, taskId }) {
     cwd: process.cwd(),
     detached: true,
     stdio: ["ignore", logHandle.fd, logHandle.fd],
-    env: { ...process.env, CODEX_MOA_JOB_HOME: jobsRoot() }
+    env: buildJobWorkerEnv(process.env, { CODEX_MOA_JOB_HOME: jobsRoot() })
   });
   child.unref();
   await logHandle.close().catch(() => {});
   return updateJob(record.jobId, { pid: child.pid, status: "queued" });
+}
+
+export async function startJob({ input, jobId, taskId }) {
+  assertJobInputSupported(input);
+  const record = createJobRecord({ jobId, taskId, input });
+  await writeJob(record);
+  await atomicWrite(jobInputPath(record.jobId), publicInput(input));
+  return spawnJobWorker(record);
+}
+
+export async function steerJob(jobId, message) {
+  if (!String(message ?? "").trim()) throw new Error("Steering message is required");
+  const job = await readJob(jobId);
+  if (!job) throw new Error(`Job not found: ${jobId}`);
+  if (TERMINAL.has(job.status)) throw new Error(`Job ${jobId} is ${job.status}; resume a paused job or start a new job.`);
+  const entry = { id: `msg-${randomUUID().slice(0, 12)}`, message: String(message).trim(), status: "pending", createdAt: new Date().toISOString(), deliveredAt: null };
+  const updated = await updateJob(jobId, (current) => ({
+    ...current,
+    control: { revision: Number(current.control?.revision ?? 0) + 1, messages: [...(current.control?.messages ?? []), entry] }
+  }));
+  return { accepted: true, delivery: "next-safe-boundary", messageId: entry.id, job: publicJob(updated) };
+}
+
+export async function consumeJobSteering(jobId) {
+  let delivered = [];
+  await updateJob(jobId, (current) => {
+    const now = new Date().toISOString();
+    delivered = (current.control?.messages ?? []).filter((item) => item.status === "pending");
+    return {
+      ...current,
+      control: {
+        revision: Number(current.control?.revision ?? 0),
+        messages: (current.control?.messages ?? []).map((item) => item.status === "pending" ? { ...item, status: "delivered", deliveredAt: now } : item)
+      }
+    };
+  });
+  return delivered.map((item) => ({ id: item.id, message: item.message, createdAt: item.createdAt }));
+}
+
+export async function pauseJob(jobId, reason = "operator request") {
+  const job = await readJob(jobId);
+  if (!job) throw new Error(`Job not found: ${jobId}`);
+  if (TERMINAL.has(job.status)) return publicJob(job);
+  const updated = await updateJob(jobId, {
+    pauseRequested: true,
+    progress: { ...(job.progress ?? {}), phase: "pausing" }
+  });
+  await requestCancellation({ taskId: updated.taskId, reason: `pause job ${jobId}: ${reason}` });
+  return publicJob(updated);
+}
+
+export async function resumeJob(jobId) {
+  const job = await readJob(jobId);
+  if (!job) throw new Error(`Job not found: ${jobId}`);
+  if (job.status !== "paused") throw new Error(`Job ${jobId} is ${job.status}; only paused jobs can resume.`);
+  const input = JSON.parse(await readFile(jobInputPath(jobId), "utf8"));
+  await atomicWrite(jobInputPath(jobId), { ...input, resume: true });
+  const updated = await updateJob(jobId, {
+    status: "queued", cancelRequested: false, pauseRequested: false, finishedAt: null, error: null,
+    progress: { ...(job.progress ?? {}), phase: "queued", activeSeat: null }
+  });
+  return spawnJobWorker(updated);
 }
 
 export async function requestJobCancellation(jobId, reason = "operator request") {
@@ -205,7 +283,7 @@ export async function requestJobCancellation(jobId, reason = "operator request")
   return publicJob(updated);
 }
 
-export async function waitForJob(jobId, timeoutMs = 30000, pollMs = 250) {
+export async function waitForJob(jobId, timeoutMs = 10000, pollMs = 250) {
   const started = Date.now();
   while (true) {
     const job = await readJob(jobId);
@@ -226,7 +304,11 @@ export async function runJobWorker(jobId, deps = {}) {
   try {
     const result = await runMoA(input, {
       ...deps.deps,
-      isCancelled: async () => (await readJob(jobId))?.cancelRequested === true,
+      isCancelled: async () => {
+        const current = await readJob(jobId);
+        return current?.cancelRequested === true || current?.pauseRequested === true;
+      },
+      consumeSteering: async () => consumeJobSteering(jobId),
       onProgress: async (event) => {
         const current = await readJob(jobId);
         if (!current) return;
@@ -240,9 +322,11 @@ export async function runJobWorker(jobId, deps = {}) {
         await updateJob(jobId, { progress });
       }
     });
-    const cancelled = (await readJob(jobId))?.cancelRequested === true;
+    const afterRun = await readJob(jobId);
+    const cancelled = afterRun?.cancelRequested === true;
+    const paused = afterRun?.pauseRequested === true;
     const allDone = result.results.length > 0 && result.results.every((item) => item.status === "done");
-    const status = allDone || result.results.length === 0 ? "completed" : cancelled ? "cancelled" : "partial";
+    const status = paused ? "paused" : allDone || result.results.length === 0 ? "completed" : cancelled ? "cancelled" : "partial";
     const latest = await readJob(jobId);
     const final = await updateJob(jobId, {
       status,
@@ -259,11 +343,13 @@ export async function runJobWorker(jobId, deps = {}) {
     });
     return publicJob(final);
   } catch (error) {
+    const interrupted = await readJob(jobId);
+    const interruptedStatus = interrupted?.pauseRequested ? "paused" : interrupted?.cancelRequested ? "cancelled" : "failed";
     const final = await updateJob(jobId, {
-      status: "failed",
+      status: interruptedStatus,
       finishedAt: new Date().toISOString(),
-      progress: { phase: "failed", activeSeat: null },
-      error: error?.stack ?? String(error)
+      progress: { phase: interruptedStatus, activeSeat: null },
+      error: interruptedStatus === "failed" ? (error?.stack ?? String(error)) : null
     });
     return publicJob(final);
   }

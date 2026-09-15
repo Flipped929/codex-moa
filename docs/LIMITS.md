@@ -7,7 +7,7 @@ Model capability and runtime budget are separate settings.
 | Model | Context window | Max output | Balanced context | Balanced output |
 |---|---:|---:|---:|---:|
 | Kimi K3 | 1,048,576 | 131,072 | 262,144 | 16,384 |
-| Kimi 2.8 | 262,144 | 131,072 | 131,072 | 16,384 |
+| Kimi K2.8 Preview | 1,048,576 | 131,072 | 262,144 | 16,384 |
 | GLM-5.3 | 1,000,000 | 128,000 | 262,144 | 32,768 |
 | GLM-5.3-flash | 1,000,000 | 128,000 | 131,072 | 16,384 |
 | DeepSeek-flash | 1,000,000 | 384,000 | 262,144 | 32,768 |
@@ -89,4 +89,4 @@ npm run ccswitch:patch-metadata:write
 npm run ccswitch:limits
 ```
 
-This changes capability metadata only. Runtime uses the balanced budget unless `limitMode="max"` is requested.
+This changes missing capability metadata only; existing values are preserved. It never changes transport metadata. Runtime uses the balanced budget unless `limitMode="max"` is requested.

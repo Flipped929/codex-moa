@@ -19,7 +19,10 @@ export function resolveReasoningEffort(selector, requested, modelsConfig) {
   const reasoning = modelReasoning(selector, modelsConfig);
   const supported = reasoning.supported ?? [];
   const normalized = normalizeEffort(requested);
+  const mapped = normalized ? normalizeEffort(reasoning.inputAliases?.[normalized]) : null;
+  if (mapped && supported.includes(mapped)) return mapped;
   if (normalized && supported.includes(normalized)) return normalized;
+  if (normalized === "medium" && supported.includes("high")) return "high";
   if (normalized && supported.length > 0) {
     const target = RANK[normalized];
     return [...supported].sort((a, b) => {

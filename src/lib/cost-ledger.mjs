@@ -3,6 +3,8 @@ import { appendFile, chmod, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { loadPricing } from "./config.mjs";
+import { loadSchedule } from "./config.mjs";
+import { getScheduleState } from "./scheduler.mjs";
 
 function expandHome(value) {
   if (typeof value !== "string") return value;
@@ -44,10 +46,23 @@ export function normalizeUsage(usage) {
   };
 }
 
-export function estimateUsageCost(model, usage, pricing = loadPricing()) {
+export function estimateUsageCost(model, usage, pricing = loadPricing(), at = new Date()) {
   const normalized = normalizeUsage(usage);
   const rates = pricing?.models?.[model] ?? null;
   const hasRate = (value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+  if (rates?.rates) {
+    const period = getScheduleState(at, loadSchedule()).deepSeekPricing;
+    const periodRates = rates.rates[period];
+    if (periodRates && hasRate(periodRates.cacheMissInputPerMillion) && hasRate(periodRates.outputPerMillion)) {
+      const cached = Math.max(0, Number(normalized.cacheReadTokens) || 0);
+      const input = Math.max(0, Number(normalized.inputTokens) || 0);
+      const uncached = Math.max(0, input - cached);
+      const inputCost = (uncached / 1_000_000) * Number(periodRates.cacheMissInputPerMillion)
+        + (cached / 1_000_000) * Number(periodRates.cacheHitInputPerMillion ?? periodRates.cacheMissInputPerMillion);
+      const outputCost = (Math.max(0, Number(normalized.outputTokens) || 0) / 1_000_000) * Number(periodRates.outputPerMillion);
+      return { estimatedUsd: inputCost + outputCost, currency: pricing?.currency ?? "USD", pricingSource: "config/pricing.json", pricingKnown: true, pricingPeriod: period };
+    }
+  }
   if (!rates || !hasRate(rates.inputPerMillion) || !hasRate(rates.outputPerMillion)) {
     return { estimatedUsd: null, currency: pricing?.currency ?? "USD", pricingSource: "config/pricing.json", pricingKnown: false };
   }

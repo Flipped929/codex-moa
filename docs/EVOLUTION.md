@@ -57,7 +57,27 @@ moa_evolve(action="list")
 moa_evolve(action="get", proposalId="evo-...")
 ```
 
-Approval, apply, and rollback are deliberately unavailable from MCP. They must be run by the user in a terminal.
+The canonical Skill command is:
+
+```text
+$codex-moa optimize
+```
+
+It analyzes evidence and creates or reuses proposals; it never applies them. Active proposals with the same policy patch are deduplicated. Reliability rates based on fewer than three runs are descriptive only and cannot drive automatic routing changes.
+Unapproved proposals expire after 30 days so stale recommendations cannot be applied accidentally.
+
+Review and control a proposal with separate, explicit commands:
+
+```text
+$codex-moa optimize status
+$codex-moa optimize show <proposal-id>
+$codex-moa optimize approve <proposal-id>
+$codex-moa optimize reject <proposal-id>
+$codex-moa optimize apply <proposal-id>
+$codex-moa optimize rollback <proposal-id>
+```
+
+Approval and application remain separate gates. Codex may call the gated MCP actions only when the user authored the matching exact English command containing the exact proposal ID.
 
 ## CLI
 
@@ -94,6 +114,10 @@ EvoMap is GPL-3.0/source-available. `codex-moa` borrows the concepts only and do
 
 - Human approval is mandatory.
 - Approval and apply use different exact confirmations.
+- Analysis/proposal never implies approval.
+- Identical active policy patches are deduplicated.
+- Low-sample reliability rates are descriptive only.
+- Unapproved proposals expire after 30 days.
 - Applied files are backed up.
 - Proposal and applied states are persisted.
 - Rollback restores the exact previous file.

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { auditConflict } from "../src/lib/captain.mjs";
+import { auditConflict, resolveCaptain } from "../src/lib/captain.mjs";
 
 const models = {
   models: {
@@ -34,4 +34,31 @@ test("allows cross-family audit", () => {
     models
   );
   assert.deepEqual(conflicts, []);
+});
+
+test("keeps the active Codex thread opaque when captainModel is not supplied", async () => {
+  const captain = await resolveCaptain({
+    ccswitchSnapshot: {
+      available: true,
+      currentProviders: {
+        codex: { id: "codex-official", name: "OpenAI Official", appType: "codex", models: ["gpt-stale-global"] }
+      }
+    }
+  });
+
+  assert.equal(captain.model, "codex-selected");
+  assert.equal(captain.source, "active-codex-thread");
+  assert.equal(captain.family, "unknown");
+  assert.equal(captain.provider.name, "OpenAI Official");
+});
+
+test("uses an explicitly reported page model for captain metadata", async () => {
+  const captain = await resolveCaptain({
+    captainModel: "gpt-6-astra",
+    ccswitchSnapshot: { available: true, currentProviders: { codex: null } }
+  });
+
+  assert.equal(captain.model, "gpt-6-astra");
+  assert.equal(captain.source, "explicit");
+  assert.equal(captain.family, "openai");
 });

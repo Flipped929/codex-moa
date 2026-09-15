@@ -1,6 +1,6 @@
 {
   "name": "codex-moa",
-  "version": "0.19.0",
+  "version": "0.19.2+codex.20260915144837",
   "description": "Codex-orchestrated mixture of agents for KimiCode, ZCode, and DeepSeekHarness.",
   "author": {
     "name": "Flipped929"

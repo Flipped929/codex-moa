@@ -112,4 +112,23 @@ npm run ccswitch:patch-metadata
 npm run ccswitch:patch-metadata:write
 ```
 
-The patch updates only provider reasoning/limit metadata and known official Codex transport metadata. It does not change credentials, provider selection, the selected captain model, or live Codex configuration.
+The patch fills only missing provider reasoning and context/output metadata. It never overwrites existing reasoning levels or defaults.
+
+It does not change `apiFormat`, `base_url`, `wire_api`, `codexChatReasoning`, `promptCacheRouting`, credentials, provider selection, the selected captain model, or live Codex configuration. CC Switch presets and the user's provider settings remain authoritative for transport. To migrate a stale provider card to native Responses, re-import the current CC Switch preset or change `上游格式 / Upstream Format` in CC Switch.
+
+## Read-only discipline (用户裁决 2026-09-15)
+
+**cc-switch 是模型与思考等级的唯一出口；codex-moa 不写 cc-switch 的配置。**
+
+Enforced in code, not by convention: every write path calls `assertCcSwitchReadOnly()`
+(`src/lib/ccswitch-readonly.mjs`) and throws. What this covers:
+
+| Surface | Status |
+|---|---|
+| `cc-switch.db` provider cards (reasoning/limits metadata) | read-only; audit via `npm run ccswitch:patch-reasoning` |
+| `~/.codex/cc-switch-model-catalog.json` | read-only |
+| live `~/.codex/config.toml` reasoning effort | read-only; diff via `npm run ccswitch:codex-effort` |
+| `~/.cc-switch/skills` | read-only; status via `npm run ccswitch:skill` |
+
+Change the value in CC Switch, then let codex-moa read it (`loadEffectiveModels()`).
+`

@@ -1,1 +1,1 @@
-{"name":"auditor","description":"Independent audit seat","defaults":{"mode":"plan","modelTier":"fast","reasoningEffort":"high","runtime":"cli"}}
+{"name": "auditor", "description": "Independent audit seat", "defaults": {"mode": "plan", "modelTier": "fast", "runtime": "cli"}}

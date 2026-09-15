@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { assertCcSwitchReadOnly, readonlyResult } from "./ccswitch-readonly.mjs";
 
 function expandHome(value) {
   if (typeof value !== "string") return value;
@@ -10,36 +11,25 @@ function expandHome(value) {
   return resolve(value);
 }
 
+// Compatibility entries are fill-only. GLM-5.3-flash is intentionally kept
+// even when current upstream presets omit it; this patch never removes models.
 const CODEX_PATCHES = {
+  "Kimi For Coding": {
+    "k3": { reasoningLevels: ["low", "high", "max"], defaultReasoningLevel: "high" },
+    "kimi-for-coding": { reasoningLevels: ["low", "high", "max"], defaultReasoningLevel: "max" }
+  },
   "Zhipu GLM": {
     "glm-5.3": { reasoningLevels: ["low", "high", "max"], defaultReasoningLevel: "max" },
     "glm-5.3-flash": { reasoningLevels: ["low", "high", "max"], defaultReasoningLevel: "max" }
   },
   "DeepSeek": {
-    "deepseek-flash": { reasoningLevels: ["off", "low", "high", "max"], defaultReasoningLevel: "high" }
-  }
-};
-
-const CODEX_TRANSPORT_PATCHES = {
-  "Kimi For Coding": {
-    apiFormat: "openai_responses",
-    baseUrl: "https://api.kimi.com/coding/v1",
-    removeMetaKeys: ["promptCacheRouting", "codexChatReasoning"]
-  },
-  "Zhipu GLM": {
-    apiFormat: "openai_responses",
-    baseUrl: "https://open.bigmodel.cn/api/v1",
-    removeMetaKeys: ["codexChatReasoning"]
-  },
-  "DeepSeek": {
-    apiFormat: "openai_responses",
-    baseUrl: "https://api.deepseek.com",
-    model: "deepseek-flash"
+    "deepseek-flash": { reasoningLevels: ["none", "low", "high", "max"], defaultReasoningLevel: "high" }
   }
 };
 
 const PI_LIMITS = {
   "k3": { contextWindow: 1048576, maxTokens: 131072 },
+  "kimi-for-coding": { contextWindow: 1048576, maxTokens: 131072 },
   "glm-5.3": { contextWindow: 1000000, maxTokens: 128000 },
   "glm-5.3-flash": { contextWindow: 1000000, maxTokens: 128000 },
   "deepseek-v4-flash": { contextWindow: 1000000, maxTokens: 384000 },
@@ -50,6 +40,7 @@ const PI_LIMITS = {
 const PI_THINKING_LEVELS = {
   "k3": { low: "low", high: "high", max: "max" },
   "kimi-k3": { low: "low", high: "high", max: "max" },
+  "kimi-for-coding": { low: "low", high: "high", max: "max" },
   "glm-5.3": { low: "low", high: "high", max: "max" },
   "glm-5.3-flash": { low: "low", high: "high", max: "max" },
   "deepseek-v4-flash": { off: "off", low: "low", high: "high", max: "max" },
@@ -61,66 +52,42 @@ function object(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-function tomlKeyPattern(key) {
-  return String(key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function isMissing(value) {
+  return value === undefined || value === null || (typeof value === "string" && value.trim() === "");
 }
 
-function replaceTomlAssignment(text, key, value) {
-  const pattern = new RegExp(`^(\\s*${tomlKeyPattern(key)}\\s*=\\s*)["'][^"']*["']`, "m");
-  const assignment = `${key} = "${value}"`;
-  if (pattern.test(text)) return text.replace(pattern, `$1"${value}"`);
-  return `${String(text ?? "").replace(/\s*$/, "")}\n${assignment}\n`;
+function mergeReasoningLevels(current, canonical) {
+  const existing = Array.isArray(current) ? current.filter((level) => typeof level === "string" && level) : [];
+  const missing = canonical.filter((level) => !existing.includes(level));
+  return [...existing, ...missing];
+}
+
+function mergeReasoningCatalogLevels(current, canonical) {
+  const existing = Array.isArray(current)
+    ? current.filter((level) => level && typeof level === "object" && typeof level.effort === "string")
+    : [];
+  const efforts = new Set(existing.map((level) => level.effort));
+  return [...existing, ...canonical.filter((level) => !efforts.has(level.effort))];
 }
 
 export function patchProviderConfig(appType, name, raw, rawMeta = null) {
   const config = JSON.parse(raw || "{}");
   let changed = false;
-  let metaChanged = false;
-  let meta = rawMeta === null ? null : JSON.parse(rawMeta || "{}");
+  const meta = rawMeta === null ? null : JSON.parse(rawMeta || "{}");
   if (appType === "codex") {
     const patches = CODEX_PATCHES[name];
-    if (patches) {
-      config.modelCatalog ??= {};
-      config.modelCatalog.models ??= [];
+    if (patches && Array.isArray(config.modelCatalog?.models)) {
       for (const model of config.modelCatalog.models) {
         const patch = patches[model.model];
         if (!patch) continue;
-        for (const [key, value] of Object.entries(patch)) {
-          if (JSON.stringify(model[key]) !== JSON.stringify(value)) {
-            model[key] = value;
-            changed = true;
-          }
-        }
-      }
-    }
-
-    const transportPatch = CODEX_TRANSPORT_PATCHES[name];
-    if (transportPatch) {
-      if (typeof config.config === "string") {
-        const withBaseUrl = transportPatch.baseUrl
-          ? replaceTomlAssignment(config.config, "base_url", transportPatch.baseUrl)
-          : config.config;
-        const withWireApi = transportPatch.apiFormat === "openai_responses"
-          ? replaceTomlAssignment(withBaseUrl, "wire_api", "responses")
-          : withBaseUrl;
-        const withModel = transportPatch.model
-          ? replaceTomlAssignment(withWireApi, "model", transportPatch.model)
-          : withWireApi;
-        if (withModel !== config.config) {
-          config.config = withModel;
+        const levels = mergeReasoningLevels(model.reasoningLevels, patch.reasoningLevels ?? []);
+        if (JSON.stringify(levels) !== JSON.stringify(model.reasoningLevels)) {
+          model.reasoningLevels = levels;
           changed = true;
         }
-      }
-      if (meta !== null) {
-        if (transportPatch.apiFormat && meta.apiFormat !== transportPatch.apiFormat) {
-          meta.apiFormat = transportPatch.apiFormat;
-          metaChanged = true;
-        }
-        for (const key of transportPatch.removeMetaKeys ?? []) {
-          if (Object.prototype.hasOwnProperty.call(meta, key)) {
-            delete meta[key];
-            metaChanged = true;
-          }
+        if (isMissing(model.defaultReasoningLevel) && patch.defaultReasoningLevel) {
+          model.defaultReasoningLevel = patch.defaultReasoningLevel;
+          changed = true;
         }
       }
     }
@@ -128,18 +95,20 @@ export function patchProviderConfig(appType, name, raw, rawMeta = null) {
     for (const model of Array.isArray(config.models) ? config.models : []) {
       const levels = PI_THINKING_LEVELS[model.id];
       if (!levels) continue;
-      if (model.reasoning !== true) {
+      if (model.reasoning === undefined || model.reasoning === null) {
         model.reasoning = true;
         changed = true;
       }
-      if (JSON.stringify(model.thinkingLevelMap) !== JSON.stringify(levels)) {
-        model.thinkingLevelMap = levels;
+      const currentLevels = object(model.thinkingLevelMap);
+      const missingLevels = Object.fromEntries(Object.entries(levels).filter(([key]) => !(key in currentLevels)));
+      if (Object.keys(missingLevels).length > 0) {
+        model.thinkingLevelMap = { ...currentLevels, ...missingLevels };
         changed = true;
       }
       const limits = PI_LIMITS[model.id];
       if (limits) {
         for (const [key, value] of Object.entries(limits)) {
-          if (model[key] !== value) {
+          if (isMissing(model[key])) {
             model[key] = value;
             changed = true;
           }
@@ -151,8 +120,8 @@ export function patchProviderConfig(appType, name, raw, rawMeta = null) {
     changed,
     raw: changed ? JSON.stringify(config) : raw,
     config,
-    metaChanged,
-    metaRaw: metaChanged ? JSON.stringify(meta) : rawMeta,
+    metaChanged: false,
+    metaRaw: rawMeta,
     meta
   };
 }
@@ -198,11 +167,12 @@ export function patchCodexCatalog(raw) {
   for (const model of Array.isArray(catalog.models) ? catalog.models : []) {
     const patch = CATALOG_PATCHES[model.slug];
     if (!patch) continue;
-    if (JSON.stringify(model.supported_reasoning_levels) !== JSON.stringify(patch.levels)) {
-      model.supported_reasoning_levels = patch.levels;
+    const levels = mergeReasoningCatalogLevels(model.supported_reasoning_levels, patch.levels);
+    if (JSON.stringify(levels) !== JSON.stringify(model.supported_reasoning_levels)) {
+      model.supported_reasoning_levels = levels;
       changed = true;
     }
-    if (model.default_reasoning_level !== patch.default) {
+    if (isMissing(model.default_reasoning_level)) {
       model.default_reasoning_level = patch.default;
       changed = true;
     }
@@ -224,58 +194,33 @@ async function patchCatalog({ catalogPath, write, backupRoot, stamp }) {
 export async function applyReasoningPatch({ databasePath = expandHome("~/.cc-switch/cc-switch.db"), codexCatalogPath = expandHome("~/.codex/cc-switch-model-catalog.json"), write = false, backupRoot = expandHome("~/.codex-moa/backups/cc-switch") } = {}) {
   if (!existsSync(databasePath)) throw new Error(`cc-switch database not found: ${databasePath}`);
   const db = await openDatabase(databasePath);
-  const providerColumns = new Set(db.prepare("PRAGMA table_info(providers)").all().map((row) => row.name));
-  const hasMeta = providerColumns.has("meta");
-  const rows = db.prepare(`SELECT id, app_type, name, settings_config${hasMeta ? ", meta" : ""} FROM providers ORDER BY app_type, name`).all();
+  const rows = db.prepare("SELECT id, app_type, name, settings_config FROM providers ORDER BY app_type, name").all();
   const changes = [];
   for (const row of rows) {
-    const patched = patchProviderConfig(row.app_type, row.name, row.settings_config, hasMeta ? row.meta : null);
-    if (patched.changed || patched.metaChanged) {
+    const patched = patchProviderConfig(row.app_type, row.name, row.settings_config);
+    if (patched.changed) {
       changes.push({
         id: row.id,
         appType: row.app_type,
         name: row.name,
         raw: patched.raw,
         config: patched.config,
-        metaRaw: patched.metaRaw,
-        meta: patched.meta,
-        configChanged: patched.changed,
-        metaChanged: patched.metaChanged
+        configChanged: true
       });
     }
   }
-  if (!write) {
+  // 写模式已被用户裁决禁掉（codex-moa 不写 CC Switch）：只保留只读审计
+  if (write) {
     db.close();
-    const catalog = await patchCatalog({ catalogPath: codexCatalogPath, write: false, backupRoot, stamp: null });
-    return { write: false, changed: changes.length, changes: changes.map(({ raw, config, metaRaw, meta, ...change }) => change), catalog: { ...catalog, raw: undefined } };
-  }
-
-  await mkdir(backupRoot, { recursive: true });
-  const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
-  const backup = join(backupRoot, `cc-switch-${stamp}.db`);
-  await copyFile(databasePath, backup);
-
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    const updateConfig = db.prepare("UPDATE providers SET settings_config = ? WHERE id = ?");
-    const updateMeta = hasMeta ? db.prepare("UPDATE providers SET meta = ? WHERE id = ?") : null;
-    for (const change of changes) {
-      if (change.configChanged) updateConfig.run(change.raw, change.id);
-      if (change.metaChanged && updateMeta) updateMeta.run(change.metaRaw, change.id);
-    }
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    db.close();
-    throw error;
+    assertCcSwitchReadOnly("补写 CC Switch 供应商卡的 reasoning/limits 元数据与 codex catalog");
   }
   db.close();
-  const catalog = await patchCatalog({ catalogPath: codexCatalogPath, write, backupRoot, stamp });
-  return {
-    write: true,
+  const catalog = await patchCatalog({ catalogPath: codexCatalogPath, write: false, backupRoot, stamp: null });
+  return readonlyResult({
+    write: false,
     changed: changes.length,
-    backup,
-    providers: changes.map(({ raw, config, metaRaw, meta, ...change }) => change),
-    catalog: { ...catalog, raw: undefined }
-  };
+    changes: changes.map(({ raw, config, ...change }) => change),
+    catalog: { ...catalog, raw: undefined },
+    note: "只读审计：实际修改请在 CC Switch 里操作"
+  });
 }

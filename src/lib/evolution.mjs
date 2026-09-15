@@ -35,12 +35,37 @@ function id(prefix = "evo") {
   return `${prefix}-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${randomUUID().slice(0, 8)}`;
 }
 
+function validateProposalId(proposalId) {
+  const value = String(proposalId ?? "");
+  if (!/^evo-[A-Za-z0-9-]{8,80}$/.test(value)) throw new Error(`Invalid proposal ID: ${value}`);
+  return value;
+}
+
 function hash(value) {
   return createHash("sha256").update(String(value)).digest("hex");
 }
 
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function summarizeReliability(states, minimumSamples = 3) {
+  return Object.fromEntries(Object.entries(states).map(([key, state]) => [key, {
+    ...state,
+    successRate: state.runs ? state.done / state.runs : null,
+    failureRate: state.runs ? state.failed / state.runs : null,
+    timeoutRate: state.runs ? state.timedOut / state.runs : null,
+    sampleSufficient: state.runs >= minimumSamples
+  }]));
+}
+
 const DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
-const ALLOWED_POLICY_KEYS = new Set(["version", "audit", "routing", "timeouts"]);
+const ALLOWED_POLICY_KEYS = new Set(["version", "audit", "routing", "timeouts", "reasoning"]);
+const PROPOSAL_TTL_DAYS = 30;
 
 export function validatePolicyPatch(patch, topLevel = true) {
   if (patch === null || typeof patch !== "object" || Array.isArray(patch)) throw new Error("policyPatch must be a JSON object");
@@ -115,8 +140,12 @@ export async function analyzeEvolution(paths = evolutionPaths(), limit = 200) {
     accepted,
     acceptanceRate: outcomes.length ? accepted / outcomes.length : null,
     averageQuality,
-    seats: seatStates,
-    models
+    seats: summarizeReliability(seatStates),
+    models: summarizeReliability(models),
+    evidencePolicy: {
+      minimumSamples: 3,
+      note: "Rates below the minimum sample size are descriptive only and must not change routing automatically."
+    }
   };
 }
 
@@ -128,12 +157,30 @@ async function writeJson(path, value) {
   await chmod(path, 0o600);
 }
 
+async function normalizeProposalExpiry(proposal, file) {
+  const createdAt = Date.parse(proposal.createdAt);
+  const fallbackExpiry = Number.isFinite(createdAt) ? createdAt + PROPOSAL_TTL_DAYS * 86400000 : Date.now();
+  proposal.expiresAt ??= new Date(fallbackExpiry).toISOString();
+  if (proposal.status === "proposed" && Date.parse(proposal.expiresAt) < Date.now()) {
+    proposal.status = "expired";
+    proposal.expiredAt = new Date().toISOString();
+    await writeJson(file, proposal);
+  }
+  return proposal;
+}
+
 export async function createProposal(input, paths = evolutionPaths()) {
   validatePolicyPatch(input.policyPatch ?? {});
   await ensureEvolutionStore(paths);
+  const fingerprint = hash(stableJson(input.policyPatch ?? {}));
+  const existing = (await listProposals(paths)).find((proposal) =>
+    proposal.fingerprint === fingerprint && ["proposed", "approved", "applied"].includes(proposal.status)
+  );
+  if (existing) return { ...existing, deduplicated: true };
   const proposal = {
     id: id(),
     createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + PROPOSAL_TTL_DAYS * 86400000).toISOString(),
     status: "proposed",
     requiresApproval: true,
     targetFile: "~/.codex-moa/evolution-policy.json",
@@ -141,6 +188,7 @@ export async function createProposal(input, paths = evolutionPaths()) {
     problem: input.problem,
     evidence: input.evidence ?? [],
     policyPatch: input.policyPatch,
+    fingerprint,
     expectedBenefit: input.expectedBenefit ?? null,
     risks: input.risks ?? [],
     evaluationPlan: input.evaluationPlan ?? [
@@ -167,13 +215,17 @@ export async function listProposals(paths = evolutionPaths()) {
   } catch {}
   const proposals = [];
   for (const file of files) {
-    try { proposals.push(JSON.parse(await readFile(file, "utf8"))); } catch {}
+    try {
+      proposals.push(await normalizeProposalExpiry(JSON.parse(await readFile(file, "utf8")), file));
+    } catch {}
   }
   return proposals.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 }
 
 export async function getProposal(proposalId, paths = evolutionPaths()) {
-  return JSON.parse(await readFile(join(paths.proposals, `${proposalId}.json`), "utf8"));
+  const safeId = validateProposalId(proposalId);
+  const file = join(paths.proposals, `${safeId}.json`);
+  return normalizeProposalExpiry(JSON.parse(await readFile(file, "utf8")), file);
 }
 
 async function saveProposal(proposal, paths = evolutionPaths()) {
@@ -183,6 +235,9 @@ async function saveProposal(proposal, paths = evolutionPaths()) {
 export async function updateProposalStatus(proposalId, status, confirmation, expectedConfirmation, paths = evolutionPaths()) {
   const proposal = await getProposal(proposalId, paths);
   if (confirmation !== expectedConfirmation) throw new Error(`Confirmation mismatch. Expected: ${expectedConfirmation}`);
+  if (proposal.status === status) return proposal;
+  if (!["approved", "rejected"].includes(status)) throw new Error(`Unsupported proposal status transition: ${status}`);
+  if (proposal.status !== "proposed") throw new Error(`Proposal ${proposalId} is ${proposal.status}; expected proposed`);
   proposal.status = status;
   proposal[`${status}At`] = new Date().toISOString();
   await saveProposal(proposal, paths);

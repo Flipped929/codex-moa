@@ -1,22 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { loadModels } from "./config.mjs";
+import { loadEffectiveModels } from "./effective-models.mjs";
 import { resolveModel } from "./models.mjs";
 import { readCcSwitchSnapshot } from "./ccswitch.mjs";
 
-function readCodexConfigModel() {
-  const path = join(homedir(), ".codex", "config.toml");
-  try {
-    const text = readFileSync(path, "utf8");
-    return text.match(/^\s*model\s*=\s*["']([^"']+)["']/m)?.[1] ?? null;
-  } catch {
-    return null;
-  }
-}
-
 function inferFamily(value) {
   const text = String(value ?? "").toLowerCase();
+  if (!text || text === "codex-selected") return "unknown";
   if (/kimi|moonshot|k2|k3/.test(text)) return "moonshot";
   if (/glm|zhipu|bigmodel|z\.ai/.test(text)) return "zhipu";
   if (/deepseek/.test(text)) return "deepseek";
@@ -30,38 +19,29 @@ function canonicalize(value, modelsConfig) {
 }
 
 export async function resolveCaptain({ captainModel, ccswitchSnapshot } = {}) {
-  const modelsConfig = loadModels();
-  const envModel = process.env.CODEX_MOA_CAPTAIN_MODEL || null;
-  const configModel = readCodexConfigModel();
-  let ccswitchModel = null;
+  const modelsConfig = loadEffectiveModels();
   let ccswitchProvider = null;
   let ccswitch = ccswitchSnapshot;
   try {
     ccswitch = ccswitch ?? await readCcSwitchSnapshot();
     ccswitchProvider = ccswitch?.currentProviders?.codex ?? null;
-    for (const hint of ccswitchProvider?.models ?? []) {
-      if (canonicalize(hint, modelsConfig)) {
-        ccswitchModel = hint;
-        break;
-      }
-    }
-    if (!ccswitchModel && ccswitchProvider?.name) ccswitchModel = ccswitchProvider.name;
   } catch {}
 
-  const selected = captainModel || envModel || configModel || ccswitchModel || "codex-selected";
+  // MCP servers do not receive the active thread's model selection. Reading the
+  // global config or CC Switch card can therefore misidentify a page-level model.
+  // Only trust the model when the Codex caller supplies it for this invocation.
+  const selected = captainModel || "codex-selected";
   const canonical = canonicalize(selected, modelsConfig);
   return {
     model: selected,
     canonicalModel: canonical?.id ?? null,
     harness: canonical?.harness ?? null,
     family: canonical?.family ?? inferFamily(selected),
-    source: captainModel ? "explicit"
-      : envModel ? "environment"
-        : configModel ? "codex-config"
-          : ccswitchModel ? "cc-switch"
-            : "fallback",
+    source: captainModel ? "explicit" : "active-codex-thread",
     provider: ccswitchProvider ? { id: ccswitchProvider.id, name: ccswitchProvider.name, appType: ccswitchProvider.appType } : null,
-    note: "Codex main model is never overridden. Sub-agents are selected independently."
+    note: captainModel
+      ? "Codex main model was reported explicitly and is never overridden. Sub-agents are selected independently."
+      : "The active Codex thread remains captain. Its page-level model is intentionally not guessed from global config or CC Switch."
   };
 }
 

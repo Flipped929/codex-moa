@@ -30,12 +30,18 @@ export function createExplicitSeat(assignment, index, modelsConfig) {
   if (!assignment?.model) throw new Error(`assignments[${index}].model is required`);
   const model = resolveModel(assignment.model, modelsConfig);
   const role = assignment.role ?? "executor";
+  const harness = assignment.harness ?? model.harness;
+  const supportedHarnesses = model.supportedHarnesses ?? [model.harness];
+  if (!supportedHarnesses.includes(harness)) {
+    throw new Error(`Model ${model.id} does not support harness=${harness}. Supported: ${supportedHarnesses.join(", ")}`);
+  }
   const defaultMode = role === "auditor" || role === "reviewer" || role === "architect" || role === "vision" ? "plan" : "edit";
   return {
     seat: assignment.seat ?? `explicit-${model.id}-${index + 1}`,
-    harness: model.harness,
+    harness,
     model: model.id,
     providerModel: model.providerModel,
+    dsh: model.dsh,
     modelTier: model.tier,
     role,
     mode: assignment.mode ?? defaultMode,

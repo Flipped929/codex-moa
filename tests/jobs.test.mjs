@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { assertJobInputSupported, createJobRecord, jobInputPath, listJobs, readJob, requestJobCancellation, runJobWorker, writeJob } from "../src/lib/jobs.mjs";
+import { assertJobInputSupported, buildJobWorkerEnv, consumeJobSteering, createJobRecord, jobInputPath, listJobs, pauseJob, readJob, requestJobCancellation, runJobWorker, steerJob, writeJob } from "../src/lib/jobs.mjs";
 
 async function fixture(name, input, root) {
   const jobId = `job-test-${name}`;
@@ -15,6 +15,14 @@ async function fixture(name, input, root) {
 
 test("rejects async jobs that try to persist per-seat env secrets", () => {
   assert.throws(() => assertJobInputSupported({ seats: [{ env: { SECRET: "value" } }] }), /do not persist per-seat env/i);
+});
+
+test("background workers inherit only an explicit environment allowlist", () => {
+  const env = buildJobWorkerEnv({ PATH: "/bin", LANG: "en_US.UTF-8", RANDOM_VALUE: "no", OPENAI_API_KEY: "secret", CODEX_MOA_BLACKBOARD: "/tmp/moa" });
+  assert.equal(env.PATH, "/bin");
+  assert.equal(env.CODEX_MOA_BLACKBOARD, "/tmp/moa");
+  assert.equal(env.RANDOM_VALUE, undefined);
+  assert.equal(env.OPENAI_API_KEY, undefined);
 });
 
 test("runs and persists an async job worker result", async () => {
@@ -63,6 +71,31 @@ test("cancels a running async job through the persisted control request", async 
     });
     assert.equal(result.status, "cancelled");
     assert.equal(result.cancelRequested, true);
+  } finally {
+    if (previousJobHome === undefined) delete process.env.CODEX_MOA_JOB_HOME;
+    else process.env.CODEX_MOA_JOB_HOME = previousJobHome;
+    if (previousControl === undefined) delete process.env.CODEX_MOA_CONTROL_PATH;
+    else process.env.CODEX_MOA_CONTROL_PATH = previousControl;
+  }
+});
+
+test("persists steering and supports a distinct pause state", async () => {
+  const previousJobHome = process.env.CODEX_MOA_JOB_HOME;
+  const previousControl = process.env.CODEX_MOA_CONTROL_PATH;
+  const root = await mkdtemp(join(tmpdir(), "codex-moa-jobs-control-"));
+  process.env.CODEX_MOA_JOB_HOME = root;
+  process.env.CODEX_MOA_CONTROL_PATH = join(root, "control.json");
+  const { jobId } = await fixture("control", { task: "test", cwd: process.cwd() }, root);
+  try {
+    const steered = await steerJob(jobId, "Check the new constraint");
+    assert.equal(steered.accepted, true);
+    assert.equal(steered.job.control.pendingMessages, 1);
+    const messages = await consumeJobSteering(jobId);
+    assert.equal(messages[0].message, "Check the new constraint");
+    assert.equal((await readJob(jobId)).control.messages[0].status, "delivered");
+    const paused = await pauseJob(jobId, "test pause");
+    assert.equal(paused.pauseRequested, true);
+    assert.equal(paused.cancelRequested, false);
   } finally {
     if (previousJobHome === undefined) delete process.env.CODEX_MOA_JOB_HOME;
     else process.env.CODEX_MOA_JOB_HOME = previousJobHome;

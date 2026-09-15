@@ -4528,7 +4528,7 @@ function isRef(value) {
 function cloneIssues(issues) {
   return issues.map((iss) => iss.path ? { ...iss, path: iss.path.slice() } : { ...iss });
 }
-function isRecursive(inst, stack, resolve23) {
+function isRecursive(inst, stack, resolve24) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE;
@@ -4538,7 +4538,7 @@ function isRecursive(inst, stack, resolve23) {
   let result = NONE;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve23);
+      const answer = isRecursive(child, stack, resolve24);
       if (answer > result)
         result = answer;
     }
@@ -4549,7 +4549,7 @@ function isRecursive(inst, stack, resolve23) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve23) : NONE;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve24) : NONE;
       if (child > answer)
         answer = child;
     }
@@ -4613,7 +4613,7 @@ function isRecursive(inst, stack, resolve23) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve23 ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve24 ? inst._zod.innerType : void 0);
       merge3(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -21426,10 +21426,10 @@ var require_util = __commonJS({
     var codegen_1 = require_codegen();
     var code_1 = require_code();
     function toHash(arr) {
-      const hash2 = {};
+      const hash3 = {};
       for (const item of arr)
-        hash2[item] = true;
-      return hash2;
+        hash3[item] = true;
+      return hash3;
     }
     exports.toHash = toHash;
     function alwaysValidSchema(it, schema) {
@@ -23349,7 +23349,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve23.call(this, root, ref);
+      let _sch = resolve24.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -23376,7 +23376,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve23(root, ref) {
+    function resolve24(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -24206,7 +24206,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve23(baseURI, relativeURI, options) {
+    function resolve24(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const {
         parsed: baseParsed,
@@ -24574,7 +24574,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize: normalize2,
-      resolve: resolve23,
+      resolve: resolve24,
       resolveComponent,
       equal,
       serialize,
@@ -27636,6 +27636,676 @@ var init_config = __esm({
   }
 });
 
+// src/lib/models.mjs
+function normalizeKey(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+function listModels(modelsConfig) {
+  return Object.values(modelsConfig.models ?? {}).map((model) => ({ ...model }));
+}
+function resolveModel(selector, modelsConfig) {
+  const key = normalizeKey(selector);
+  const aliases = new Map(Object.entries(modelsConfig.aliases ?? {}).map(([alias, id3]) => [normalizeKey(alias), id3]));
+  const id2 = aliases.get(key) ?? Object.keys(modelsConfig.models ?? {}).find((candidate) => normalizeKey(candidate) === key);
+  if (!id2) {
+    const available = Object.keys(modelsConfig.models ?? {}).join(", ");
+    throw new Error(`Unknown model "${selector}". Available models: ${available}`);
+  }
+  const model = modelsConfig.models[id2];
+  if (!model) throw new Error(`Model alias "${selector}" points to missing model "${id2}"`);
+  return { ...model };
+}
+function resolveSeatModel(seat, modelsConfig) {
+  const tier = seat.modelTier ?? "fast";
+  const selector = seat.model ?? modelsConfig.tiers?.[tier]?.[seat.harness];
+  if (!selector) throw new Error(`No model configured for harness=${seat.harness} tier=${tier}`);
+  return resolveModel(selector, modelsConfig);
+}
+function createExplicitSeat(assignment, index, modelsConfig) {
+  if (!assignment?.model) throw new Error(`assignments[${index}].model is required`);
+  const model = resolveModel(assignment.model, modelsConfig);
+  const role = assignment.role ?? "executor";
+  const harness = assignment.harness ?? model.harness;
+  const supportedHarnesses = model.supportedHarnesses ?? [model.harness];
+  if (!supportedHarnesses.includes(harness)) {
+    throw new Error(`Model ${model.id} does not support harness=${harness}. Supported: ${supportedHarnesses.join(", ")}`);
+  }
+  const defaultMode = role === "auditor" || role === "reviewer" || role === "architect" || role === "vision" ? "plan" : "edit";
+  return {
+    seat: assignment.seat ?? `explicit-${model.id}-${index + 1}`,
+    harness,
+    model: model.id,
+    providerModel: model.providerModel,
+    dsh: model.dsh,
+    modelTier: model.tier,
+    role,
+    mode: assignment.mode ?? defaultMode,
+    runtime: assignment.runtime,
+    reasoningEffort: assignment.reasoningEffort,
+    reasoningSource: assignment.reasoningEffort ? "explicit" : void 0,
+    cwd: assignment.cwd,
+    autoApprove: assignment.autoApprove,
+    maxTurns: assignment.maxTurns,
+    allowedTools: assignment.allowedTools,
+    disallowedTools: assignment.disallowedTools,
+    profile: assignment.profile,
+    env: assignment.env
+  };
+}
+var init_models = __esm({
+  "src/lib/models.mjs"() {
+  }
+});
+
+// src/lib/process.mjs
+var process_exports = {};
+__export(process_exports, {
+  buildEnv: () => buildEnv,
+  runCommand: () => runCommand
+});
+import { spawn } from "node:child_process";
+function buildEnv(extra = {}, stripSecretEnv = true) {
+  const base = stripSecretEnv ? Object.fromEntries(Object.entries(process.env).filter(([key]) => !SECRET_ENV_RE.test(key))) : { ...process.env };
+  const safeExtra = stripSecretEnv ? Object.fromEntries(Object.entries(extra).filter(([key]) => !SECRET_ENV_RE.test(key))) : extra;
+  return { ...base, ...safeExtra };
+}
+function killTree(child, signal = "SIGTERM") {
+  if (!child?.pid) return;
+  try {
+    if (process.platform !== "win32") process.kill(-child.pid, signal);
+    else child.kill(signal);
+  } catch {
+    try {
+      child.kill(signal);
+    } catch {
+    }
+  }
+}
+function runCommand({
+  command,
+  args = [],
+  cwd,
+  input: input2,
+  env = {},
+  timeoutMs = 3e5,
+  maxOutputBytes = 8 * 1024 * 1024,
+  stripSecretEnv = true
+}) {
+  return new Promise((resolve24) => {
+    const startedAt = Date.now();
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let settled = false;
+    let child;
+    try {
+      child = spawn(command, args, {
+        cwd,
+        env: buildEnv(env, stripSecretEnv),
+        detached: process.platform !== "win32",
+        shell: false,
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+    } catch (error62) {
+      return resolve24({
+        ok: false,
+        code: null,
+        signal: null,
+        stdout,
+        stderr: String(error62?.message ?? error62),
+        timedOut: false,
+        durationMs: Date.now() - startedAt
+      });
+    }
+    const append = (target, chunk) => {
+      const next = target + chunk.toString("utf8");
+      return Buffer.byteLength(next, "utf8") <= maxOutputBytes ? next : next.slice(0, maxOutputBytes);
+    };
+    child.stdout.on("data", (chunk) => {
+      stdout = append(stdout, chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr = append(stderr, chunk);
+    });
+    child.on("error", (error62) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve24({ ok: false, code: null, signal: null, stdout, stderr: String(error62?.message ?? error62), timedOut, durationMs: Date.now() - startedAt });
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killTree(child, "SIGTERM");
+      setTimeout(() => killTree(child, "SIGKILL"), 3e3).unref?.();
+    }, Math.max(1, timeoutMs));
+    child.on("close", (code, signal) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve24({ ok: code === 0 && !timedOut, code, signal, stdout, stderr, timedOut, durationMs: Date.now() - startedAt });
+    });
+    if (input2 !== void 0) child.stdin.end(String(input2));
+    else child.stdin.end();
+  });
+}
+var SECRET_ENV_RE;
+var init_process = __esm({
+  "src/lib/process.mjs"() {
+    SECRET_ENV_RE = /(API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH)/i;
+  }
+});
+
+// src/lib/ccswitch.mjs
+import { existsSync as existsSync2, readFileSync as readFileSync2 } from "node:fs";
+import { readFile, writeFile, mkdir, rename, chmod } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { homedir as homedir2 } from "node:os";
+import { dirname as dirname2, join, resolve as resolve2 } from "node:path";
+function expandHome2(value) {
+  if (typeof value !== "string") return value;
+  if (value === "~") return homedir2();
+  if (value.startsWith("~/")) return resolve2(homedir2(), value.slice(2));
+  return resolve2(value);
+}
+function unique(values) {
+  return [...new Set(values.filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim()))];
+}
+function normalizeReasoningLevel(value) {
+  const level = String(value ?? "").trim().toLowerCase();
+  if (["none", "disabled", "disable"].includes(level)) return "off";
+  if (["minimal", "minimum"].includes(level)) return "low";
+  return level;
+}
+function extractModelEntries(settingsConfig) {
+  let parsed = null;
+  try {
+    parsed = JSON.parse(settingsConfig || "{}");
+  } catch {
+  }
+  const entries = [];
+  if (parsed) {
+    for (const model of parsed.modelCatalog?.models ?? []) {
+      entries.push({
+        id: model?.model ?? null,
+        name: model?.displayName ?? null,
+        levels: unique(model?.reasoningLevels ?? []).map(normalizeReasoningLevel),
+        defaultLevel: model?.defaultReasoningLevel ? normalizeReasoningLevel(model.defaultReasoningLevel) : null,
+        contextWindow: model?.contextWindow ?? null,
+        maxTokens: model?.maxOutputTokens ?? model?.maxTokens ?? null
+      });
+    }
+    for (const model of parsed.models ?? []) {
+      const levels = unique(Object.keys(model?.thinkingLevelMap ?? {})).map(normalizeReasoningLevel);
+      entries.push({
+        id: model?.id ?? null,
+        name: model?.name ?? null,
+        levels: levels.length > 0 ? levels : model?.reasoning ? ["high"] : [],
+        defaultLevel: model?.defaultEffort ? normalizeReasoningLevel(model.defaultEffort) : null,
+        contextWindow: model?.contextWindow ?? null,
+        maxTokens: model?.maxTokens ?? null
+      });
+    }
+  }
+  const seen = /* @__PURE__ */ new Set();
+  return entries.filter((entry) => {
+    const key = `${entry.id ?? ""}|${entry.name ?? ""}|${entry.levels.join(",")}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+function extractModelHints(settingsConfig) {
+  const hints = [];
+  for (const entry of extractModelEntries(settingsConfig)) {
+    if (entry.id) hints.push(entry.id);
+    if (entry.name) hints.push(entry.name);
+  }
+  let parsed = null;
+  try {
+    parsed = JSON.parse(settingsConfig || "{}");
+  } catch {
+  }
+  const env = parsed?.env ?? {};
+  for (const [key, value] of Object.entries(env)) {
+    if (/MODEL/i.test(key) && typeof value === "string") hints.push(value);
+  }
+  if (typeof parsed?.model === "string") hints.push(parsed.model);
+  const text = String(settingsConfig || "");
+  for (const match of text.matchAll(/(?:^|\s)model\s*=\s*["']([^"']+)["']/g)) hints.push(match[1]);
+  return unique(hints).filter((hint) => hint.length < 160);
+}
+function parseJsonObject(raw) {
+  try {
+    const value = JSON.parse(raw || "{}");
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch {
+    return {};
+  }
+}
+function extractTomlAssignment(text, key) {
+  const escaped = String(key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = String(text ?? "").match(new RegExp(`^\\s*${escaped}\\s*=\\s*["']([^"']+)["']`, "m"));
+  return match?.[1] ?? null;
+}
+function extractTomlTable(text, tableName) {
+  const escaped = String(tableName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`^\\[${escaped}\\]\\s*$`, "m").exec(String(text ?? ""));
+  if (!match) return null;
+  const rest = String(text).slice(match.index + match[0].length);
+  const next = rest.search(/^\s*\[/m);
+  return (next === -1 ? rest : rest.slice(0, next)).trim();
+}
+function sanitizeBaseUrl(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const url2 = new URL(value.trim());
+    url2.username = "";
+    url2.password = "";
+    url2.search = "";
+    url2.hash = "";
+    return url2.toString().replace(/\/$/, "");
+  } catch {
+    return value.trim();
+  }
+}
+function isLoopbackBaseUrl(value) {
+  if (typeof value !== "string") return false;
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0";
+  } catch {
+    return /(?:localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)/i.test(value);
+  }
+}
+function extractCodexTransport(settingsConfig, apiFormat = null) {
+  const parsed = parseJsonObject(settingsConfig);
+  const text = typeof parsed.config === "string" ? parsed.config : "";
+  const modelProvider = extractTomlAssignment(text, "model_provider");
+  const providerSection = modelProvider ? extractTomlTable(text, `model_providers.${modelProvider}`) : null;
+  const scope = providerSection || text;
+  const baseUrl = extractTomlAssignment(scope, "base_url");
+  const wireApi = extractTomlAssignment(scope, "wire_api");
+  const proxyManaged = isLoopbackBaseUrl(baseUrl) || /experimental_bearer_token\s*=\s*["']PROXY_MANAGED["']/i.test(scope);
+  const directCapable = Boolean(baseUrl && wireApi === "responses" && !proxyManaged);
+  const directEligible = directCapable && (!apiFormat || apiFormat === "openai_responses");
+  const metadataMismatch = directCapable && Boolean(apiFormat) && apiFormat !== "openai_responses";
+  const proxyRequired = !directCapable && (apiFormat === "openai_chat" || apiFormat === "anthropic" || wireApi && wireApi !== "responses");
+  const routingMode = proxyManaged ? "proxy" : directEligible ? "direct" : metadataMismatch ? "metadata_stale" : proxyRequired ? "proxy_required" : directCapable ? "direct_candidate" : "unknown";
+  return {
+    modelProvider,
+    baseUrl: sanitizeBaseUrl(baseUrl),
+    wireApi,
+    apiFormat: apiFormat ?? null,
+    proxyManaged,
+    directCapable,
+    directEligible,
+    metadataMismatch,
+    proxyRequired,
+    routingMode
+  };
+}
+async function querySqlite(dbPath, sql) {
+  try {
+    const { DatabaseSync } = await import("node:sqlite");
+    const db = new DatabaseSync(dbPath, { readOnly: true });
+    const rows = db.prepare(sql).all().map((row) => ({ ...row }));
+    db.close();
+    return rows;
+  } catch (error62) {
+    if (error62?.code !== "ERR_UNKNOWN_BUILTIN_MODULE" && !/node:sqlite/i.test(String(error62?.message))) throw error62;
+  }
+  const { runCommand: runCommand2 } = await Promise.resolve().then(() => (init_process(), process_exports));
+  const result = await runCommand2({
+    command: "sqlite3",
+    args: ["-readonly", "-json", dbPath, sql],
+    timeoutMs: 15e3,
+    stripSecretEnv: true
+  });
+  if (!result.ok) throw new Error(result.stderr || `sqlite3 failed with exit ${result.code}`);
+  return JSON.parse(result.stdout || "[]");
+}
+function ccSwitchPaths() {
+  const root = expandHome2(process.env.CC_SWITCH_HOME || "~/.cc-switch");
+  return {
+    root,
+    settings: join(root, "settings.json"),
+    database: join(root, "cc-switch.db"),
+    skillsDir: join(root, "skills")
+  };
+}
+function codexPaths() {
+  const root = expandHome2(process.env.CODEX_HOME || "~/.codex");
+  return {
+    root,
+    config: join(root, "config.toml"),
+    auth: join(root, "auth.json")
+  };
+}
+function toSnapshotProvider(provider) {
+  const meta3 = parseJsonObject(provider.meta);
+  const apiFormat = typeof meta3.apiFormat === "string" ? meta3.apiFormat : null;
+  return {
+    id: provider.id,
+    appType: provider.app_type,
+    name: provider.name,
+    category: provider.category,
+    isCurrent: Boolean(provider.is_current),
+    apiFormat,
+    meta: {
+      apiFormat,
+      promptCacheRouting: meta3.promptCacheRouting ?? null,
+      codexChatReasoning: Boolean(meta3.codexChatReasoning)
+    },
+    transport: extractCodexTransport(provider.settings_config, apiFormat),
+    models: extractModelHints(provider.settings_config),
+    modelEntries: extractModelEntries(provider.settings_config)
+  };
+}
+async function readCcSwitchSnapshot() {
+  const paths = ccSwitchPaths();
+  if (!existsSync2(paths.database) || !existsSync2(paths.settings)) {
+    return { available: false, reason: "cc-switch data not found", paths };
+  }
+  const settings = JSON.parse(await readFile(paths.settings, "utf8"));
+  const providers = await querySqlite(paths.database, `
+    SELECT id, app_type, name, category, is_current, settings_config, meta
+    FROM providers
+    ORDER BY app_type, is_current DESC, sort_index, name
+  `);
+  const skills = await querySqlite(paths.database, `
+    SELECT id, name, description, directory, repo_owner, repo_name,
+           enabled_claude, enabled_codex, enabled_gemini, enabled_opencode,
+           enabled_hermes, enabled_grokbuild
+    FROM skills
+    ORDER BY name
+  `);
+  const safeProviders = providers.map(toSnapshotProvider);
+  const current = {
+    codex: settings.currentProviderCodex ?? null,
+    claude: settings.currentProviderClaude ?? null
+  };
+  const codex = codexPaths();
+  let liveTransport = null;
+  if (existsSync2(codex.config)) {
+    try {
+      liveTransport = extractCodexTransport(JSON.stringify({ config: await readFile(codex.config, "utf8") }), null);
+    } catch {
+    }
+  }
+  return {
+    available: true,
+    paths,
+    settings: {
+      currentProviderCodex: current.codex,
+      currentProviderClaude: current.claude,
+      localProxyEnabled: Boolean(settings.enableLocalProxy),
+      proxyConfirmed: Boolean(settings.proxyConfirmed),
+      skillStorageLocation: settings.skillStorageLocation ?? null,
+      skillSyncMethod: settings.skillSyncMethod ?? null
+    },
+    liveTransport,
+    currentProviders: Object.fromEntries(Object.entries(current).map(([app, id2]) => [app, safeProviders.find((provider) => provider.id === id2) ?? null])),
+    providers: safeProviders,
+    skills: skills.map((skill) => ({
+      id: skill.id,
+      name: skill.name,
+      description: skill.description,
+      directory: skill.directory,
+      upstream: skill.repo_owner && skill.repo_name ? `${skill.repo_owner}/${skill.repo_name}` : null,
+      enabled: {
+        claude: Boolean(skill.enabled_claude),
+        codex: Boolean(skill.enabled_codex),
+        gemini: Boolean(skill.enabled_gemini),
+        opencode: Boolean(skill.enabled_opencode),
+        hermes: Boolean(skill.enabled_hermes),
+        grokbuild: Boolean(skill.enabled_grokbuild)
+      }
+    }))
+  };
+}
+function normalize(value) {
+  return String(value ?? "").toLowerCase().replace(/\[[^\]]+\]/g, "").replace(/[^a-z0-9]+/g, "");
+}
+function bindModelsToCcSwitch(snapshot, modelsConfig = loadModels()) {
+  if (!snapshot?.available) return {};
+  return Object.fromEntries(listModels(modelsConfig).map((model) => {
+    const candidates = unique([
+      model.id,
+      model.providerModel,
+      model.displayName,
+      ...Object.entries(modelsConfig.aliases ?? {}).filter(([, id2]) => id2 === model.id).map(([alias]) => alias)
+    ]).map(normalize);
+    const scored = [];
+    for (const provider of snapshot.providers) {
+      const matches2 = [];
+      for (const hint of provider.models) {
+        const normalizedHint = normalize(hint);
+        for (const candidate of candidates) {
+          let score = 0;
+          if (normalizedHint === candidate) score = 100;
+          else if (candidate.length >= 4 && normalizedHint.includes(candidate)) score = 50;
+          else if (normalizedHint.length >= 4 && candidate.includes(normalizedHint)) score = 40;
+          if (score > 0) matches2.push({ hint, score });
+        }
+      }
+      const bestScore = Math.max(0, ...matches2.map((match) => match.score));
+      if (bestScore > 0) {
+        const matchedModels = unique(matches2.filter((match) => match.score === bestScore).map((match) => match.hint));
+        const matchedEntries = (provider.modelEntries ?? []).filter((entry) => matchedModels.some((matched) => normalize(matched) === normalize(entry.id) || normalize(matched) === normalize(entry.name)));
+        const matchedReasoningLevels = unique(matchedEntries.flatMap((entry) => entry.levels ?? []));
+        const matchedReasoningDefaults = unique(matchedEntries.map((entry) => entry.defaultLevel ?? null));
+        scored.push({ provider: { ...provider, matchedModels, matchedReasoningLevels, matchedReasoningDefaults }, score: bestScore });
+      }
+    }
+    const best = Math.max(0, ...scored.map((item) => item.score));
+    return [model.id, scored.filter((item) => item.score === best).sort((a, b) => Number(b.provider.isCurrent) - Number(a.provider.isCurrent)).map((item) => item.provider)];
+  }));
+}
+function routingObservation(provider) {
+  const transport = provider.transport ?? {};
+  const status = transport.routingMode === "direct" ? "direct_ready" : transport.routingMode === "metadata_stale" ? "metadata_stale" : transport.routingMode === "proxy" ? "proxy_managed" : transport.routingMode === "proxy_required" ? "proxy_required" : "unknown";
+  const recommendedAction = {
+    direct_ready: "No local routing is required for this provider.",
+    metadata_stale: "Set the CC Switch upstream format to Responses or re-import the official preset.",
+    proxy_managed: "The live config still points at the local proxy; stop or disable takeover with live restore.",
+    proxy_required: "This upstream still requires local routing because it is not native Responses.",
+    unknown: "Inspect the provider base URL, wire API, and upstream format."
+  }[status];
+  return {
+    provider: provider.name,
+    appType: provider.appType,
+    apiFormat: provider.apiFormat ?? null,
+    baseUrl: transport.baseUrl ?? null,
+    wireApi: transport.wireApi ?? null,
+    routingMode: transport.routingMode ?? "unknown",
+    status,
+    recommendedAction
+  };
+}
+function ccswitchRoutingAudit(snapshot, modelsConfig = loadModels()) {
+  if (!snapshot?.available) return { available: false, models: {} };
+  const bindings = bindModelsToCcSwitch(snapshot, modelsConfig);
+  const models = Object.fromEntries(listModels(modelsConfig).map((model) => {
+    const boundProviders = bindings[model.id] ?? [];
+    const codexProviders = boundProviders.filter((provider) => provider.appType === "codex");
+    const observations = (codexProviders.length > 0 ? codexProviders : boundProviders).map(routingObservation);
+    const status = observations.some((item) => item.status === "metadata_stale") ? "metadata_stale" : observations.some((item) => item.status === "direct_ready") ? "direct_ready" : observations.some((item) => item.status === "proxy_required") ? "proxy_required" : observations.some((item) => item.status === "proxy_managed") ? "proxy_managed" : "unknown";
+    return [model.id, {
+      status,
+      observations,
+      recommendedAction: observations.find((item) => item.status === status)?.recommendedAction ?? "Inspect the bound CC Switch provider."
+    }];
+  }));
+  const liveMode = snapshot.liveTransport?.routingMode ?? "unknown";
+  const warnings = [];
+  if (!snapshot.settings?.localProxyEnabled && liveMode === "proxy") {
+    warnings.push("Codex live config is still proxy-managed while local routing is disabled.");
+  }
+  if (snapshot.settings?.localProxyEnabled && Object.values(models).some((item) => item.status === "direct_ready")) {
+    warnings.push("At least one provider is direct-ready; disable takeover for those providers when possible.");
+  }
+  return {
+    available: true,
+    localProxyEnabled: snapshot.settings?.localProxyEnabled ?? null,
+    liveMode,
+    liveTransport: snapshot.liveTransport ?? null,
+    warnings,
+    models
+  };
+}
+function ccswitchReasoningAudit(snapshot, modelsConfig = loadModels()) {
+  if (!snapshot?.available) return { available: false, models: {} };
+  const bindings = bindModelsToCcSwitch(snapshot, modelsConfig);
+  return {
+    available: true,
+    models: Object.fromEntries(listModels(modelsConfig).map((model) => {
+      const configured = model.reasoning?.supported ?? [];
+      const providers = bindings[model.id] ?? [];
+      const selectedProvider = selectReasoningProvider(providers);
+      const ccswitchLevels = unique(selectedProvider?.matchedReasoningLevels ?? []);
+      return [model.id, {
+        configured,
+        ccswitchLevels,
+        selectedProvider: selectedProvider ? { id: selectedProvider.id, name: selectedProvider.name, appType: selectedProvider.appType, isCurrent: selectedProvider.isCurrent } : null,
+        conflictingProviders: providers.filter((provider) => provider.id !== selectedProvider?.id).filter((provider) => JSON.stringify(unique(provider.matchedReasoningLevels ?? [])) !== JSON.stringify(ccswitchLevels)).map((provider) => ({ id: provider.id, name: provider.name, levels: unique(provider.matchedReasoningLevels ?? []) })),
+        missingInCcSwitch: configured.filter((level) => !ccswitchLevels.includes(level)),
+        extraInCcSwitch: ccswitchLevels.filter((level) => !configured.includes(level)),
+        complete: configured.every((level) => ccswitchLevels.includes(level))
+      }];
+    }))
+  };
+}
+function ccSwitchSkillStatus(snapshot, skillName = "codex-moa") {
+  if (!snapshot?.available) return { available: false, enabled: false };
+  const skill = snapshot.skills.find((item) => item.directory === skillName || item.name === skillName);
+  return skill ? { available: true, enabled: Boolean(skill.enabled.codex), skill } : { available: false, enabled: false };
+}
+function selectReasoningProvider(providers) {
+  const list = Array.isArray(providers) ? providers : [];
+  return [...list].sort((left, right) => {
+    const leftHasLevels = Number((left.matchedReasoningLevels?.length ?? 0) > 0 || (left.matchedReasoningDefaults?.length ?? 0) > 0);
+    const rightHasLevels = Number((right.matchedReasoningLevels?.length ?? 0) > 0 || (right.matchedReasoningDefaults?.length ?? 0) > 0);
+    if (leftHasLevels !== rightHasLevels) return rightHasLevels - leftHasLevels;
+    const leftCodex = Number(left.appType === "codex");
+    const rightCodex = Number(right.appType === "codex");
+    if (leftCodex !== rightCodex) return rightCodex - leftCodex;
+    return Number(right.isCurrent) - Number(left.isCurrent);
+  })[0] ?? null;
+}
+function querySqliteSync(dbPath, sql) {
+  try {
+    const require2 = createRequire(import.meta.url);
+    const { DatabaseSync } = require2("node:sqlite");
+    const db = new DatabaseSync(dbPath, { readOnly: true });
+    const rows = db.prepare(sql).all().map((row) => ({ ...row }));
+    db.close();
+    return rows;
+  } catch {
+    return null;
+  }
+}
+function readCcSwitchSnapshotSync() {
+  const paths = ccSwitchPaths();
+  if (!existsSync2(paths.database) || !existsSync2(paths.settings)) {
+    return { available: false, reason: "cc-switch data not found", paths };
+  }
+  const rows = querySqliteSync(paths.database, PROVIDER_SNAPSHOT_SQL);
+  if (!rows) return { available: false, reason: "node:sqlite unavailable", paths };
+  let settings = {};
+  try {
+    settings = JSON.parse(readFileSync2(paths.settings, "utf8"));
+  } catch {
+  }
+  return {
+    available: true,
+    paths,
+    settings: {
+      currentProviderCodex: settings.currentProviderCodex ?? null,
+      currentProviderClaude: settings.currentProviderClaude ?? null,
+      localProxyEnabled: Boolean(settings.enableLocalProxy)
+    },
+    providers: rows.map(toSnapshotProvider)
+  };
+}
+function ccSwitchReasoningIndex(snapshot, modelsConfig = loadModels()) {
+  if (!snapshot?.available) return {};
+  const bindings = bindModelsToCcSwitch(snapshot, modelsConfig);
+  const index = {};
+  for (const [modelId, providers] of Object.entries(bindings)) {
+    const list = Array.isArray(providers) ? providers : [];
+    const selected = selectReasoningProvider(list);
+    const levels = unique(selected?.matchedReasoningLevels ?? []);
+    const defaults = unique(selected?.matchedReasoningDefaults ?? []);
+    if (levels.length === 0 && defaults.length === 0) continue;
+    index[modelId] = {
+      levels,
+      defaultLevel: defaults[0] ?? null,
+      selectedProvider: selected ? { id: selected.id, name: selected.name, appType: selected.appType, isCurrent: selected.isCurrent } : null,
+      providers: list.map((provider) => ({ id: provider.id, name: provider.name, appType: provider.appType, isCurrent: provider.isCurrent })),
+      conflicts: list.filter((provider) => provider.id !== selected?.id).filter((provider) => JSON.stringify(unique(provider.matchedReasoningLevels ?? [])) !== JSON.stringify(levels)).map((provider) => ({ id: provider.id, name: provider.name, levels: unique(provider.matchedReasoningLevels ?? []) }))
+    };
+  }
+  return index;
+}
+function applyCcSwitchReasoning(modelsConfig = loadModels(), snapshot) {
+  const index = ccSwitchReasoningIndex(snapshot, modelsConfig);
+  const models = {};
+  const reasoningSources = {};
+  for (const [id2, model] of Object.entries(modelsConfig.models ?? {})) {
+    const managed = index[id2];
+    const localSupported = model.reasoning?.supported ?? [];
+    if (!managed || managed.levels.length === 0) {
+      models[id2] = { ...model };
+      reasoningSources[id2] = "local";
+      continue;
+    }
+    const supported = managed.levels;
+    const defaultLevel = (managed.defaultLevel && supported.includes(managed.defaultLevel) ? managed.defaultLevel : null) ?? supported[supported.length - 1] ?? null;
+    models[id2] = {
+      ...model,
+      reasoning: {
+        ...model.reasoning ?? {},
+        supported,
+        default: defaultLevel,
+        source: "cc-switch"
+      }
+    };
+    reasoningSources[id2] = "cc-switch";
+  }
+  return { ...modelsConfig, models, reasoningSources };
+}
+var PROVIDER_SNAPSHOT_SQL;
+var init_ccswitch = __esm({
+  "src/lib/ccswitch.mjs"() {
+    init_config();
+    init_models();
+    PROVIDER_SNAPSHOT_SQL = `
+    SELECT id, app_type, name, category, is_current, settings_config, meta
+    FROM providers
+    ORDER BY app_type, is_current DESC, sort_index, name
+  `;
+  }
+});
+
+// src/lib/effective-models.mjs
+function loadEffectiveModels({ snapshot } = {}) {
+  const models = loadModels();
+  if (process.env.CODEX_MOA_NO_CCSWITCH === "1") return { ...models, reasoningSources: {} };
+  try {
+    const resolved = snapshot ?? readCcSwitchSnapshotSync();
+    if (!resolved?.available) return { ...models, reasoningSources: {} };
+    return applyCcSwitchReasoning(models, resolved);
+  } catch {
+    return { ...models, reasoningSources: {} };
+  }
+}
+var init_effective_models = __esm({
+  "src/lib/effective-models.mjs"() {
+    init_config();
+    init_ccswitch();
+  }
+});
+
 // src/lib/redact.mjs
 function redactText(value) {
   let text = typeof value === "string" ? value : JSON.stringify(value);
@@ -27646,11 +28316,14 @@ function redactValue(value) {
   if (typeof value === "string") return redactText(value);
   if (Array.isArray(value)) return value.map(redactValue);
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactValue(item)]));
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+      key,
+      SECRET_KEY_RE.test(key) ? "***REDACTED***" : redactValue(item)
+    ]));
   }
   return value;
 }
-var PATTERNS;
+var PATTERNS, SECRET_KEY_RE;
 var init_redact = __esm({
   "src/lib/redact.mjs"() {
     PATTERNS = [
@@ -27660,12 +28333,13 @@ var init_redact = __esm({
       [/((?:api[_-]?key|token|secret|password|credential)\s*[:=]\s*)["']?[^"'\s,}]+/gi, "$1***REDACTED***"],
       [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "***JWT_REDACTED***"]
     ];
+    SECRET_KEY_RE = /(?:api[_-]?key|token|secret|password|credential|authorization|cookie)/i;
   }
 });
 
 // src/lib/blackboard.mjs
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join as join2 } from "node:path";
 import { randomUUID } from "node:crypto";
 function createTaskId(prefix = "moa") {
   const stamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
@@ -27673,12 +28347,12 @@ function createTaskId(prefix = "moa") {
 }
 function createWorkspace(baseDir, taskId = createTaskId()) {
   if (!/^[A-Za-z0-9._-]{1,120}$/.test(String(taskId))) throw new Error(`Invalid taskId: ${taskId}`);
-  const root = join(expandHome(baseDir), taskId);
+  const root = join2(expandHome(baseDir), taskId);
   const dirs = {
     root,
-    results: join(root, "results"),
-    artifacts: join(root, "artifacts"),
-    logs: join(root, "logs")
+    results: join2(root, "results"),
+    artifacts: join2(root, "artifacts"),
+    logs: join2(root, "logs")
   };
   for (const path of Object.values(dirs)) mkdirSync(path, { recursive: true });
   return { taskId, dirs };
@@ -27921,61 +28595,6 @@ var init_scheduler = __esm({
   }
 });
 
-// src/lib/models.mjs
-function normalizeKey(value) {
-  return String(value ?? "").trim().toLowerCase();
-}
-function listModels(modelsConfig) {
-  return Object.values(modelsConfig.models ?? {}).map((model) => ({ ...model }));
-}
-function resolveModel(selector, modelsConfig) {
-  const key = normalizeKey(selector);
-  const aliases = new Map(Object.entries(modelsConfig.aliases ?? {}).map(([alias, id3]) => [normalizeKey(alias), id3]));
-  const id2 = aliases.get(key) ?? Object.keys(modelsConfig.models ?? {}).find((candidate) => normalizeKey(candidate) === key);
-  if (!id2) {
-    const available = Object.keys(modelsConfig.models ?? {}).join(", ");
-    throw new Error(`Unknown model "${selector}". Available models: ${available}`);
-  }
-  const model = modelsConfig.models[id2];
-  if (!model) throw new Error(`Model alias "${selector}" points to missing model "${id2}"`);
-  return { ...model };
-}
-function resolveSeatModel(seat, modelsConfig) {
-  const tier = seat.modelTier ?? "fast";
-  const selector = seat.model ?? modelsConfig.tiers?.[tier]?.[seat.harness];
-  if (!selector) throw new Error(`No model configured for harness=${seat.harness} tier=${tier}`);
-  return resolveModel(selector, modelsConfig);
-}
-function createExplicitSeat(assignment, index, modelsConfig) {
-  if (!assignment?.model) throw new Error(`assignments[${index}].model is required`);
-  const model = resolveModel(assignment.model, modelsConfig);
-  const role = assignment.role ?? "executor";
-  const defaultMode = role === "auditor" || role === "reviewer" || role === "architect" || role === "vision" ? "plan" : "edit";
-  return {
-    seat: assignment.seat ?? `explicit-${model.id}-${index + 1}`,
-    harness: model.harness,
-    model: model.id,
-    providerModel: model.providerModel,
-    modelTier: model.tier,
-    role,
-    mode: assignment.mode ?? defaultMode,
-    runtime: assignment.runtime,
-    reasoningEffort: assignment.reasoningEffort,
-    reasoningSource: assignment.reasoningEffort ? "explicit" : void 0,
-    cwd: assignment.cwd,
-    autoApprove: assignment.autoApprove,
-    maxTurns: assignment.maxTurns,
-    allowedTools: assignment.allowedTools,
-    disallowedTools: assignment.disallowedTools,
-    profile: assignment.profile,
-    env: assignment.env
-  };
-}
-var init_models = __esm({
-  "src/lib/models.mjs"() {
-  }
-});
-
 // src/lib/reasoning.mjs
 function normalizeEffort(value) {
   const text = String(value ?? "").toLowerCase().trim();
@@ -27991,7 +28610,10 @@ function resolveReasoningEffort(selector, requested, modelsConfig) {
   const reasoning = modelReasoning(selector, modelsConfig);
   const supported = reasoning.supported ?? [];
   const normalized = normalizeEffort(requested);
+  const mapped = normalized ? normalizeEffort(reasoning.inputAliases?.[normalized]) : null;
+  if (mapped && supported.includes(mapped)) return mapped;
   if (normalized && supported.includes(normalized)) return normalized;
+  if (normalized === "medium" && supported.includes("high")) return "high";
   if (normalized && supported.length > 0) {
     const target = RANK[normalized];
     return [...supported].sort((a, b) => {
@@ -28002,20 +28624,6 @@ function resolveReasoningEffort(selector, requested, modelsConfig) {
     })[0];
   }
   return reasoning.default ?? supported[0] ?? "off";
-}
-function effortForTask({ level = "L1", role = "executor", stakes = "medium", quotaPercent = null, requested, policy = null } = {}) {
-  if (requested) return { effort: requested, source: "explicit", rationale: "explicit reasoningEffort" };
-  const rules = policy?.reasoning ?? {};
-  let effort = rules.defaultByLevel?.[level] ?? (level === "L0" ? "off" : level === "L1" ? "low" : level === "L3" ? "max" : "high");
-  if (role === "auditor" || role === "reviewer") effort = rules.auditByStakes?.[stakes] ?? (stakes === "high" ? "max" : "high");
-  if (role === "architect") effort = rules.architectByLevel?.[level] ?? (level === "L3" ? "max" : "high");
-  if (role === "vision") effort = rules.vision ?? "high";
-  const downgradeBelow = Number(rules.quotaDowngradeBelow ?? 10);
-  if (quotaPercent !== null && quotaPercent < downgradeBelow && !["auditor", "reviewer"].includes(role)) {
-    const index = Math.max(0, RANK[effort] - 1);
-    effort = CANONICAL_EFFORTS[index];
-  }
-  return { effort, source: "task-policy", rationale: `${level}/${role}/${stakes}${quotaPercent !== null ? `/quota:${quotaPercent}` : ""}` };
 }
 var CANONICAL_EFFORTS, RANK;
 var init_reasoning = __esm({
@@ -28107,16 +28715,16 @@ var init_task_graph = __esm({
 });
 
 // src/lib/roles.mjs
-import { existsSync as existsSync2, readdirSync, readFileSync as readFileSync2 } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-import { dirname as dirname2, join as join2, resolve as resolve2 } from "node:path";
+import { existsSync as existsSync3, readdirSync, readFileSync as readFileSync3 } from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import { dirname as dirname3, join as join3, resolve as resolve3 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 function loadDir(dir, origin, roles) {
-  if (!existsSync2(dir)) return;
+  if (!existsSync3(dir)) return;
   for (const file2 of readdirSync(dir)) {
     if (!file2.endsWith(".json")) continue;
     try {
-      const raw = JSON.parse(readFileSync2(join2(dir, file2), "utf8"));
+      const raw = JSON.parse(readFileSync3(join3(dir, file2), "utf8"));
       if (!raw.name || typeof raw.name !== "string") continue;
       const defaults = {};
       for (const key of ALLOWED_KEYS) if (raw.defaults?.[key] !== void 0) defaults[key] = raw.defaults[key];
@@ -28128,7 +28736,7 @@ function loadDir(dir, origin, roles) {
 function loadRoles() {
   const roles = /* @__PURE__ */ new Map();
   loadDir(roleRoot, "package", roles);
-  loadDir(resolve2(homedir2(), ".codex-moa", "roles"), "user", roles);
+  loadDir(resolve3(homedir3(), ".codex-moa", "roles"), "user", roles);
   return roles;
 }
 function applyRoleDefaults(seat, roles) {
@@ -28138,7 +28746,7 @@ function applyRoleDefaults(seat, roles) {
 var roleRoot, ALLOWED_KEYS;
 var init_roles = __esm({
   "src/lib/roles.mjs"() {
-    roleRoot = resolve2(dirname2(fileURLToPath2(import.meta.url)), "..", "..", "roles");
+    roleRoot = resolve3(dirname3(fileURLToPath2(import.meta.url)), "..", "..", "roles");
     ALLOWED_KEYS = ["description", "mode", "modelTier", "runtime", "reasoningEffort", "contextBudget", "outputBudget"];
   }
 });
@@ -28161,19 +28769,23 @@ function normalizeAssignments(assignments) {
 function planMoA(input2 = {}, deps = {}) {
   const { task, stakes = "medium", mode = "implement", vision = false } = input2;
   if (!task || typeof task !== "string") throw new Error("task is required");
-  const models = deps.models ?? loadModels();
+  const models = deps.models ?? loadEffectiveModels();
   const schedule = deps.schedule ?? loadSchedule();
   const policy = deps.policy ?? loadEvolutionPolicy();
   const roles = deps.roles ?? loadRoles();
   const scheduleState = deps.scheduleState ?? getScheduleState(/* @__PURE__ */ new Date(), schedule);
   const explicitAssignments = normalizeAssignments(input2.assignments);
   const explicitSeats = normalizeSeats(input2.seats);
+  const orchestrationMode = input2.orchestrationMode ?? "auto";
+  if (!["off", "auto", "force"].includes(orchestrationMode)) throw new Error(`Invalid orchestrationMode: ${orchestrationMode}`);
   let level = "L1";
   if (explicitAssignments) level = "explicit";
+  else if (!explicitSeats && orchestrationMode === "off") level = "L0";
   else if (stakes === "high" || HIGH_RISK_RE.test(task)) level = "L3";
   else if (stakes === "medium" || COMPLEX_RE.test(task)) level = "L2";
   else if (SIMPLE_RE.test(task)) level = "L0";
-  if (!explicitAssignments && (mode === "audit" || mode === "review")) level = level === "L3" ? "L3" : "L2";
+  if (!explicitAssignments && !explicitSeats && orchestrationMode === "force" && level === "L0") level = "L1";
+  if (!explicitAssignments && orchestrationMode !== "off" && (mode === "audit" || mode === "review")) level = level === "L3" ? "L3" : "L2";
   let plannedSeats;
   if (explicitAssignments) {
     plannedSeats = explicitAssignments.map((assignment, index) => applyRoleDefaults(createExplicitSeat(assignment, index, models), roles));
@@ -28199,39 +28811,26 @@ function planMoA(input2 = {}, deps = {}) {
         seat: item.seat,
         model: resolved.id,
         providerModel: resolved.providerModel,
+        dsh: resolved.dsh,
         modelTier,
         harness: item.harness ?? definition.harness ?? resolved.harness
       }, roles);
     });
   }
-  for (const seat of plannedSeats) {
-    const requested = seat.reasoningEffort ?? input2.reasoningEffort ?? null;
-    const taskPolicy = effortForTask({
-      level,
-      role: seat.role,
-      stakes,
-      quotaPercent: Number.isFinite(input2.quotaPercent) ? input2.quotaPercent : null,
-      requested,
-      policy
-    });
-    seat.reasoningRequested = requested;
-    seat.reasoningEffort = resolveReasoningEffort(seat.model, taskPolicy.effort, models);
-    seat.reasoningSource = requested ? "explicit" : "task-policy";
-    seat.reasoningRationale = taskPolicy.rationale;
-    const limits = budgetForTask({
-      selector: seat.model,
-      level,
-      role: seat.role,
-      stakes,
-      requestedContext: seat.contextBudget,
-      requestedOutput: seat.outputBudget,
-      limitMode: seat.limitMode ?? input2.limitMode
-    }, models);
-    seat.contextWindow = limits.contextWindow;
-    seat.maxOutputTokens = limits.maxOutputTokens;
-    seat.contextBudget = limits.contextBudget;
-    seat.outputBudget = limits.outputBudget;
-    seat.limitSource = limits.source;
+  if (!explicitAssignments && !explicitSeats && !scheduleState.deepSeekOffPeak && stakes !== "high") {
+    for (const seat of plannedSeats) {
+      if (seat.harness !== "dsh" || seat.model !== "DeepSeek-flash") continue;
+      const preferred = input2.captain?.family === "zhipu" ? "kimi-2.8" : "GLM-5.3-flash";
+      const replacement = resolveModel(preferred, models);
+      seat.originalModel = seat.model;
+      seat.model = replacement.id;
+      seat.providerModel = replacement.providerModel;
+      seat.dsh = replacement.dsh;
+      seat.modelTier = replacement.tier;
+      seat.harness = "dsh";
+      seat.scheduleAdjusted = true;
+      seat.scheduleRationale = "DeepSeek peak pricing; keep the DeepSeekHarness agent and use a lower-cost provider model";
+    }
   }
   if (!explicitAssignments && !explicitSeats && input2.captain?.family && policy.audit?.avoidCaptainFamily) {
     const preferred = policy.audit.preferredByCaptainFamily?.[input2.captain.family] ?? [];
@@ -28247,18 +28846,48 @@ function planMoA(input2 = {}, deps = {}) {
           }
         }).find((model) => model && model.family !== input2.captain.family);
         if (replacement) {
+          const keepHarness = (replacement.supportedHarnesses ?? [replacement.harness]).includes(seat.harness);
           seat.originalModel = seat.model;
           seat.model = replacement.id;
           seat.providerModel = replacement.providerModel;
-          seat.harness = replacement.harness;
+          seat.dsh = replacement.dsh;
+          seat.harness = keepHarness ? seat.harness : replacement.harness;
           seat.modelTier = replacement.tier;
           seat.evolutionAdjusted = true;
         }
       }
     }
   }
+  for (const seat of plannedSeats) {
+    const requested = seat.reasoningEffort ?? input2.reasoningEffort ?? null;
+    seat.reasoningRequested = requested;
+    if (requested) {
+      seat.reasoningEffort = resolveReasoningEffort(seat.model, requested, models);
+      seat.reasoningSource = "explicit";
+      seat.reasoningRationale = "explicit reasoningEffort";
+    } else {
+      delete seat.reasoningEffort;
+      seat.reasoningSource = "model-default";
+      seat.reasoningRationale = "hands-off: model/harness default";
+    }
+    const limits = budgetForTask({
+      selector: seat.model,
+      level,
+      role: seat.role,
+      stakes,
+      requestedContext: seat.contextBudget,
+      requestedOutput: seat.outputBudget,
+      limitMode: seat.limitMode ?? input2.limitMode
+    }, models);
+    seat.contextWindow = limits.contextWindow;
+    seat.maxOutputTokens = limits.maxOutputTokens;
+    seat.contextBudget = limits.contextBudget;
+    seat.outputBudget = limits.outputBudget;
+    seat.limitSource = limits.source;
+  }
   return {
     level,
+    orchestrationMode,
     captain: input2.captain ?? null,
     evolutionPolicy: policy,
     mode,
@@ -28284,6 +28913,7 @@ function planMoA(input2 = {}, deps = {}) {
     },
     rationale: [
       `classified as ${level}`,
+      `orchestration mode: ${orchestrationMode}`,
       `${plannedSeats.length} external seat(s)`,
       plannedSeats.some((seat) => seat.model) ? `models: ${plannedSeats.map((seat) => seat.model).join(", ")}` : "no external model",
       scheduleState.glmNightCampaignActive ? "GLM night campaign active" : "GLM night campaign inactive",
@@ -28295,6 +28925,7 @@ var HIGH_RISK_RE, COMPLEX_RE, SIMPLE_RE;
 var init_router = __esm({
   "src/lib/router.mjs"() {
     init_config();
+    init_effective_models();
     init_scheduler();
     init_models();
     init_reasoning();
@@ -28308,21 +28939,21 @@ var init_router = __esm({
 });
 
 // src/lib/quota.mjs
-import { existsSync as existsSync3, readFileSync as readFileSync3 } from "node:fs";
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { homedir as homedir3 } from "node:os";
-import { join as join3, resolve as resolve3 } from "node:path";
+import { existsSync as existsSync4, readFileSync as readFileSync4 } from "node:fs";
+import { chmod as chmod2, mkdir as mkdir2, readFile as readFile2, rename as rename2, writeFile as writeFile2 } from "node:fs/promises";
+import { homedir as homedir4 } from "node:os";
+import { join as join4, resolve as resolve4 } from "node:path";
 import { randomUUID as randomUUID2 } from "node:crypto";
-function expandHome2(value) {
+function expandHome3(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir3();
-  if (value.startsWith("~/")) return resolve3(homedir3(), value.slice(2));
-  return resolve3(value);
+  if (value === "~") return homedir4();
+  if (value.startsWith("~/")) return resolve4(homedir4(), value.slice(2));
+  return resolve4(value);
 }
 function readDshCredential(name) {
-  const path = join3(homedir3(), ".dsh", ".credentials.yaml");
+  const path = join4(homedir4(), ".dsh", ".credentials.yaml");
   try {
-    const text = readFileSync3(path, "utf8");
+    const text = readFileSync4(path, "utf8");
     const pattern = new RegExp(`^\\s*${name}:\\s*(?:"([^"]+)"|'([^']+)'|([^\\s#]+))`, "m");
     const match = text.match(pattern);
     return match?.[1] ?? match?.[2] ?? match?.[3] ?? "";
@@ -28332,8 +28963,8 @@ function readDshCredential(name) {
 }
 function readKimiAccessToken() {
   try {
-    const path = join3(homedir3(), ".kimi-code", "credentials", "kimi-code.json");
-    return JSON.parse(readFileSync3(path, "utf8")).access_token ?? "";
+    const path = join4(homedir4(), ".kimi-code", "credentials", "kimi-code.json");
+    return JSON.parse(readFileSync4(path, "utf8")).access_token ?? "";
   } catch {
     return "";
   }
@@ -28534,7 +29165,7 @@ async function fetchDeepSeekQuota(credentials) {
   }
 }
 function quotaFilePath(config2 = loadConfig()) {
-  return expandHome2(config2.quota?.snapshotPath ?? "~/.codex-moa/quota.json");
+  return expandHome3(config2.quota?.snapshotPath ?? "~/.codex-moa/quota.json");
 }
 async function refreshQuota(config2 = loadConfig(), deps = {}) {
   const credentials = deps.credentials ?? resolveQuotaCredentials(deps.env);
@@ -28550,20 +29181,20 @@ async function refreshQuota(config2 = loadConfig(), deps = {}) {
   };
   if (deps.write !== false) {
     const path = quotaFilePath(config2);
-    await mkdir(join3(path, ".."), { recursive: true });
+    await mkdir2(join4(path, ".."), { recursive: true });
     const temporary = `${path}.${randomUUID2()}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(snapshot, null, 2)}
+    await writeFile2(temporary, `${JSON.stringify(snapshot, null, 2)}
 `, { mode: 384 });
-    await rename(temporary, path);
-    await chmod(path, 384);
+    await rename2(temporary, path);
+    await chmod2(path, 384);
   }
   return snapshot;
 }
 async function readQuotaSnapshot(config2 = loadConfig()) {
   const path = quotaFilePath(config2);
-  if (!existsSync3(path)) return null;
+  if (!existsSync4(path)) return null;
   try {
-    return JSON.parse(await readFile(path, "utf8"));
+    return JSON.parse(await readFile2(path, "utf8"));
   } catch {
     return null;
   }
@@ -28582,7 +29213,7 @@ function modelQuota(selector, snapshot, modelsConfig) {
 }
 function depletedModels(assignments, snapshot, modelsConfig) {
   if (!snapshot) return [];
-  return assignments.map((assignment) => ({ assignment, quota: modelQuota(assignment.model, snapshot, modelsConfig) })).filter(({ quota }) => quota.window?.remainingPercent !== void 0 && quota.window?.remainingPercent <= 0 || quota.window?.remaining !== void 0 && quota.window?.remaining <= 0 && !quota.window?.currency);
+  return assignments.map((assignment) => ({ assignment, quota: modelQuota(assignment.model, snapshot, modelsConfig) })).filter(({ quota }) => quota.window?.remainingPercent !== void 0 && quota.window?.remainingPercent <= 0 || quota.window?.remaining !== void 0 && quota.window?.remaining <= 0);
 }
 function quotaForSeats(seats2, snapshot, modelsConfig) {
   return seats2.map((seat) => ({ seat: seat.seat, model: seat.model, quota: modelQuota(seat.model, snapshot, modelsConfig) }));
@@ -28594,496 +29225,10 @@ var init_quota = __esm({
   }
 });
 
-// src/lib/process.mjs
-var process_exports = {};
-__export(process_exports, {
-  buildEnv: () => buildEnv,
-  runCommand: () => runCommand
-});
-import { spawn } from "node:child_process";
-function buildEnv(extra = {}, stripSecretEnv = true) {
-  const base = stripSecretEnv ? Object.fromEntries(Object.entries(process.env).filter(([key]) => !SECRET_ENV_RE.test(key))) : { ...process.env };
-  return { ...base, ...extra };
-}
-function killTree(child, signal = "SIGTERM") {
-  if (!child?.pid) return;
-  try {
-    if (process.platform !== "win32") process.kill(-child.pid, signal);
-    else child.kill(signal);
-  } catch {
-    try {
-      child.kill(signal);
-    } catch {
-    }
-  }
-}
-function runCommand({
-  command,
-  args = [],
-  cwd,
-  input: input2,
-  env = {},
-  timeoutMs = 3e5,
-  maxOutputBytes = 8 * 1024 * 1024,
-  stripSecretEnv = true
-}) {
-  return new Promise((resolve23) => {
-    const startedAt = Date.now();
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    let settled = false;
-    let child;
-    try {
-      child = spawn(command, args, {
-        cwd,
-        env: buildEnv(env, stripSecretEnv),
-        detached: process.platform !== "win32",
-        shell: false,
-        stdio: ["pipe", "pipe", "pipe"]
-      });
-    } catch (error62) {
-      return resolve23({
-        ok: false,
-        code: null,
-        signal: null,
-        stdout,
-        stderr: String(error62?.message ?? error62),
-        timedOut: false,
-        durationMs: Date.now() - startedAt
-      });
-    }
-    const append = (target, chunk) => {
-      const next = target + chunk.toString("utf8");
-      return Buffer.byteLength(next, "utf8") <= maxOutputBytes ? next : next.slice(0, maxOutputBytes);
-    };
-    child.stdout.on("data", (chunk) => {
-      stdout = append(stdout, chunk);
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr = append(stderr, chunk);
-    });
-    child.on("error", (error62) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve23({ ok: false, code: null, signal: null, stdout, stderr: String(error62?.message ?? error62), timedOut, durationMs: Date.now() - startedAt });
-    });
-    const timer = setTimeout(() => {
-      timedOut = true;
-      killTree(child, "SIGTERM");
-      setTimeout(() => killTree(child, "SIGKILL"), 3e3).unref?.();
-    }, Math.max(1, timeoutMs));
-    child.on("close", (code, signal) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve23({ ok: code === 0 && !timedOut, code, signal, stdout, stderr, timedOut, durationMs: Date.now() - startedAt });
-    });
-    if (input2 !== void 0) child.stdin.end(String(input2));
-    else child.stdin.end();
-  });
-}
-var SECRET_ENV_RE;
-var init_process = __esm({
-  "src/lib/process.mjs"() {
-    SECRET_ENV_RE = /(API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH)/i;
-  }
-});
-
-// src/lib/ccswitch.mjs
-import { existsSync as existsSync4 } from "node:fs";
-import { readFile as readFile2, writeFile as writeFile2, mkdir as mkdir2, rename as rename2, chmod as chmod2 } from "node:fs/promises";
-import { homedir as homedir4 } from "node:os";
-import { dirname as dirname3, join as join4, resolve as resolve4 } from "node:path";
-function expandHome3(value) {
-  if (typeof value !== "string") return value;
-  if (value === "~") return homedir4();
-  if (value.startsWith("~/")) return resolve4(homedir4(), value.slice(2));
-  return resolve4(value);
-}
-function unique(values) {
-  return [...new Set(values.filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim()))];
-}
-function extractModelEntries(settingsConfig) {
-  let parsed = null;
-  try {
-    parsed = JSON.parse(settingsConfig || "{}");
-  } catch {
-  }
-  const entries = [];
-  if (parsed) {
-    for (const model of parsed.modelCatalog?.models ?? []) {
-      entries.push({
-        id: model?.model ?? null,
-        name: model?.displayName ?? null,
-        levels: unique(model?.reasoningLevels ?? []),
-        defaultLevel: model?.defaultReasoningLevel ?? null,
-        contextWindow: model?.contextWindow ?? null,
-        maxTokens: model?.maxOutputTokens ?? model?.maxTokens ?? null
-      });
-    }
-    for (const model of parsed.models ?? []) {
-      const levels = unique(Object.keys(model?.thinkingLevelMap ?? {}));
-      entries.push({
-        id: model?.id ?? null,
-        name: model?.name ?? null,
-        levels: levels.length > 0 ? levels : model?.reasoning ? ["high"] : [],
-        defaultLevel: model?.defaultEffort ?? null,
-        contextWindow: model?.contextWindow ?? null,
-        maxTokens: model?.maxTokens ?? null
-      });
-    }
-  }
-  const seen = /* @__PURE__ */ new Set();
-  return entries.filter((entry) => {
-    const key = `${entry.id ?? ""}|${entry.name ?? ""}|${entry.levels.join(",")}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-function extractModelHints(settingsConfig) {
-  const hints = [];
-  for (const entry of extractModelEntries(settingsConfig)) {
-    if (entry.id) hints.push(entry.id);
-    if (entry.name) hints.push(entry.name);
-  }
-  let parsed = null;
-  try {
-    parsed = JSON.parse(settingsConfig || "{}");
-  } catch {
-  }
-  const env = parsed?.env ?? {};
-  for (const [key, value] of Object.entries(env)) {
-    if (/MODEL/i.test(key) && typeof value === "string") hints.push(value);
-  }
-  if (typeof parsed?.model === "string") hints.push(parsed.model);
-  const text = String(settingsConfig || "");
-  for (const match of text.matchAll(/(?:^|\s)model\s*=\s*["']([^"']+)["']/g)) hints.push(match[1]);
-  return unique(hints).filter((hint) => hint.length < 160);
-}
-function parseJsonObject(raw) {
-  try {
-    const value = JSON.parse(raw || "{}");
-    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  } catch {
-    return {};
-  }
-}
-function extractTomlAssignment(text, key) {
-  const escaped = String(key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = String(text ?? "").match(new RegExp(`^\\s*${escaped}\\s*=\\s*["']([^"']+)["']`, "m"));
-  return match?.[1] ?? null;
-}
-function extractTomlTable(text, tableName) {
-  const escaped = String(tableName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = new RegExp(`^\\[${escaped}\\]\\s*$`, "m").exec(String(text ?? ""));
-  if (!match) return null;
-  const rest = String(text).slice(match.index + match[0].length);
-  const next = rest.search(/^\s*\[/m);
-  return (next === -1 ? rest : rest.slice(0, next)).trim();
-}
-function sanitizeBaseUrl(value) {
-  if (typeof value !== "string" || !value.trim()) return null;
-  try {
-    const url2 = new URL(value.trim());
-    url2.username = "";
-    url2.password = "";
-    url2.search = "";
-    url2.hash = "";
-    return url2.toString().replace(/\/$/, "");
-  } catch {
-    return value.trim();
-  }
-}
-function isLoopbackBaseUrl(value) {
-  if (typeof value !== "string") return false;
-  try {
-    const host = new URL(value).hostname.toLowerCase();
-    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0";
-  } catch {
-    return /(?:localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)/i.test(value);
-  }
-}
-function extractCodexTransport(settingsConfig, apiFormat = null) {
-  const parsed = parseJsonObject(settingsConfig);
-  const text = typeof parsed.config === "string" ? parsed.config : "";
-  const modelProvider = extractTomlAssignment(text, "model_provider");
-  const providerSection = modelProvider ? extractTomlTable(text, `model_providers.${modelProvider}`) : null;
-  const scope = providerSection || text;
-  const baseUrl = extractTomlAssignment(scope, "base_url");
-  const wireApi = extractTomlAssignment(scope, "wire_api");
-  const proxyManaged = isLoopbackBaseUrl(baseUrl) || /experimental_bearer_token\s*=\s*["']PROXY_MANAGED["']/i.test(scope);
-  const directCapable = Boolean(baseUrl && wireApi === "responses" && !proxyManaged);
-  const directEligible = directCapable && (!apiFormat || apiFormat === "openai_responses");
-  const metadataMismatch = directCapable && Boolean(apiFormat) && apiFormat !== "openai_responses";
-  const proxyRequired = !directCapable && (apiFormat === "openai_chat" || apiFormat === "anthropic" || wireApi && wireApi !== "responses");
-  const routingMode = proxyManaged ? "proxy" : directEligible ? "direct" : metadataMismatch ? "metadata_stale" : proxyRequired ? "proxy_required" : directCapable ? "direct_candidate" : "unknown";
-  return {
-    modelProvider,
-    baseUrl: sanitizeBaseUrl(baseUrl),
-    wireApi,
-    apiFormat: apiFormat ?? null,
-    proxyManaged,
-    directCapable,
-    directEligible,
-    metadataMismatch,
-    proxyRequired,
-    routingMode
-  };
-}
-async function querySqlite(dbPath, sql) {
-  try {
-    const { DatabaseSync } = await import("node:sqlite");
-    const db = new DatabaseSync(dbPath, { readOnly: true });
-    const rows = db.prepare(sql).all().map((row) => ({ ...row }));
-    db.close();
-    return rows;
-  } catch (error62) {
-    if (error62?.code !== "ERR_UNKNOWN_BUILTIN_MODULE" && !/node:sqlite/i.test(String(error62?.message))) throw error62;
-  }
-  const { runCommand: runCommand2 } = await Promise.resolve().then(() => (init_process(), process_exports));
-  const result = await runCommand2({
-    command: "sqlite3",
-    args: ["-readonly", "-json", dbPath, sql],
-    timeoutMs: 15e3,
-    stripSecretEnv: true
-  });
-  if (!result.ok) throw new Error(result.stderr || `sqlite3 failed with exit ${result.code}`);
-  return JSON.parse(result.stdout || "[]");
-}
-function ccSwitchPaths() {
-  const root = expandHome3(process.env.CC_SWITCH_HOME || "~/.cc-switch");
-  return {
-    root,
-    settings: join4(root, "settings.json"),
-    database: join4(root, "cc-switch.db"),
-    skillsDir: join4(root, "skills")
-  };
-}
-function codexPaths() {
-  const root = expandHome3(process.env.CODEX_HOME || "~/.codex");
-  return {
-    root,
-    config: join4(root, "config.toml"),
-    auth: join4(root, "auth.json")
-  };
-}
-async function readCcSwitchSnapshot() {
-  const paths = ccSwitchPaths();
-  if (!existsSync4(paths.database) || !existsSync4(paths.settings)) {
-    return { available: false, reason: "cc-switch data not found", paths };
-  }
-  const settings = JSON.parse(await readFile2(paths.settings, "utf8"));
-  const providers = await querySqlite(paths.database, `
-    SELECT id, app_type, name, category, is_current, settings_config, meta
-    FROM providers
-    ORDER BY app_type, is_current DESC, sort_index, name
-  `);
-  const skills = await querySqlite(paths.database, `
-    SELECT id, name, description, directory, repo_owner, repo_name,
-           enabled_claude, enabled_codex, enabled_gemini, enabled_opencode,
-           enabled_hermes, enabled_grokbuild
-    FROM skills
-    ORDER BY name
-  `);
-  const safeProviders = providers.map((provider) => {
-    const meta3 = parseJsonObject(provider.meta);
-    const apiFormat = typeof meta3.apiFormat === "string" ? meta3.apiFormat : null;
-    return {
-      id: provider.id,
-      appType: provider.app_type,
-      name: provider.name,
-      category: provider.category,
-      isCurrent: Boolean(provider.is_current),
-      apiFormat,
-      meta: {
-        apiFormat,
-        promptCacheRouting: meta3.promptCacheRouting ?? null,
-        codexChatReasoning: Boolean(meta3.codexChatReasoning)
-      },
-      transport: extractCodexTransport(provider.settings_config, apiFormat),
-      models: extractModelHints(provider.settings_config),
-      modelEntries: extractModelEntries(provider.settings_config)
-    };
-  });
-  const current = {
-    codex: settings.currentProviderCodex ?? null,
-    claude: settings.currentProviderClaude ?? null
-  };
-  const codex = codexPaths();
-  let liveTransport = null;
-  if (existsSync4(codex.config)) {
-    try {
-      liveTransport = extractCodexTransport(JSON.stringify({ config: await readFile2(codex.config, "utf8") }), null);
-    } catch {
-    }
-  }
-  return {
-    available: true,
-    paths,
-    settings: {
-      currentProviderCodex: current.codex,
-      currentProviderClaude: current.claude,
-      localProxyEnabled: Boolean(settings.enableLocalProxy),
-      proxyConfirmed: Boolean(settings.proxyConfirmed),
-      skillStorageLocation: settings.skillStorageLocation ?? null,
-      skillSyncMethod: settings.skillSyncMethod ?? null
-    },
-    liveTransport,
-    currentProviders: Object.fromEntries(Object.entries(current).map(([app, id2]) => [app, safeProviders.find((provider) => provider.id === id2) ?? null])),
-    providers: safeProviders,
-    skills: skills.map((skill) => ({
-      id: skill.id,
-      name: skill.name,
-      description: skill.description,
-      directory: skill.directory,
-      upstream: skill.repo_owner && skill.repo_name ? `${skill.repo_owner}/${skill.repo_name}` : null,
-      enabled: {
-        claude: Boolean(skill.enabled_claude),
-        codex: Boolean(skill.enabled_codex),
-        gemini: Boolean(skill.enabled_gemini),
-        opencode: Boolean(skill.enabled_opencode),
-        hermes: Boolean(skill.enabled_hermes),
-        grokbuild: Boolean(skill.enabled_grokbuild)
-      }
-    }))
-  };
-}
-function normalize(value) {
-  return String(value ?? "").toLowerCase().replace(/\[[^\]]+\]/g, "").replace(/[^a-z0-9]+/g, "");
-}
-function bindModelsToCcSwitch(snapshot, modelsConfig = loadModels()) {
-  if (!snapshot?.available) return {};
-  return Object.fromEntries(listModels(modelsConfig).map((model) => {
-    const candidates = unique([
-      model.id,
-      model.providerModel,
-      model.displayName,
-      ...Object.entries(modelsConfig.aliases ?? {}).filter(([, id2]) => id2 === model.id).map(([alias]) => alias)
-    ]).map(normalize);
-    const scored = [];
-    for (const provider of snapshot.providers) {
-      const matches2 = [];
-      for (const hint of provider.models) {
-        const normalizedHint = normalize(hint);
-        for (const candidate of candidates) {
-          let score = 0;
-          if (normalizedHint === candidate) score = 100;
-          else if (candidate.length >= 4 && normalizedHint.includes(candidate)) score = 50;
-          else if (normalizedHint.length >= 4 && candidate.includes(normalizedHint)) score = 40;
-          if (score > 0) matches2.push({ hint, score });
-        }
-      }
-      const bestScore = Math.max(0, ...matches2.map((match) => match.score));
-      if (bestScore > 0) {
-        const matchedModels = unique(matches2.filter((match) => match.score === bestScore).map((match) => match.hint));
-        const matchedReasoningLevels = unique((provider.modelEntries ?? []).filter((entry) => matchedModels.some((matched) => normalize(matched) === normalize(entry.id) || normalize(matched) === normalize(entry.name))).flatMap((entry) => entry.levels ?? []));
-        scored.push({ provider: { ...provider, matchedModels, matchedReasoningLevels }, score: bestScore });
-      }
-    }
-    const best = Math.max(0, ...scored.map((item) => item.score));
-    return [model.id, scored.filter((item) => item.score === best).sort((a, b) => Number(b.provider.isCurrent) - Number(a.provider.isCurrent)).map((item) => item.provider)];
-  }));
-}
-function routingObservation(provider) {
-  const transport = provider.transport ?? {};
-  const status = transport.routingMode === "direct" ? "direct_ready" : transport.routingMode === "metadata_stale" ? "metadata_stale" : transport.routingMode === "proxy" ? "proxy_managed" : transport.routingMode === "proxy_required" ? "proxy_required" : "unknown";
-  const recommendedAction = {
-    direct_ready: "No local routing is required for this provider.",
-    metadata_stale: "Set the CC Switch upstream format to Responses or re-import the official preset.",
-    proxy_managed: "The live config still points at the local proxy; stop or disable takeover with live restore.",
-    proxy_required: "This upstream still requires local routing because it is not native Responses.",
-    unknown: "Inspect the provider base URL, wire API, and upstream format."
-  }[status];
-  return {
-    provider: provider.name,
-    appType: provider.appType,
-    apiFormat: provider.apiFormat ?? null,
-    baseUrl: transport.baseUrl ?? null,
-    wireApi: transport.wireApi ?? null,
-    routingMode: transport.routingMode ?? "unknown",
-    status,
-    recommendedAction
-  };
-}
-function ccswitchRoutingAudit(snapshot, modelsConfig = loadModels()) {
-  if (!snapshot?.available) return { available: false, models: {} };
-  const bindings = bindModelsToCcSwitch(snapshot, modelsConfig);
-  const models = Object.fromEntries(listModels(modelsConfig).map((model) => {
-    const boundProviders = bindings[model.id] ?? [];
-    const codexProviders = boundProviders.filter((provider) => provider.appType === "codex");
-    const observations = (codexProviders.length > 0 ? codexProviders : boundProviders).map(routingObservation);
-    const status = observations.some((item) => item.status === "metadata_stale") ? "metadata_stale" : observations.some((item) => item.status === "direct_ready") ? "direct_ready" : observations.some((item) => item.status === "proxy_required") ? "proxy_required" : observations.some((item) => item.status === "proxy_managed") ? "proxy_managed" : "unknown";
-    return [model.id, {
-      status,
-      observations,
-      recommendedAction: observations.find((item) => item.status === status)?.recommendedAction ?? "Inspect the bound CC Switch provider."
-    }];
-  }));
-  const liveMode = snapshot.liveTransport?.routingMode ?? "unknown";
-  const warnings = [];
-  if (!snapshot.settings?.localProxyEnabled && liveMode === "proxy") {
-    warnings.push("Codex live config is still proxy-managed while local routing is disabled.");
-  }
-  if (snapshot.settings?.localProxyEnabled && Object.values(models).some((item) => item.status === "direct_ready")) {
-    warnings.push("At least one provider is direct-ready; disable takeover for those providers when possible.");
-  }
-  return {
-    available: true,
-    localProxyEnabled: snapshot.settings?.localProxyEnabled ?? null,
-    liveMode,
-    liveTransport: snapshot.liveTransport ?? null,
-    warnings,
-    models
-  };
-}
-function ccswitchReasoningAudit(snapshot, modelsConfig = loadModels()) {
-  if (!snapshot?.available) return { available: false, models: {} };
-  const bindings = bindModelsToCcSwitch(snapshot, modelsConfig);
-  return {
-    available: true,
-    models: Object.fromEntries(listModels(modelsConfig).map((model) => {
-      const configured = model.reasoning?.supported ?? [];
-      const ccswitchLevels = unique((bindings[model.id] ?? []).flatMap((provider) => provider.matchedReasoningLevels ?? []));
-      return [model.id, {
-        configured,
-        ccswitchLevels,
-        missingInCcSwitch: configured.filter((level) => !ccswitchLevels.includes(level)),
-        extraInCcSwitch: ccswitchLevels.filter((level) => !configured.includes(level)),
-        complete: configured.every((level) => ccswitchLevels.includes(level))
-      }];
-    }))
-  };
-}
-function ccSwitchSkillStatus(snapshot, skillName = "codex-moa") {
-  if (!snapshot?.available) return { available: false, enabled: false };
-  const skill = snapshot.skills.find((item) => item.directory === skillName || item.name === skillName);
-  return skill ? { available: true, enabled: Boolean(skill.enabled.codex), skill } : { available: false, enabled: false };
-}
-var init_ccswitch = __esm({
-  "src/lib/ccswitch.mjs"() {
-    init_config();
-    init_models();
-  }
-});
-
 // src/lib/captain.mjs
-import { existsSync as existsSync5, readFileSync as readFileSync4 } from "node:fs";
-import { homedir as homedir5 } from "node:os";
-import { join as join5 } from "node:path";
-function readCodexConfigModel() {
-  const path = join5(homedir5(), ".codex", "config.toml");
-  try {
-    const text = readFileSync4(path, "utf8");
-    return text.match(/^\s*model\s*=\s*["']([^"']+)["']/m)?.[1] ?? null;
-  } catch {
-    return null;
-  }
-}
 function inferFamily(value) {
   const text = String(value ?? "").toLowerCase();
+  if (!text || text === "codex-selected") return "unknown";
   if (/kimi|moonshot|k2|k3/.test(text)) return "moonshot";
   if (/glm|zhipu|bigmodel|z\.ai/.test(text)) return "zhipu";
   if (/deepseek/.test(text)) return "deepseek";
@@ -29099,34 +29244,24 @@ function canonicalize(value, modelsConfig) {
   }
 }
 async function resolveCaptain({ captainModel, ccswitchSnapshot } = {}) {
-  const modelsConfig = loadModels();
-  const envModel = process.env.CODEX_MOA_CAPTAIN_MODEL || null;
-  const configModel = readCodexConfigModel();
-  let ccswitchModel = null;
+  const modelsConfig = loadEffectiveModels();
   let ccswitchProvider = null;
   let ccswitch = ccswitchSnapshot;
   try {
     ccswitch = ccswitch ?? await readCcSwitchSnapshot();
     ccswitchProvider = ccswitch?.currentProviders?.codex ?? null;
-    for (const hint of ccswitchProvider?.models ?? []) {
-      if (canonicalize(hint, modelsConfig)) {
-        ccswitchModel = hint;
-        break;
-      }
-    }
-    if (!ccswitchModel && ccswitchProvider?.name) ccswitchModel = ccswitchProvider.name;
   } catch {
   }
-  const selected = captainModel || envModel || configModel || ccswitchModel || "codex-selected";
+  const selected = captainModel || "codex-selected";
   const canonical = canonicalize(selected, modelsConfig);
   return {
     model: selected,
     canonicalModel: canonical?.id ?? null,
     harness: canonical?.harness ?? null,
     family: canonical?.family ?? inferFamily(selected),
-    source: captainModel ? "explicit" : envModel ? "environment" : configModel ? "codex-config" : ccswitchModel ? "cc-switch" : "fallback",
+    source: captainModel ? "explicit" : "active-codex-thread",
     provider: ccswitchProvider ? { id: ccswitchProvider.id, name: ccswitchProvider.name, appType: ccswitchProvider.appType } : null,
-    note: "Codex main model is never overridden. Sub-agents are selected independently."
+    note: captainModel ? "Codex main model was reported explicitly and is never overridden. Sub-agents are selected independently." : "The active Codex thread remains captain. Its page-level model is intentionally not guessed from global config or CC Switch."
   };
 }
 function auditConflict(captain, assignments, modelsConfig = loadModels()) {
@@ -29148,6 +29283,7 @@ function auditConflict(captain, assignments, modelsConfig = loadModels()) {
 var init_captain = __esm({
   "src/lib/captain.mjs"() {
     init_config();
+    init_effective_models();
     init_models();
     init_ccswitch();
   }
@@ -29156,29 +29292,56 @@ var init_captain = __esm({
 // src/lib/evolution.mjs
 import { appendFile, chmod as chmod3, copyFile, mkdir as mkdir3, readFile as readFile3, rename as rename3, writeFile as writeFile3 } from "node:fs/promises";
 import { createHash, randomUUID as randomUUID3 } from "node:crypto";
-import { homedir as homedir6 } from "node:os";
-import { dirname as dirname4, join as join6, resolve as resolve5 } from "node:path";
+import { homedir as homedir5 } from "node:os";
+import { dirname as dirname4, join as join5, resolve as resolve5 } from "node:path";
 function expandHome4(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir6();
-  if (value.startsWith("~/")) return resolve5(homedir6(), value.slice(2));
+  if (value === "~") return homedir5();
+  if (value.startsWith("~/")) return resolve5(homedir5(), value.slice(2));
   return resolve5(value);
 }
 function evolutionPaths() {
   const root = expandHome4(process.env.CODEX_MOA_EVOLUTION_HOME || "~/.codex-moa/evolution");
   return {
     root,
-    events: join6(root, "events.jsonl"),
-    outcomes: join6(root, "outcomes.jsonl"),
-    proposals: join6(root, "proposals"),
-    backups: join6(root, "backups")
+    events: join5(root, "events.jsonl"),
+    outcomes: join5(root, "outcomes.jsonl"),
+    proposals: join5(root, "proposals"),
+    backups: join5(root, "backups")
   };
+}
+function policyPath() {
+  return expandHome4(process.env.CODEX_MOA_POLICY_PATH || "~/.codex-moa/evolution-policy.json");
 }
 async function ensureEvolutionStore(paths = evolutionPaths()) {
   for (const path of [paths.root, paths.proposals, paths.backups]) await mkdir3(path, { recursive: true });
 }
 function id(prefix = "evo") {
   return `${prefix}-${(/* @__PURE__ */ new Date()).toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${randomUUID3().slice(0, 8)}`;
+}
+function validateProposalId(proposalId) {
+  const value = String(proposalId ?? "");
+  if (!/^evo-[A-Za-z0-9-]{8,80}$/.test(value)) throw new Error(`Invalid proposal ID: ${value}`);
+  return value;
+}
+function hash2(value) {
+  return createHash("sha256").update(String(value)).digest("hex");
+}
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+function summarizeReliability(states, minimumSamples = 3) {
+  return Object.fromEntries(Object.entries(states).map(([key, state]) => [key, {
+    ...state,
+    successRate: state.runs ? state.done / state.runs : null,
+    failureRate: state.runs ? state.failed / state.runs : null,
+    timeoutRate: state.runs ? state.timedOut / state.runs : null,
+    sampleSufficient: state.runs >= minimumSamples
+  }]));
 }
 function validatePolicyPatch(patch, topLevel = true) {
   if (patch === null || typeof patch !== "object" || Array.isArray(patch)) throw new Error("policyPatch must be a JSON object");
@@ -29188,6 +29351,12 @@ function validatePolicyPatch(patch, topLevel = true) {
     if (value && typeof value === "object" && !Array.isArray(value)) validatePolicyPatch(value, false);
   }
   return patch;
+}
+function deepMerge(base, patch) {
+  if (patch === null || typeof patch !== "object" || Array.isArray(patch)) return patch;
+  const output2 = base && typeof base === "object" && !Array.isArray(base) ? { ...base } : {};
+  for (const [key, value] of Object.entries(patch)) output2[key] = deepMerge(output2[key], value);
+  return output2;
 }
 async function recordEvolutionEvent(event, paths = evolutionPaths()) {
   await ensureEvolutionStore(paths);
@@ -29245,8 +29414,12 @@ async function analyzeEvolution(paths = evolutionPaths(), limit = 200) {
     accepted,
     acceptanceRate: outcomes.length ? accepted / outcomes.length : null,
     averageQuality,
-    seats: seatStates,
-    models
+    seats: summarizeReliability(seatStates),
+    models: summarizeReliability(models),
+    evidencePolicy: {
+      minimumSamples: 3,
+      note: "Rates below the minimum sample size are descriptive only and must not change routing automatically."
+    }
   };
 }
 async function writeJson2(path, value) {
@@ -29257,12 +29430,29 @@ async function writeJson2(path, value) {
   await rename3(temporary, path);
   await chmod3(path, 384);
 }
+async function normalizeProposalExpiry(proposal, file2) {
+  const createdAt = Date.parse(proposal.createdAt);
+  const fallbackExpiry = Number.isFinite(createdAt) ? createdAt + PROPOSAL_TTL_DAYS * 864e5 : Date.now();
+  proposal.expiresAt ??= new Date(fallbackExpiry).toISOString();
+  if (proposal.status === "proposed" && Date.parse(proposal.expiresAt) < Date.now()) {
+    proposal.status = "expired";
+    proposal.expiredAt = (/* @__PURE__ */ new Date()).toISOString();
+    await writeJson2(file2, proposal);
+  }
+  return proposal;
+}
 async function createProposal(input2, paths = evolutionPaths()) {
   validatePolicyPatch(input2.policyPatch ?? {});
   await ensureEvolutionStore(paths);
+  const fingerprint = hash2(stableJson(input2.policyPatch ?? {}));
+  const existing = (await listProposals(paths)).find(
+    (proposal2) => proposal2.fingerprint === fingerprint && ["proposed", "approved", "applied"].includes(proposal2.status)
+  );
+  if (existing) return { ...existing, deduplicated: true };
   const proposal = {
     id: id(),
     createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+    expiresAt: new Date(Date.now() + PROPOSAL_TTL_DAYS * 864e5).toISOString(),
     status: "proposed",
     requiresApproval: true,
     targetFile: "~/.codex-moa/evolution-policy.json",
@@ -29270,6 +29460,7 @@ async function createProposal(input2, paths = evolutionPaths()) {
     problem: input2.problem,
     evidence: input2.evidence ?? [],
     policyPatch: input2.policyPatch,
+    fingerprint,
     expectedBenefit: input2.expectedBenefit ?? null,
     risks: input2.risks ?? [],
     evaluationPlan: input2.evaluationPlan ?? [
@@ -29283,7 +29474,7 @@ async function createProposal(input2, paths = evolutionPaths()) {
   };
   proposal.approvalCommand = `APPROVE ${proposal.id}`;
   proposal.applyCommand = `APPLY ${proposal.id}`;
-  await writeJson2(join6(paths.proposals, `${proposal.id}.json`), proposal);
+  await writeJson2(join5(paths.proposals, `${proposal.id}.json`), proposal);
   return proposal;
 }
 async function listProposals(paths = evolutionPaths()) {
@@ -29291,20 +29482,36 @@ async function listProposals(paths = evolutionPaths()) {
   const files = [];
   try {
     const { readdir: readdir5 } = await import("node:fs/promises");
-    for (const file2 of await readdir5(paths.proposals)) if (file2.endsWith(".json")) files.push(join6(paths.proposals, file2));
+    for (const file2 of await readdir5(paths.proposals)) if (file2.endsWith(".json")) files.push(join5(paths.proposals, file2));
   } catch {
   }
   const proposals = [];
   for (const file2 of files) {
     try {
-      proposals.push(JSON.parse(await readFile3(file2, "utf8")));
+      proposals.push(await normalizeProposalExpiry(JSON.parse(await readFile3(file2, "utf8")), file2));
     } catch {
     }
   }
   return proposals.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 }
 async function getProposal(proposalId, paths = evolutionPaths()) {
-  return JSON.parse(await readFile3(join6(paths.proposals, `${proposalId}.json`), "utf8"));
+  const safeId = validateProposalId(proposalId);
+  const file2 = join5(paths.proposals, `${safeId}.json`);
+  return normalizeProposalExpiry(JSON.parse(await readFile3(file2, "utf8")), file2);
+}
+async function saveProposal(proposal, paths = evolutionPaths()) {
+  await writeJson2(join5(paths.proposals, `${proposal.id}.json`), proposal);
+}
+async function updateProposalStatus(proposalId, status, confirmation, expectedConfirmation, paths = evolutionPaths()) {
+  const proposal = await getProposal(proposalId, paths);
+  if (confirmation !== expectedConfirmation) throw new Error(`Confirmation mismatch. Expected: ${expectedConfirmation}`);
+  if (proposal.status === status) return proposal;
+  if (!["approved", "rejected"].includes(status)) throw new Error(`Unsupported proposal status transition: ${status}`);
+  if (proposal.status !== "proposed") throw new Error(`Proposal ${proposalId} is ${proposal.status}; expected proposed`);
+  proposal.status = status;
+  proposal[`${status}At`] = (/* @__PURE__ */ new Date()).toISOString();
+  await saveProposal(proposal, paths);
+  return proposal;
 }
 async function proposeFromEvidence(paths = evolutionPaths(), policyFile = null) {
   const analysis = await analyzeEvolution(paths);
@@ -29340,17 +29547,68 @@ async function proposeFromEvidence(paths = evolutionPaths(), policyFile = null) 
   }
   return { analysis, proposals };
 }
-var DANGEROUS_KEYS, ALLOWED_POLICY_KEYS;
+async function applyProposal(proposalId, confirmation, paths = evolutionPaths(), target = policyPath()) {
+  const proposal = await getProposal(proposalId, paths);
+  if (proposal.status !== "approved") throw new Error(`Proposal ${proposalId} must be approved first`);
+  if (confirmation !== `APPLY ${proposalId}`) throw new Error(`Confirmation mismatch. Expected: APPLY ${proposalId}`);
+  let current = {};
+  let hadTarget = true;
+  try {
+    current = JSON.parse(await readFile3(target, "utf8"));
+  } catch {
+    hadTarget = false;
+  }
+  validatePolicyPatch(proposal.policyPatch ?? {});
+  const next = deepMerge(current, proposal.policyPatch ?? {});
+  const backupDir = join5(paths.backups, proposalId);
+  await mkdir3(backupDir, { recursive: true });
+  const backupFile = join5(backupDir, "evolution-policy.json");
+  if (hadTarget) {
+    await copyFile(target, backupFile);
+    await chmod3(backupFile, 384);
+  } else {
+    await writeFile3(backupFile, "{}\n", { mode: 384 });
+  }
+  await writeJson2(target, next);
+  proposal.status = "applied";
+  proposal.appliedAt = (/* @__PURE__ */ new Date()).toISOString();
+  proposal.backupFile = backupFile;
+  proposal.hadTarget = hadTarget;
+  proposal.beforeHash = hash2(JSON.stringify(current));
+  proposal.afterHash = hash2(JSON.stringify(next));
+  await saveProposal(proposal, paths);
+  await recordEvolutionEvent({ type: "proposal_applied", proposalId, title: proposal.title, policyPatch: proposal.policyPatch }, paths);
+  return proposal;
+}
+async function rollbackProposal(proposalId, confirmation, paths = evolutionPaths(), target = policyPath()) {
+  const proposal = await getProposal(proposalId, paths);
+  if (proposal.status !== "applied") throw new Error(`Proposal ${proposalId} is not applied`);
+  if (confirmation !== `ROLLBACK ${proposalId}`) throw new Error(`Confirmation mismatch. Expected: ROLLBACK ${proposalId}`);
+  if (proposal.hadTarget === false) {
+    const { unlink: unlink3 } = await import("node:fs/promises");
+    await unlink3(target).catch(() => {
+    });
+  } else {
+    await copyFile(proposal.backupFile, target);
+  }
+  proposal.status = "rolled_back";
+  proposal.rolledBackAt = (/* @__PURE__ */ new Date()).toISOString();
+  await saveProposal(proposal, paths);
+  await recordEvolutionEvent({ type: "proposal_rolled_back", proposalId, title: proposal.title }, paths);
+  return proposal;
+}
+var DANGEROUS_KEYS, ALLOWED_POLICY_KEYS, PROPOSAL_TTL_DAYS;
 var init_evolution = __esm({
   "src/lib/evolution.mjs"() {
     init_config();
     DANGEROUS_KEYS = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
-    ALLOWED_POLICY_KEYS = /* @__PURE__ */ new Set(["version", "audit", "routing", "timeouts"]);
+    ALLOWED_POLICY_KEYS = /* @__PURE__ */ new Set(["version", "audit", "routing", "timeouts", "reasoning"]);
+    PROPOSAL_TTL_DAYS = 30;
   }
 });
 
 // src/lib/json-store.mjs
-import { existsSync as existsSync6 } from "node:fs";
+import { existsSync as existsSync5 } from "node:fs";
 import { chmod as chmod4, mkdir as mkdir4, open as open2, readFile as readFile4, rename as rename4, stat, unlink, writeFile as writeFile4 } from "node:fs/promises";
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { dirname as dirname5 } from "node:path";
@@ -29412,7 +29670,7 @@ function migrateJsonStore(value, { version: version2, defaultValue, migrations =
   return { ...structuredClone(defaultValue), ...current, version: version2 };
 }
 async function readJsonStore(path, { version: version2 = 1, defaultValue = {}, migrations = {} } = {}) {
-  if (!existsSync6(path)) return migrateJsonStore(structuredClone(defaultValue), { version: version2, defaultValue, migrations });
+  if (!existsSync5(path)) return migrateJsonStore(structuredClone(defaultValue), { version: version2, defaultValue, migrations });
   try {
     const parsed = JSON.parse(await readFile4(path, "utf8"));
     return migrateJsonStore(parsed, { version: version2, defaultValue, migrations });
@@ -29442,12 +29700,12 @@ var init_json_store = __esm({
 
 // src/lib/continuity.mjs
 import { createHash as createHash2 } from "node:crypto";
-import { homedir as homedir7 } from "node:os";
+import { homedir as homedir6 } from "node:os";
 import { resolve as resolve6 } from "node:path";
 function expandHome5(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir7();
-  if (value.startsWith("~/")) return resolve6(homedir7(), value.slice(2));
+  if (value === "~") return homedir6();
+  if (value.startsWith("~/")) return resolve6(homedir6(), value.slice(2));
   return resolve6(value);
 }
 function continuityStorePath() {
@@ -29492,15 +29750,15 @@ var init_continuity = __esm({
 });
 
 // src/lib/memory.mjs
-import { existsSync as existsSync7, readFileSync as readFileSync5 } from "node:fs";
+import { existsSync as existsSync6, readFileSync as readFileSync5 } from "node:fs";
 import { chmod as chmod5, mkdir as mkdir5, readdir, rename as rename5, writeFile as writeFile5 } from "node:fs/promises";
 import { createHash as createHash3, randomUUID as randomUUID5 } from "node:crypto";
-import { homedir as homedir8 } from "node:os";
-import { dirname as dirname6, join as join7, resolve as resolve7 } from "node:path";
+import { homedir as homedir7 } from "node:os";
+import { dirname as dirname6, join as join6, resolve as resolve7 } from "node:path";
 function expandHome6(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir8();
-  if (value.startsWith("~/")) return resolve7(homedir8(), value.slice(2));
+  if (value === "~") return homedir7();
+  if (value.startsWith("~/")) return resolve7(homedir7(), value.slice(2));
   return resolve7(value);
 }
 function memoryRoot() {
@@ -29512,7 +29770,7 @@ ${resolve7(cwd || process.cwd())}`;
   return createHash3("sha256").update(source).digest("hex").slice(0, 24);
 }
 function memoryPath(key) {
-  return join7(memoryRoot(), `${key}.json`);
+  return join6(memoryRoot(), `${key}.json`);
 }
 async function saveMemory(memory) {
   await mkdir5(dirname6(memory.path), { recursive: true });
@@ -29526,7 +29784,7 @@ async function saveMemory(memory) {
 async function loadMemory({ key, cwd, title = null }) {
   const resolvedKey = memoryKey({ key, cwd });
   const path = memoryPath(resolvedKey);
-  if (!existsSync7(path)) {
+  if (!existsSync6(path)) {
     return {
       version: 1,
       key: resolvedKey,
@@ -29630,12 +29888,12 @@ function buildMemoryPack(memory, maxChars = 8e3) {
 }
 async function listMemories() {
   const root = memoryRoot();
-  if (!existsSync7(root)) return [];
+  if (!existsSync6(root)) return [];
   const result = [];
   for (const file2 of await readdir(root)) {
     if (!file2.endsWith(".json")) continue;
     try {
-      const memory = JSON.parse(readFileSync5(join7(root, file2), "utf8"));
+      const memory = JSON.parse(readFileSync5(join6(root, file2), "utf8"));
       result.push({ key: memory.key, sourceKey: memory.sourceKey, title: memory.title, cwd: memory.cwd, updatedAt: memory.updatedAt });
     } catch {
     }
@@ -29649,20 +29907,20 @@ var init_memory = __esm({
 });
 
 // src/lib/seat-registry.mjs
-import { existsSync as existsSync8, readFileSync as readFileSync6 } from "node:fs";
-import { homedir as homedir9 } from "node:os";
+import { existsSync as existsSync7, readFileSync as readFileSync6 } from "node:fs";
+import { homedir as homedir8 } from "node:os";
 import { resolve as resolve8 } from "node:path";
 function expandHome7(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir9();
-  if (value.startsWith("~/")) return resolve8(homedir9(), value.slice(2));
+  if (value === "~") return homedir8();
+  if (value.startsWith("~/")) return resolve8(homedir8(), value.slice(2));
   return resolve8(value);
 }
 function seatRegistryPath() {
   return expandHome7(process.env.CODEX_MOA_SEAT_REGISTRY || "~/.codex-moa/seats.json");
 }
 function readSeatRegistry(path = seatRegistryPath()) {
-  if (!existsSync8(path)) return migrateJsonStore(structuredClone(DEFAULT_REGISTRY), { version: SEAT_REGISTRY_VERSION, defaultValue: DEFAULT_REGISTRY, migrations: MIGRATIONS2 });
+  if (!existsSync7(path)) return migrateJsonStore(structuredClone(DEFAULT_REGISTRY), { version: SEAT_REGISTRY_VERSION, defaultValue: DEFAULT_REGISTRY, migrations: MIGRATIONS2 });
   try {
     return migrateJsonStore(JSON.parse(readFileSync6(path, "utf8")), { version: SEAT_REGISTRY_VERSION, defaultValue: DEFAULT_REGISTRY, migrations: MIGRATIONS2 });
   } catch {
@@ -29703,15 +29961,15 @@ var init_seat_registry = __esm({
 });
 
 // src/lib/worktree.mjs
-import { existsSync as existsSync9 } from "node:fs";
+import { existsSync as existsSync8 } from "node:fs";
 import { chmod as chmod6, mkdir as mkdir6, writeFile as writeFile6 } from "node:fs/promises";
 import { createHash as createHash4 } from "node:crypto";
-import { homedir as homedir10 } from "node:os";
-import { join as join8, resolve as resolve9 } from "node:path";
+import { homedir as homedir9 } from "node:os";
+import { join as join7, resolve as resolve9, sep } from "node:path";
 function expandHome8(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir10();
-  if (value.startsWith("~/")) return resolve9(homedir10(), value.slice(2));
+  if (value === "~") return homedir9();
+  if (value.startsWith("~/")) return resolve9(homedir9(), value.slice(2));
   return resolve9(value);
 }
 async function gitRoot(cwd) {
@@ -29723,22 +29981,22 @@ async function currentHead(cwd) {
   return result.ok ? result.stdout.trim() : null;
 }
 function worktreeRoot(repo) {
-  const hash2 = createHash4("sha256").update(resolve9(repo)).digest("hex").slice(0, 12);
-  return join8(expandHome8("~/.codex-moa/worktrees"), hash2);
+  const hash3 = createHash4("sha256").update(resolve9(repo)).digest("hex").slice(0, 12);
+  return join7(expandHome8("~/.codex-moa/worktrees"), hash3);
 }
 async function createWorktree({ cwd, taskId, seat }) {
   const repo = await gitRoot(cwd);
   if (!repo) return { supported: false, repo: null, path: null };
-  const path = join8(worktreeRoot(repo), taskId, seat);
-  await mkdir6(join8(worktreeRoot(repo), taskId), { recursive: true });
-  if (existsSync9(path)) return { supported: true, repo, path, baseCommit: await currentHead(repo), existing: true };
+  const path = join7(worktreeRoot(repo), taskId, seat);
+  await mkdir6(join7(worktreeRoot(repo), taskId), { recursive: true });
+  if (existsSync8(path)) return { supported: true, repo, path, baseCommit: await currentHead(repo), existing: true };
   const result = await runCommand({
     command: "git",
     args: ["worktree", "add", "--detach", path, "HEAD"],
     cwd: repo,
     timeoutMs: 12e4
   });
-  if (!result.ok && !existsSync9(path)) throw new Error(result.stderr || `git worktree add failed with exit ${result.code}`);
+  if (!result.ok && !existsSync8(path)) throw new Error(result.stderr || `git worktree add failed with exit ${result.code}`);
   return { supported: true, repo, path, baseCommit: await currentHead(repo) };
 }
 function parseStatus(output2) {
@@ -29757,7 +30015,7 @@ function parseStatus(output2) {
   return { changedFiles, untrackedFiles, deletedFiles };
 }
 async function captureWorktreeDiff(path) {
-  if (!path || !existsSync9(path)) return "";
+  if (!path || !existsSync8(path)) return "";
   const status = await runCommand({ command: "git", args: ["status", "--porcelain=v1", "--untracked-files=all"], cwd: path, timeoutMs: 3e4 });
   const parsed = parseStatus(status.stdout);
   if (parsed.untrackedFiles.length > 0) {
@@ -29770,7 +30028,7 @@ async function captureWorktreeDiff(path) {
   return result.stdout || "";
 }
 async function inspectWorktree(path, { baseCommit = null, resultStatus = "done", diff = null } = {}) {
-  if (!path || !existsSync9(path)) {
+  if (!path || !existsSync8(path)) {
     return { exists: false, clean: false, changedFiles: [], untrackedFiles: [], deletedFiles: [], diffBytes: 0, partialWrite: false, hasConflicts: false };
   }
   const status = await runCommand({ command: "git", args: ["status", "--porcelain=v1", "--untracked-files=all"], cwd: path, timeoutMs: 3e4 });
@@ -29793,8 +30051,8 @@ async function inspectWorktree(path, { baseCommit = null, resultStatus = "done",
 }
 async function writeDiffArtifact(root, seat, diff) {
   if (!diff) return null;
-  const path = join8(root, "artifacts", `${seat}.patch`);
-  await mkdir6(join8(root, "artifacts"), { recursive: true });
+  const path = join7(root, "artifacts", `${seat}.patch`);
+  await mkdir6(join7(root, "artifacts"), { recursive: true });
   await writeFile6(path, diff, { encoding: "utf8", mode: 384 });
   await chmod6(path, 384).catch(() => {
   });
@@ -29840,10 +30098,22 @@ async function listWorktrees(cwd) {
   });
 }
 async function removeWorktree(path, { repo = null, force = false } = {}) {
-  if (!path || !existsSync9(path)) return { removed: false, error: "Worktree does not exist" };
+  if (!path || !existsSync8(path)) return { removed: false, error: "Worktree does not exist" };
+  if (!repo) return { removed: false, error: "Repository root is required for managed worktree removal" };
+  const repository = await gitRoot(repo);
+  if (!repository) return { removed: false, error: "Not a Git repository" };
+  const target = resolve9(path);
+  const managedRoot = resolve9(worktreeRoot(repository));
+  if (!target.startsWith(`${managedRoot}${sep}`)) {
+    return { removed: false, path: target, error: `Refusing to remove a worktree outside the managed root: ${managedRoot}` };
+  }
+  const registered = await listWorktrees(repository);
+  if (!registered.some((entry) => resolve9(entry.path) === target)) {
+    return { removed: false, path: target, error: "Refusing to remove a path not registered as a git worktree" };
+  }
   const args = ["worktree", "remove", ...force ? ["--force"] : [], path];
-  const result = await runCommand({ command: "git", args, cwd: repo ?? path, timeoutMs: 6e4 });
-  return { removed: result.ok, path, error: result.ok ? null : result.stderr || `exit ${result.code}` };
+  const result = await runCommand({ command: "git", args, cwd: repository, timeoutMs: 6e4 });
+  return { removed: result.ok, path: target, error: result.ok ? null : result.stderr || `exit ${result.code}` };
 }
 async function pruneWorktrees(cwd, { dryRun = true, expire = null } = {}) {
   const repo = await gitRoot(cwd);
@@ -29861,7 +30131,7 @@ var init_worktree = __esm({
 // src/lib/context-pack.mjs
 import { createHash as createHash5 } from "node:crypto";
 import { readFile as readFile5 } from "node:fs/promises";
-import { join as join9 } from "node:path";
+import { join as join8 } from "node:path";
 function keywords(task) {
   return [...new Set(String(task).toLowerCase().match(/[a-zA-Z0-9_./-]{3,}|[\u4e00-\u9fff]{2,}/g) ?? [])].filter((word) => !STOP_WORDS.has(word)).slice(0, 40);
 }
@@ -29883,7 +30153,7 @@ async function buildContextPack({ cwd, task, maxFiles = 20, maxTotalTokens = 32e
     if (score <= 0) continue;
     let content = "";
     try {
-      content = await readFile5(join9(cwd, rel), "utf8");
+      content = await readFile5(join8(cwd, rel), "utf8");
     } catch {
     }
     for (const term of terms) if (content.toLowerCase().includes(term)) score += 2;
@@ -30119,14 +30389,14 @@ var init_seat_result = __esm({
 });
 
 // src/lib/cost-ledger.mjs
-import { existsSync as existsSync10, readFileSync as readFileSync7 } from "node:fs";
+import { existsSync as existsSync9, readFileSync as readFileSync7 } from "node:fs";
 import { appendFile as appendFile2, chmod as chmod7, mkdir as mkdir7, readFile as readFile6 } from "node:fs/promises";
-import { homedir as homedir11 } from "node:os";
+import { homedir as homedir10 } from "node:os";
 import { dirname as dirname7, resolve as resolve10 } from "node:path";
 function expandHome9(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir11();
-  if (value.startsWith("~/")) return resolve10(homedir11(), value.slice(2));
+  if (value === "~") return homedir10();
+  if (value.startsWith("~/")) return resolve10(homedir10(), value.slice(2));
   return resolve10(value);
 }
 function costLedgerPath() {
@@ -30159,10 +30429,22 @@ function normalizeUsage(usage) {
     contextWindow: pick2("contextWindow", "size") ?? null
   };
 }
-function estimateUsageCost(model, usage, pricing = loadPricing()) {
+function estimateUsageCost(model, usage, pricing = loadPricing(), at = /* @__PURE__ */ new Date()) {
   const normalized = normalizeUsage(usage);
   const rates = pricing?.models?.[model] ?? null;
   const hasRate = (value) => value !== null && value !== void 0 && value !== "" && Number.isFinite(Number(value));
+  if (rates?.rates) {
+    const period = getScheduleState(at, loadSchedule()).deepSeekPricing;
+    const periodRates = rates.rates[period];
+    if (periodRates && hasRate(periodRates.cacheMissInputPerMillion) && hasRate(periodRates.outputPerMillion)) {
+      const cached2 = Math.max(0, Number(normalized.cacheReadTokens) || 0);
+      const input2 = Math.max(0, Number(normalized.inputTokens) || 0);
+      const uncached = Math.max(0, input2 - cached2);
+      const inputCost2 = uncached / 1e6 * Number(periodRates.cacheMissInputPerMillion) + cached2 / 1e6 * Number(periodRates.cacheHitInputPerMillion ?? periodRates.cacheMissInputPerMillion);
+      const outputCost2 = Math.max(0, Number(normalized.outputTokens) || 0) / 1e6 * Number(periodRates.outputPerMillion);
+      return { estimatedUsd: inputCost2 + outputCost2, currency: pricing?.currency ?? "USD", pricingSource: "config/pricing.json", pricingKnown: true, pricingPeriod: period };
+    }
+  }
   if (!rates || !hasRate(rates.inputPerMillion) || !hasRate(rates.outputPerMillion)) {
     return { estimatedUsd: null, currency: pricing?.currency ?? "USD", pricingSource: "config/pricing.json", pricingKnown: false };
   }
@@ -30200,7 +30482,7 @@ async function recordCostEntry(entry, path = costLedgerPath()) {
   return entry;
 }
 async function readCostLedger(path = costLedgerPath(), limit = 1e4) {
-  if (!existsSync10(path)) return [];
+  if (!existsSync9(path)) return [];
   try {
     const lines = (await readFile6(path, "utf8")).split(/\r?\n/).filter(Boolean).slice(-limit);
     return lines.map((line) => JSON.parse(line));
@@ -30275,16 +30557,18 @@ function providerForModelName(model) {
 var init_cost_ledger = __esm({
   "src/lib/cost-ledger.mjs"() {
     init_config();
+    init_config();
+    init_scheduler();
   }
 });
 
 // src/lib/provider-state.mjs
-import { homedir as homedir12 } from "node:os";
+import { homedir as homedir11 } from "node:os";
 import { resolve as resolve11 } from "node:path";
 function expandHome10(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir12();
-  if (value.startsWith("~/")) return resolve11(homedir12(), value.slice(2));
+  if (value === "~") return homedir11();
+  if (value.startsWith("~/")) return resolve11(homedir11(), value.slice(2));
   return resolve11(value);
 }
 function providerStatePath() {
@@ -30440,6 +30724,8 @@ function providerState(quota, recent) {
   if (!quota || quota.status === "not_configured") return "inactive";
   if (quota.status === "unauthorized" || quota.status === "rate_limited") return "critical";
   if (quota.status !== "ok") return "warning";
+  const emptyBalance = (quota.windows ?? []).some((window) => window.kind === "billing" && Number.isFinite(Number(window.remaining)) && Number(window.remaining) <= 0);
+  if (emptyBalance) return "critical";
   const low = (quota.windows ?? []).some((window) => Number.isFinite(Number(window.remainingPercent)) && Number(window.remainingPercent) <= Number(quota.lowThreshold ?? 10));
   if (low) return "warning";
   if (recent?.runs >= 3 && recent.failures / recent.runs >= 0.5) return "warning";
@@ -30524,6 +30810,7 @@ function applyProviderHealthRouting(seats2, { health, modelsConfig, captain = nu
     seat.originalModel = seat.model;
     seat.model = replacement.id;
     seat.providerModel = replacement.providerModel;
+    seat.dsh = replacement.dsh;
     seat.harness = replacement.harness;
     seat.modelTier = replacement.tier;
     seat.healthAdjusted = true;
@@ -30619,11 +30906,11 @@ var init_budget = __esm({
 });
 
 // src/adapters/base.mjs
-import { existsSync as existsSync11, statSync } from "node:fs";
+import { existsSync as existsSync10, statSync } from "node:fs";
 import { resolve as resolve12 } from "node:path";
 function resolveCwd(cwd, fallback) {
   const value = resolve12(cwd || fallback || process.cwd());
-  if (!existsSync11(value) || !statSync(value).isDirectory()) throw new Error(`Working directory does not exist: ${value}`);
+  if (!existsSync10(value) || !statSync(value).isDirectory()) throw new Error(`Working directory does not exist: ${value}`);
   return value;
 }
 function commandParts(commandConfig) {
@@ -30710,13 +30997,13 @@ var init_kimi = __esm({
 
 // src/lib/zcode-model.mjs
 import { chmod as chmod8, copyFile as copyFile2, mkdir as mkdir8, readFile as readFile7, rename as rename6, stat as stat2, writeFile as writeFile7 } from "node:fs/promises";
-import { dirname as dirname8, join as join10, resolve as resolve13 } from "node:path";
-import { homedir as homedir13 } from "node:os";
+import { dirname as dirname8, join as join9, resolve as resolve13 } from "node:path";
+import { homedir as homedir12 } from "node:os";
 import { randomUUID as randomUUID6 } from "node:crypto";
 function expandHome11(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir13();
-  if (value.startsWith("~/")) return resolve13(homedir13(), value.slice(2));
+  if (value === "~") return homedir12();
+  if (value.startsWith("~/")) return resolve13(homedir12(), value.slice(2));
   return resolve13(value);
 }
 async function readJson2(path, missingOk = false) {
@@ -30786,7 +31073,7 @@ function cliProviderCopy(provider) {
 }
 async function atomicWritePrivate(path, value) {
   await mkdir8(dirname8(path), { recursive: true });
-  const temporary = join10(dirname8(path), `.${path.split("/").pop()}.${randomUUID6()}.tmp`);
+  const temporary = join9(dirname8(path), `.${path.split("/").pop()}.${randomUUID6()}.tmp`);
   await writeFile7(temporary, `${JSON.stringify(value, null, 2)}
 `, { encoding: "utf8", mode: 384 });
   await rename6(temporary, path);
@@ -30892,18 +31179,18 @@ var init_zcode_model = __esm({
 });
 
 // src/lib/zcode-home.mjs
-import { existsSync as existsSync12 } from "node:fs";
+import { existsSync as existsSync11 } from "node:fs";
 import { chmod as chmod9, copyFile as copyFile3, mkdir as mkdir9, symlink } from "node:fs/promises";
-import { homedir as homedir14 } from "node:os";
-import { dirname as dirname9, join as join11, resolve as resolve14 } from "node:path";
+import { homedir as homedir13 } from "node:os";
+import { dirname as dirname9, join as join10, resolve as resolve14 } from "node:path";
 function expandHome12(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir14();
-  if (value.startsWith("~/")) return resolve14(homedir14(), value.slice(2));
+  if (value === "~") return homedir13();
+  if (value.startsWith("~/")) return resolve14(homedir13(), value.slice(2));
   return resolve14(value);
 }
 async function linkOrCopy(source, destination) {
-  if (!existsSync12(source) || existsSync12(destination)) return;
+  if (!existsSync11(source) || existsSync11(destination)) return;
   try {
     await symlink(source, destination);
   } catch {
@@ -30913,19 +31200,19 @@ async function linkOrCopy(source, destination) {
 }
 async function prepareZCodeHome(config2 = {}) {
   const home = expandHome12(config2.zcode?.headlessHome ?? "~/.codex-moa/zcode-home");
-  const cliDir = join11(home, ".zcode", "cli");
-  const v2Dir = join11(home, ".zcode", "v2");
+  const cliDir = join10(home, ".zcode", "cli");
+  const v2Dir = join10(home, ".zcode", "v2");
   await mkdir9(cliDir, { recursive: true });
   await mkdir9(v2Dir, { recursive: true });
   await chmod9(home, 448).catch(() => {
   });
   const realV2 = dirname9(expandHome12(config2.zcode?.desktopConfig ?? "~/.zcode/v2/config.json"));
   for (const file2 of ["credentials.json", "setting.json", "config.json"]) {
-    await linkOrCopy(join11(realV2, file2), join11(v2Dir, file2));
+    await linkOrCopy(join10(realV2, file2), join10(v2Dir, file2));
   }
   return {
     home,
-    cliConfigPath: join11(cliDir, "config.json"),
+    cliConfigPath: join10(cliDir, "config.json"),
     v2Dir
   };
 }
@@ -31007,14 +31294,14 @@ var init_zcode = __esm({
 });
 
 // src/lib/dsh-home.mjs
-import { existsSync as existsSync13, lstatSync, mkdirSync as mkdirSync2, readFileSync as readFileSync8, readlinkSync, symlinkSync } from "node:fs";
+import { existsSync as existsSync12, lstatSync, mkdirSync as mkdirSync2, readFileSync as readFileSync8, readlinkSync, symlinkSync } from "node:fs";
 import { mkdir as mkdir10, writeFile as writeFile8 } from "node:fs/promises";
-import { homedir as homedir15 } from "node:os";
-import { join as join12, resolve as resolve15 } from "node:path";
+import { homedir as homedir14 } from "node:os";
+import { join as join11, resolve as resolve15 } from "node:path";
 function expandHome13(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir15();
-  if (value.startsWith("~/")) return resolve15(homedir15(), value.slice(2));
+  if (value === "~") return homedir14();
+  if (value.startsWith("~/")) return resolve15(homedir14(), value.slice(2));
   return resolve15(value);
 }
 function setTopLevelValue(text, blockName, key, value) {
@@ -31049,7 +31336,7 @@ function setModelMaxTokens(text, providerName, modelId, value) {
   return text;
 }
 function ensureSymlink(target, source) {
-  if (!existsSync13(source)) return;
+  if (!existsSync12(source)) return;
   try {
     const stat6 = lstatSync(target);
     if (stat6.isSymbolicLink() && readlinkSync(target) === source) return;
@@ -31058,26 +31345,34 @@ function ensureSymlink(target, source) {
   }
   symlinkSync(source, target);
 }
-async function prepareDshHome(reasoningEffort = "high", options = {}) {
+async function prepareDshHome(reasoningEffort = null, options = {}) {
   const sourceHome = expandHome13(options.sourceHome || process.env.DSH_HOME || "~/.dsh");
   const root = expandHome13(options.targetRoot || "~/.codex-moa/dsh-homes");
-  const effort = ["off", "low", "high", "max"].includes(reasoningEffort) ? reasoningEffort : "high";
+  const effort = ["off", "low", "high", "max"].includes(reasoningEffort) ? reasoningEffort : null;
   const outputBudget = Number(options.outputBudget ?? 0);
-  const target = join12(root, outputBudget > 0 ? `${effort}-out-${outputBudget}` : effort);
+  const provider = options.provider ?? null;
+  const model = options.model ?? null;
+  const routeLabel = [provider, model].filter(Boolean).join("-").replace(/[^A-Za-z0-9._-]+/g, "-");
+  const label = routeLabel ? `${routeLabel}-${effort ?? "default"}` : effort ?? "default";
+  const target = join11(root, outputBudget > 0 ? `${label}-out-${outputBudget}` : label);
   await mkdir10(target, { recursive: true });
-  const sourceSettings = join12(sourceHome, "settings.yaml");
-  let settings = existsSync13(sourceSettings) ? readFileSync8(sourceSettings, "utf8") : "";
-  settings = setTopLevelValue(settings, "agent-default-model", "reasoningEffort", effort);
-  settings = setTopLevelValue(settings, "llm-deepseek", "reasoningEffort", effort);
+  const sourceSettings = join11(sourceHome, "settings.yaml");
+  let settings = existsSync12(sourceSettings) ? readFileSync8(sourceSettings, "utf8") : "";
+  if (provider) settings = setTopLevelValue(settings, "agent-default-model", "provider", provider);
+  if (model) settings = setTopLevelValue(settings, "agent-default-model", "model", model);
+  if (effort) {
+    settings = setTopLevelValue(settings, "agent-default-model", "reasoningEffort", effort);
+    settings = setTopLevelValue(settings, "llm-deepseek", "reasoningEffort", effort);
+  }
   if (outputBudget > 0) settings = setModelMaxTokens(settings, "llm-deepseek", "deepseek-flash", outputBudget);
-  await writeFile8(join12(target, "settings.yaml"), settings, "utf8");
-  ensureSymlink(join12(target, "profiles"), join12(sourceHome, "profiles"));
-  ensureSymlink(join12(target, "skills"), join12(sourceHome, "skills"));
-  ensureSymlink(join12(target, ".credentials.yaml"), join12(sourceHome, ".credentials.yaml"));
-  ensureSymlink(join12(target, "cordis.patch.yml"), join12(sourceHome, "cordis.patch.yml"));
-  mkdirSync2(join12(target, "sessions"), { recursive: true });
-  mkdirSync2(join12(target, "storages"), { recursive: true });
-  return { home: target, effort, outputBudget: outputBudget > 0 ? outputBudget : null };
+  await writeFile8(join11(target, "settings.yaml"), settings, "utf8");
+  ensureSymlink(join11(target, "profiles"), join11(sourceHome, "profiles"));
+  ensureSymlink(join11(target, "skills"), join11(sourceHome, "skills"));
+  ensureSymlink(join11(target, ".credentials.yaml"), join11(sourceHome, ".credentials.yaml"));
+  ensureSymlink(join11(target, "cordis.patch.yml"), join11(sourceHome, "cordis.patch.yml"));
+  mkdirSync2(join11(target, "sessions"), { recursive: true });
+  mkdirSync2(join11(target, "storages"), { recursive: true });
+  return { home: target, effort, provider, model, outputBudget: outputBudget > 0 ? outputBudget : null };
 }
 var init_dsh_home = __esm({
   "src/lib/dsh-home.mjs"() {
@@ -31086,14 +31381,17 @@ var init_dsh_home = __esm({
 
 // src/adapters/dsh.mjs
 async function runDshSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false }) {
-  if (seat.model !== "DeepSeek-flash") throw new Error(`DSH adapter only supports DeepSeek-flash, received ${seat.model}`);
   const cwd = resolveCwd(seat.cwd, config2.defaultCwd);
   const { command, args: baseArgs } = commandParts(config2.commands.dsh);
   const tier = seat.modelTier === "deep" ? "deep" : "fast";
   const profile = seat.profile ?? config2.profiles?.dsh?.[tier] ?? "headless";
   const args = [...baseArgs, "--profile", profile, prompt];
-  const permissionMode = allowWrite && seat.mode !== "plan" ? "workspace-write" : "read-only";
-  const dshHome = await prepareDshHome(seat.reasoningEffort ?? "high", { outputBudget: seat.outputBudget });
+  const permissionMode = allowWrite && seat.autoApprove && seat.mode !== "plan" ? "workspace-write" : "read-only";
+  const dshHome = await prepareDshHome(seat.reasoningEffort ?? null, {
+    outputBudget: seat.outputBudget,
+    provider: seat.dsh?.provider,
+    model: seat.dsh?.model
+  });
   const run = await runCommand({
     command,
     args,
@@ -31113,7 +31411,7 @@ async function runDshSeat({ seat, prompt, config: config2, timeoutMs, allowWrite
     run,
     text,
     artifactPath: null,
-    extra: { modelSelection: "profile-default", selectedModel: seat.providerModel ?? "deepseek-flash", profile, reasoningEffort: dshHome.effort, reasoningSelection: "dsh-home:settings", contextBudget: seat.contextBudget, outputBudget: dshHome.outputBudget, sessionId: null, usage, continuitySupport: "headless-profile-only" }
+    extra: { modelSelection: "dsh-home:agent-default-model", selectedProvider: dshHome.provider, selectedModel: dshHome.model ?? seat.providerModel, profile, reasoningEffort: dshHome.effort, reasoningSelection: dshHome.effort ? "dsh-home:settings" : "dsh-home:source-default", contextBudget: seat.contextBudget, outputBudget: dshHome.outputBudget, sessionId: null, usage, continuitySupport: "headless-profile-only" }
   });
 }
 var init_dsh = __esm({
@@ -33327,11 +33625,11 @@ var init_jsonrpc = __esm({
         const id2 = this.nextRequestId++;
         let cancel = () => {
         };
-        const response = new Promise((resolve23, reject) => {
+        const response = new Promise((resolve24, reject) => {
           const pendingResponse = {
             resolve: (value) => {
               try {
-                resolve23(mapResponse ? mapResponse(value) : value);
+                resolve24(mapResponse ? mapResponse(value) : value);
               } catch (error62) {
                 reject(error62);
               }
@@ -33388,8 +33686,8 @@ var init_jsonrpc = __esm({
         this.stream = stream;
         this.staticHandlers = handlers;
         this.allowBatches = options?.allowBatches ?? true;
-        this.closedPromise = new Promise((resolve23) => {
-          this.abortController.signal.addEventListener("abort", () => resolve23());
+        this.closedPromise = new Promise((resolve24) => {
+          this.abortController.signal.addEventListener("abort", () => resolve24());
         });
         void this.receive();
       }
@@ -34399,8 +34697,8 @@ var init_acp = __esm({
         if (this.failed) {
           return Promise.reject(this.failure);
         }
-        return new Promise((resolve23, reject) => {
-          this.waiters.push({ resolve: resolve23, reject });
+        return new Promise((resolve24, reject) => {
+          this.waiters.push({ resolve: resolve24, reject });
         });
       }
     };
@@ -34915,12 +35213,12 @@ var init_acp = __esm({
 
 // src/lib/control-store.mjs
 import { randomUUID as randomUUID7 } from "node:crypto";
-import { homedir as homedir16 } from "node:os";
+import { homedir as homedir15 } from "node:os";
 import { resolve as resolve16 } from "node:path";
 function expandHome14(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir16();
-  if (value.startsWith("~/")) return resolve16(homedir16(), value.slice(2));
+  if (value === "~") return homedir15();
+  if (value.startsWith("~/")) return resolve16(homedir15(), value.slice(2));
   return resolve16(value);
 }
 function controlStorePath() {
@@ -35079,7 +35377,11 @@ async function createSeat({ seat, config: config2, allowWrite, timeoutMs }) {
       env.KIMI_MODEL_MAX_COMPLETION_TOKENS = String(seat.outputBudget);
     }
   } else if (seat.harness === "dsh") {
-    const dshHome = await prepareDshHome(seat.reasoningEffort ?? "high", { outputBudget: seat.outputBudget });
+    const dshHome = await prepareDshHome(seat.reasoningEffort ?? null, {
+      outputBudget: seat.outputBudget,
+      provider: seat.dsh?.provider,
+      model: seat.dsh?.model
+    });
     env.DSH_HOME = dshHome.home;
   } else if (seat.harness === "zcode") {
     const zcodeHome = await prepareZCodeHome(config2);
@@ -35375,7 +35677,7 @@ var init_acp_seat = __esm({
       }
       async request(method, params, timeoutMs = 3e4) {
         const id2 = this.nextRequestId++;
-        const promise2 = new Promise((resolve23, reject) => {
+        const promise2 = new Promise((resolve24, reject) => {
           const timer = setTimeout(() => {
             this.pending.delete(String(id2));
             reject(new Error(`ZCode Protocol request timed out: ${method}`));
@@ -35388,7 +35690,7 @@ var init_acp_seat = __esm({
               error62.data = message.error.data;
               reject(error62);
             } else {
-              resolve23(message.result);
+              resolve24(message.result);
             }
           });
         });
@@ -35523,7 +35825,7 @@ var init_acp_seat = __esm({
           if ((projection.turnCount ?? 0) > initialTurnCount && projection.status !== "running") {
             return { status: projection.status ?? "idle", snapshot };
           }
-          await new Promise((resolve23) => setTimeout(resolve23, 250));
+          await new Promise((resolve24) => setTimeout(resolve24, 250));
         }
       }
       extractMessages(raw) {
@@ -35651,12 +35953,12 @@ var init_acp2 = __esm({
 });
 
 // src/lib/task-checkpoint.mjs
-import { existsSync as existsSync14 } from "node:fs";
+import { existsSync as existsSync13 } from "node:fs";
 import { chmod as chmod10, mkdir as mkdir11, readFile as readFile8, rename as rename7, writeFile as writeFile9 } from "node:fs/promises";
 import { randomUUID as randomUUID8 } from "node:crypto";
-import { join as join13 } from "node:path";
+import { join as join12 } from "node:path";
 function checkpointPath(root) {
-  return join13(root, "checkpoint.json");
+  return join12(root, "checkpoint.json");
 }
 function createCheckpoint({ taskId, input: input2, plan }) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -35735,7 +36037,7 @@ function mergeCheckpointIntoSeats(seats2, checkpoint) {
 }
 async function readCheckpoint(root) {
   const path = checkpointPath(root);
-  if (!existsSync14(path)) return null;
+  if (!existsSync13(path)) return null;
   try {
     const checkpoint = JSON.parse(await readFile8(path, "utf8"));
     if (checkpoint?.version !== CHECKPOINT_VERSION || !checkpoint.nodes) return null;
@@ -35778,12 +36080,12 @@ var init_task_checkpoint = __esm({
 
 // src/lib/routing-experiment.mjs
 import { createHash as createHash6 } from "node:crypto";
-import { homedir as homedir17 } from "node:os";
+import { homedir as homedir16 } from "node:os";
 import { resolve as resolve17 } from "node:path";
 function expandHome15(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir17();
-  if (value.startsWith("~/")) return resolve17(homedir17(), value.slice(2));
+  if (value === "~") return homedir16();
+  if (value.startsWith("~/")) return resolve17(homedir16(), value.slice(2));
   return resolve17(value);
 }
 function routingExperimentStatePath() {
@@ -35931,8 +36233,50 @@ var init_routing_experiment = __esm({
   }
 });
 
+// src/lib/moa-mode.mjs
+import { homedir as homedir17 } from "node:os";
+import { resolve as resolve18 } from "node:path";
+function modePath() {
+  return process.env.CODEX_MOA_MODE_PATH ? resolve18(process.env.CODEX_MOA_MODE_PATH) : resolve18(homedir17(), ".codex-moa", "mode.json");
+}
+function normalizeMode(mode) {
+  const normalized = String(mode ?? "auto").trim().toLowerCase();
+  if (!MOA_MODES.includes(normalized)) {
+    throw new Error(`Invalid MOA mode "${mode}". Expected one of: ${MOA_MODES.join(", ")}`);
+  }
+  return normalized;
+}
+async function readMoAMode(path = modePath()) {
+  const state = await readJsonStore(path, {
+    version: 1,
+    defaultValue: { version: 1, mode: "auto", updatedAt: null }
+  });
+  return { ...state, mode: normalizeMode(state.mode), path };
+}
+async function setMoAMode(mode, path = modePath()) {
+  const state = {
+    version: 1,
+    mode: normalizeMode(mode),
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  await writeJsonAtomic(path, state);
+  return { ...state, path };
+}
+async function resolveMoAMode(override, path = modePath()) {
+  if (override) return { mode: normalizeMode(override), source: "explicit", path };
+  const persisted = await readMoAMode(path);
+  return { ...persisted, source: persisted.updatedAt ? "persistent" : "default" };
+}
+var MOA_MODES;
+var init_moa_mode = __esm({
+  "src/lib/moa-mode.mjs"() {
+    init_json_store();
+    MOA_MODES = ["off", "auto", "force"];
+  }
+});
+
 // src/orchestrator.mjs
-import { join as join14 } from "node:path";
+import { join as join13 } from "node:path";
 function auditorPrompt({ task, diff, files, context }) {
   return [
     "You are the independent DeepSeekHarness audit seat in a Codex-orchestrated MoA run.",
@@ -36075,18 +36419,29 @@ function graphNodeMap(plan) {
 function allNodesDone(plan, checkpoint) {
   return (plan.graph?.nodes ?? []).every((node2) => checkpoint.nodes?.[node2.id]?.status === "done");
 }
+function assertIsolatedExternalWrites({ allowWrite, worktree, seats: seats2 }) {
+  if (!allowWrite) return;
+  if (worktree === false) {
+    throw new Error("External writes require an isolated git worktree; worktree=false is not allowed with allowWrite=true.");
+  }
+  const unsafe = (seats2 ?? []).filter((seat) => seat.role === "executor" && !seat.worktree?.path);
+  if (unsafe.length > 0) {
+    throw new Error(`External writes require isolated git worktrees. No worktree was created for: ${unsafe.map((seat) => seat.seat).join(", ")}`);
+  }
+}
 async function runMoA(input2, deps = {}) {
   const config2 = deps.config ?? loadConfig();
-  const models = deps.models ?? loadModels();
+  const models = deps.models ?? loadEffectiveModels();
   const schedule = deps.schedule ?? loadSchedule();
   const pricing = deps.pricing ?? loadPricing();
   const adapterFor = deps.adapterFor ?? ((seat) => seat.runtime === "acp" ? runAcpAdapter : getAdapter(seat.harness));
   const createWorktreeFn = deps.createWorktree ?? createWorktree;
   const captureDiff = deps.captureWorktreeDiff ?? captureWorktreeDiff;
   const captain = await resolveCaptain({ captainModel: input2.captainModel });
+  const orchestration = await resolveMoAMode(input2.orchestrationMode);
   const workspace = createWorkspace(config2.blackboardDir, input2.taskId);
-  const manifestPath = join14(workspace.dirs.root, "manifest.json");
-  const eventsPath = join14(workspace.dirs.root, "events.jsonl");
+  const manifestPath = join13(workspace.dirs.root, "manifest.json");
+  const eventsPath = join13(workspace.dirs.root, "events.jsonl");
   const checkpointFile = checkpointPath(workspace.dirs.root);
   let checkpoint = input2.resume ? await readCheckpoint(workspace.dirs.root) : null;
   if (input2.resume && !checkpoint) throw new Error(`No resumable checkpoint found for task ${workspace.taskId}`);
@@ -36104,7 +36459,7 @@ async function runMoA(input2, deps = {}) {
     state: experimentState,
     forceVariant: checkpoint?.plan?.routingExperiment?.variant ?? null
   }) : { enabled: false, id: null, variant: "control", policy, rationale: "routing experiment not eligible" };
-  const plan = planMoA({ ...input2, captain, routingExperiment: route }, { models, schedule, policy: route.policy ?? policy });
+  const plan = planMoA({ ...input2, captain, orchestrationMode: orchestration.mode, routingExperiment: route }, { models, schedule, policy: route.policy ?? policy });
   let healthRouting = null;
   let providerHealth = null;
   if (input2.respectHealth !== false && !input2.assignments?.length && !input2.seats?.length) {
@@ -36232,6 +36587,7 @@ async function runMoA(input2, deps = {}) {
     }
   }
   const allowWrite = input2.allowWrite === true;
+  assertIsolatedExternalWrites({ allowWrite, worktree: input2.worktree, seats: seatInputs });
   const runStartedAt = Date.now();
   const budgetPolicy = normalizeBudgetPolicy({ config: config2, input: input2 });
   const budgetTotals = newBudgetTotals();
@@ -36256,6 +36612,15 @@ async function runMoA(input2, deps = {}) {
     } catch {
     }
   };
+  const steeringContext = [];
+  const consumeSteering = async () => {
+    const messages = await deps.consumeSteering?.();
+    for (const item of messages ?? []) steeringContext.push(`[${item.id}] ${item.message}`);
+    if ((messages ?? []).length > 0) {
+      appendEvent(eventsPath, { type: "steering_applied", messages: messages.map((item) => item.id) });
+      await reportProgress({ type: "steering_applied", activeSeat: null });
+    }
+  };
   const runSeat = async (seat, layerIndex = 0, options = {}) => {
     const adapter = adapterFor(seat);
     const prompt = promptForSeat(seat, {
@@ -36264,6 +36629,8 @@ async function runMoA(input2, deps = {}) {
       files: input2.files,
       context: [
         input2.context,
+        steeringContext.length > 0 ? `## Operator steering (newest instructions)
+${steeringContext.join("\n")}` : null,
         options.extraContext,
         contextPack ? renderContextPack(contextPack) : null,
         memoryPack ? `## Prior memory (may be stale; verify against current workspace)
@@ -36314,8 +36681,8 @@ ${memoryPack}` : null
       worktree: result.worktreeCleanup?.removed ? null : seat.worktree?.path ?? seat.worktree ?? null,
       finishedAt: (/* @__PURE__ */ new Date()).toISOString()
     });
-    const resultPath = join14(workspace.dirs.results, `${seat.seat}.json`);
-    const textPath = join14(workspace.dirs.artifacts, `${seat.seat}.md`);
+    const resultPath = join13(workspace.dirs.results, `${seat.seat}.json`);
+    const textPath = join13(workspace.dirs.artifacts, `${seat.seat}.md`);
     result.artifactPath = resultPath;
     writeJson(resultPath, result);
     writeText(textPath, result.summary ?? result.error ?? "");
@@ -36415,6 +36782,7 @@ ${memoryPack}` : null
   };
   const layers = plan.graph?.layers ?? [];
   for (let layerIndex = 0; layerIndex < layers.length; layerIndex += 1) {
+    await consumeSteering();
     const layer = layers[layerIndex];
     if (checkBudget().length > 0) {
       blockRemaining("budget exceeded", budgetViolations);
@@ -36554,8 +36922,8 @@ ${repairSummary}` });
     });
     if (navigator2.verdict === "pass") navigator2.verdict = "warn";
   }
-  writeJson(join14(workspace.dirs.root, "navigator.json"), navigator2);
-  const resultsPath = join14(workspace.dirs.root, "results.json");
+  writeJson(join13(workspace.dirs.root, "navigator.json"), navigator2);
+  const resultsPath = join13(workspace.dirs.root, "results.json");
   writeJson(resultsPath, results);
   if (memoryKeySource) {
     await recordEpisode({
@@ -36604,6 +36972,7 @@ ${repairSummary}` });
     resumed: hadCheckpoint,
     cancelled: cancellationRequested === true,
     level: plan.level,
+    orchestration,
     captain,
     auditWarnings,
     allowWrite,
@@ -36634,7 +37003,7 @@ ${repairSummary}` });
       manifest: manifestPath,
       events: eventsPath,
       results: resultsPath,
-      navigator: join14(workspace.dirs.root, "navigator.json")
+      navigator: join13(workspace.dirs.root, "navigator.json")
     },
     graph: {
       layers: plan.graph?.layers ?? [],
@@ -36657,6 +37026,7 @@ async function runAudit(input2, deps = {}) {
 var init_orchestrator = __esm({
   "src/orchestrator.mjs"() {
     init_config();
+    init_effective_models();
     init_blackboard();
     init_redact();
     init_parser();
@@ -36679,12 +37049,13 @@ var init_orchestrator = __esm({
     init_task_checkpoint();
     init_cost_ledger();
     init_routing_experiment();
+    init_moa_mode();
   }
 });
 
 // mcp/server.mjs
 import { readFileSync as readFileSync9 } from "node:fs";
-import { resolve as resolve22 } from "node:path";
+import { resolve as resolve23 } from "node:path";
 
 // node_modules/zod/v3/helpers/util.js
 var util;
@@ -44183,7 +44554,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve23) => setTimeout(resolve23, pollInterval));
+        await new Promise((resolve24) => setTimeout(resolve24, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error62) {
@@ -44200,7 +44571,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve23, reject) => {
+    return new Promise((resolve24, reject) => {
       const earlyReject = (error62) => {
         reject(error62);
       };
@@ -44278,7 +44649,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve23(parseResult.data);
+            resolve24(parseResult.data);
           }
         } catch (error62) {
           reject(error62);
@@ -44539,12 +44910,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve23, reject) => {
+    return new Promise((resolve24, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve23, interval);
+      const timeoutId = setTimeout(resolve24, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -45635,7 +46006,7 @@ var McpServer = class {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5e3;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve23) => setTimeout(resolve23, pollInterval));
+      await new Promise((resolve24) => setTimeout(resolve24, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError(ErrorCode.InternalError, `Task ${taskId} not found during polling`);
@@ -46299,12 +46670,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve23) => {
+    return new Promise((resolve24) => {
       const json2 = serializeMessage(message);
       if (this._stdout.write(json2)) {
-        resolve23();
+        resolve24();
       } else {
-        this._stdout.once("drain", resolve23);
+        this._stdout.once("drain", resolve24);
       }
     });
   }
@@ -46322,7 +46693,7 @@ init_models();
 init_zcode_model();
 init_ccswitch();
 init_captain();
-import { existsSync as existsSync15 } from "node:fs";
+import { existsSync as existsSync14 } from "node:fs";
 async function probe(label, commandConfig, versionArgs) {
   const { command, args } = commandParts(commandConfig);
   const result = await runCommand({
@@ -46407,7 +46778,7 @@ async function doctor() {
     },
     zcodeSelections,
     checks: {
-      zcodeScriptExists: zcodeScript ? existsSync15(zcodeScript) : false,
+      zcodeScriptExists: zcodeScript ? existsSync14(zcodeScript) : false,
       dshHeadlessProfileAvailable: dshProfile.ok,
       kimiAuthenticatedHint: "Run `kimi provider list` if --version succeeds but requests fail.",
       dshAuthenticatedHint: 'Run a small `dsh --profile headless "reply ok"` probe before enabling audits.',
@@ -46440,41 +46811,51 @@ init_provider_health();
 init_provider_state();
 init_quota();
 init_task_checkpoint();
-import { existsSync as existsSync18 } from "node:fs";
+import { existsSync as existsSync17 } from "node:fs";
 import { readFile as readFile11, readdir as readdir3, stat as stat4 } from "node:fs/promises";
 import { homedir as homedir20 } from "node:os";
-import { join as join16, resolve as resolve20 } from "node:path";
+import { join as join15, resolve as resolve21 } from "node:path";
 
 // src/lib/jobs.mjs
 init_control_store();
 init_config();
-import { existsSync as existsSync16 } from "node:fs";
+import { existsSync as existsSync15 } from "node:fs";
 import { chmod as chmod11, mkdir as mkdir12, open as open3, readFile as readFile9, readdir as readdir2, rename as rename8, stat as stat3, unlink as unlink2, writeFile as writeFile10 } from "node:fs/promises";
 import { randomUUID as randomUUID9 } from "node:crypto";
 import { homedir as homedir18 } from "node:os";
-import { dirname as dirname10, join as join15, resolve as resolve18 } from "node:path";
-var TERMINAL = /* @__PURE__ */ new Set(["completed", "partial", "failed", "cancelled"]);
+import { dirname as dirname10, join as join14, resolve as resolve19 } from "node:path";
+var TERMINAL = /* @__PURE__ */ new Set(["completed", "partial", "failed", "cancelled", "paused"]);
+var WORKER_ENV_KEYS = /* @__PURE__ */ new Set(["PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TMP", "TEMP", "LANG", "LC_ALL", "TERM", "NO_COLOR", "FORCE_COLOR", "CODEX_HOME", "CC_SWITCH_HOME"]);
+var SECRET_ENV_RE2 = /(API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH|COOKIE)/i;
+function buildJobWorkerEnv(source = process.env, overrides = {}) {
+  const env = {};
+  for (const [key, value] of Object.entries(source)) {
+    const allowed = WORKER_ENV_KEYS.has(key) || key.startsWith("LC_") || key.startsWith("XDG_") || key.startsWith("CODEX_MOA_");
+    if (allowed && !SECRET_ENV_RE2.test(key) && typeof value === "string") env[key] = value;
+  }
+  return { ...env, ...overrides };
+}
 function expandHome16(value) {
   if (typeof value !== "string") return value;
   if (value === "~") return homedir18();
-  if (value.startsWith("~/")) return resolve18(homedir18(), value.slice(2));
-  return resolve18(value);
+  if (value.startsWith("~/")) return resolve19(homedir18(), value.slice(2));
+  return resolve19(value);
 }
 function jobsRoot() {
   return expandHome16(process.env.CODEX_MOA_JOB_HOME || "~/.codex-moa/jobs");
 }
 function jobDir(jobId) {
   if (!/^job-[A-Za-z0-9._-]{1,100}$/.test(String(jobId))) throw new Error(`Invalid jobId: ${jobId}`);
-  return join15(jobsRoot(), jobId);
+  return join14(jobsRoot(), jobId);
 }
 function jobPath(jobId) {
-  return join15(jobDir(jobId), "job.json");
+  return join14(jobDir(jobId), "job.json");
 }
 function jobInputPath(jobId) {
-  return join15(jobDir(jobId), "input.json");
+  return join14(jobDir(jobId), "input.json");
 }
 function jobLogPath(jobId) {
-  return join15(jobDir(jobId), "worker.log");
+  return join14(jobDir(jobId), "worker.log");
 }
 function publicInput(input2) {
   if (!input2) return null;
@@ -46508,12 +46889,14 @@ function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${randomUUID9
     taskId,
     status: "queued",
     cancelRequested: false,
+    pauseRequested: false,
     createdAt: now,
     updatedAt: now,
     startedAt: null,
     finishedAt: null,
     pid: null,
     progress: { phase: "queued", completed: 0, total: 0, activeSeat: null },
+    control: { revision: 0, messages: [] },
     input: publicInput(input2),
     resultSummary: null,
     error: null
@@ -46529,7 +46912,7 @@ async function atomicWrite(path, value) {
   });
 }
 async function withLock(jobId, fn, timeoutMs = 1e4) {
-  const lockPath = join15(jobDir(jobId), "job.lock");
+  const lockPath = join14(jobDir(jobId), "job.lock");
   await mkdir12(dirname10(lockPath), { recursive: true });
   const started = Date.now();
   let handle;
@@ -46559,7 +46942,7 @@ async function writeJob(job) {
 }
 async function readJob(jobId) {
   const path = jobPath(jobId);
-  if (!existsSync16(path)) return null;
+  if (!existsSync15(path)) return null;
   try {
     return JSON.parse(await readFile9(path, "utf8"));
   } catch {
@@ -46578,7 +46961,7 @@ async function updateJob(jobId, patch) {
 }
 async function listJobs(limit = 50) {
   const root = jobsRoot();
-  if (!existsSync16(root)) return [];
+  if (!existsSync15(root)) return [];
   const entries = await readdir2(root, { withFileTypes: true });
   const jobs = [];
   for (const entry of entries) {
@@ -46596,6 +46979,7 @@ function publicJob(job) {
     taskId: job.taskId,
     status: job.status,
     cancelRequested: job.cancelRequested === true,
+    pauseRequested: job.pauseRequested === true,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
     startedAt: job.startedAt,
@@ -46606,27 +46990,75 @@ function publicJob(job) {
     error: job.error,
     logPath: jobLogPath(job.jobId),
     inputPath: jobInputPath(job.jobId),
-    input: job.input
+    input: job.input,
+    control: {
+      revision: Number(job.control?.revision ?? 0),
+      pendingMessages: (job.control?.messages ?? []).filter((item) => item.status === "pending").length,
+      deliveredMessages: (job.control?.messages ?? []).filter((item) => item.status === "delivered").length,
+      lastMessageId: job.control?.messages?.at(-1)?.id ?? null
+    }
   };
 }
-async function startJob({ input: input2, jobId, taskId }) {
-  assertJobInputSupported(input2);
-  const record2 = createJobRecord({ jobId, taskId, input: input2 });
-  await writeJob(record2);
-  await atomicWrite(jobInputPath(record2.jobId), publicInput(input2));
-  const workerPath = join15(pluginRoot, "scripts", "moa-job-worker.mjs");
+async function spawnJobWorker(record2) {
+  const workerPath = join14(pluginRoot, "scripts", "moa-job-worker.mjs");
   const logHandle = await open3(jobLogPath(record2.jobId), "a", 384);
   const { spawn: spawn3 } = await import("node:child_process");
   const child = spawn3(process.execPath, [workerPath, record2.jobId], {
     cwd: process.cwd(),
     detached: true,
     stdio: ["ignore", logHandle.fd, logHandle.fd],
-    env: { ...process.env, CODEX_MOA_JOB_HOME: jobsRoot() }
+    env: buildJobWorkerEnv(process.env, { CODEX_MOA_JOB_HOME: jobsRoot() })
   });
   child.unref();
   await logHandle.close().catch(() => {
   });
   return updateJob(record2.jobId, { pid: child.pid, status: "queued" });
+}
+async function startJob({ input: input2, jobId, taskId }) {
+  assertJobInputSupported(input2);
+  const record2 = createJobRecord({ jobId, taskId, input: input2 });
+  await writeJob(record2);
+  await atomicWrite(jobInputPath(record2.jobId), publicInput(input2));
+  return spawnJobWorker(record2);
+}
+async function steerJob(jobId, message) {
+  if (!String(message ?? "").trim()) throw new Error("Steering message is required");
+  const job = await readJob(jobId);
+  if (!job) throw new Error(`Job not found: ${jobId}`);
+  if (TERMINAL.has(job.status)) throw new Error(`Job ${jobId} is ${job.status}; resume a paused job or start a new job.`);
+  const entry = { id: `msg-${randomUUID9().slice(0, 12)}`, message: String(message).trim(), status: "pending", createdAt: (/* @__PURE__ */ new Date()).toISOString(), deliveredAt: null };
+  const updated = await updateJob(jobId, (current) => ({
+    ...current,
+    control: { revision: Number(current.control?.revision ?? 0) + 1, messages: [...current.control?.messages ?? [], entry] }
+  }));
+  return { accepted: true, delivery: "next-safe-boundary", messageId: entry.id, job: publicJob(updated) };
+}
+async function pauseJob(jobId, reason = "operator request") {
+  const job = await readJob(jobId);
+  if (!job) throw new Error(`Job not found: ${jobId}`);
+  if (TERMINAL.has(job.status)) return publicJob(job);
+  const updated = await updateJob(jobId, {
+    pauseRequested: true,
+    progress: { ...job.progress ?? {}, phase: "pausing" }
+  });
+  await requestCancellation({ taskId: updated.taskId, reason: `pause job ${jobId}: ${reason}` });
+  return publicJob(updated);
+}
+async function resumeJob(jobId) {
+  const job = await readJob(jobId);
+  if (!job) throw new Error(`Job not found: ${jobId}`);
+  if (job.status !== "paused") throw new Error(`Job ${jobId} is ${job.status}; only paused jobs can resume.`);
+  const input2 = JSON.parse(await readFile9(jobInputPath(jobId), "utf8"));
+  await atomicWrite(jobInputPath(jobId), { ...input2, resume: true });
+  const updated = await updateJob(jobId, {
+    status: "queued",
+    cancelRequested: false,
+    pauseRequested: false,
+    finishedAt: null,
+    error: null,
+    progress: { ...job.progress ?? {}, phase: "queued", activeSeat: null }
+  });
+  return spawnJobWorker(updated);
 }
 async function requestJobCancellation(jobId, reason = "operator request") {
   const job = await readJob(jobId);
@@ -46639,7 +47071,7 @@ async function requestJobCancellation(jobId, reason = "operator request") {
   await requestCancellation({ taskId: updated.taskId, reason: `job ${jobId}: ${reason}` });
   return publicJob(updated);
 }
-async function waitForJob(jobId, timeoutMs = 3e4, pollMs = 250) {
+async function waitForJob(jobId, timeoutMs = 1e4, pollMs = 250) {
   const started = Date.now();
   while (true) {
     const job = await readJob(jobId);
@@ -46651,15 +47083,15 @@ async function waitForJob(jobId, timeoutMs = 3e4, pollMs = 250) {
 }
 
 // src/lib/patch-metrics.mjs
-import { existsSync as existsSync17 } from "node:fs";
+import { existsSync as existsSync16 } from "node:fs";
 import { appendFile as appendFile3, chmod as chmod12, mkdir as mkdir13, readFile as readFile10 } from "node:fs/promises";
 import { homedir as homedir19 } from "node:os";
-import { dirname as dirname11, resolve as resolve19 } from "node:path";
+import { dirname as dirname11, resolve as resolve20 } from "node:path";
 function expandHome17(value) {
   if (typeof value !== "string") return value;
   if (value === "~") return homedir19();
-  if (value.startsWith("~/")) return resolve19(homedir19(), value.slice(2));
-  return resolve19(value);
+  if (value.startsWith("~/")) return resolve20(homedir19(), value.slice(2));
+  return resolve20(value);
 }
 function patchMetricsPath() {
   return expandHome17(process.env.CODEX_MOA_PATCH_METRICS || "~/.codex-moa/patch-metrics.jsonl");
@@ -46684,7 +47116,7 @@ async function recordPatchEvent(event, path = patchMetricsPath()) {
   return entry;
 }
 async function readPatchMetrics(path = patchMetricsPath(), limit = 1e4) {
-  if (!existsSync17(path)) return [];
+  if (!existsSync16(path)) return [];
   try {
     return (await readFile10(path, "utf8")).split(/\r?\n/).filter(Boolean).slice(-limit).map((line) => JSON.parse(line));
   } catch {
@@ -46742,8 +47174,8 @@ function summarizePatchMetrics(entries = []) {
 function expandHome18(value) {
   if (typeof value !== "string") return value;
   if (value === "~") return homedir20();
-  if (value.startsWith("~/")) return resolve20(homedir20(), value.slice(2));
-  return resolve20(value);
+  if (value.startsWith("~/")) return resolve21(homedir20(), value.slice(2));
+  return resolve21(value);
 }
 function blackboardRoot(config2 = loadConfig()) {
   return expandHome18(config2.blackboardDir ?? "~/.codex-moa/blackboard");
@@ -46757,7 +47189,7 @@ async function readJson3(path) {
 }
 async function latestBlackboardState(config2 = loadConfig()) {
   const root = blackboardRoot(config2);
-  if (!existsSync18(root)) return { root, navigator: null, checkpoints: [] };
+  if (!existsSync17(root)) return { root, navigator: null, checkpoints: [] };
   let entries = [];
   try {
     entries = await readdir3(root, { withFileTypes: true });
@@ -46767,7 +47199,7 @@ async function latestBlackboardState(config2 = loadConfig()) {
   const tasks = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const path = join16(root, entry.name);
+    const path = join15(root, entry.name);
     try {
       const info = await stat4(path);
       tasks.push({ path, taskId: entry.name, mtimeMs: info.mtimeMs });
@@ -46778,10 +47210,10 @@ async function latestBlackboardState(config2 = loadConfig()) {
   const checkpoints = [];
   let navigator2 = null;
   for (const task of tasks.slice(0, 30)) {
-    const checkpoint = await readJson3(join16(task.path, "checkpoint.json"));
-    if (checkpoint) checkpoints.push({ ...summarizeCheckpoint(checkpoint), path: join16(task.path, "checkpoint.json") });
+    const checkpoint = await readJson3(join15(task.path, "checkpoint.json"));
+    if (checkpoint) checkpoints.push({ ...summarizeCheckpoint(checkpoint), path: join15(task.path, "checkpoint.json") });
     if (!navigator2) {
-      const review = await readJson3(join16(task.path, "navigator.json"));
+      const review = await readJson3(join15(task.path, "navigator.json"));
       if (review) navigator2 = { taskId: task.taskId, ...review };
     }
   }
@@ -46855,28 +47287,56 @@ async function buildStatusSummary({ config: config2 = loadConfig(), recentHours 
 
 // mcp/server.mjs
 init_routing_experiment();
+
+// src/lib/interactive-run.mjs
+var LONG_TASK_RE = /(\bssh\b|remote host|remote server|benchmark|load test|stress test|soak test|model loading|multi[- ]stage|end[- ]to[- ]end|远程|压测|基准|模型加载|多阶段|全链路)/i;
+var INTERACTIVE_LIMIT_MS = 6e4;
+function backgroundRequirement(input2 = {}) {
+  const reasons = [];
+  if (Number(input2.timeoutMs ?? 0) > INTERACTIVE_LIMIT_MS) reasons.push(`timeoutMs exceeds ${INTERACTIVE_LIMIT_MS}`);
+  if (input2.allowWrite === true) reasons.push("write-enabled execution");
+  if (LONG_TASK_RE.test(String(input2.task ?? ""))) reasons.push("task is likely long-running or remote");
+  if ((input2.assignments ?? input2.seats ?? []).some((seat) => seat?.runtime === "acp")) reasons.push("persistent ACP runtime");
+  return reasons.length > 0 ? {
+    code: "BACKGROUND_REQUIRED",
+    message: "This run must use moa_start so the Codex turn stays steerable.",
+    suggestedTool: "moa_start",
+    interactiveLimitMs: INTERACTIVE_LIMIT_MS,
+    reasons
+  } : null;
+}
+function assertInteractiveRun(input2 = {}) {
+  const requirement = backgroundRequirement(input2);
+  if (!requirement) return input2;
+  const error62 = new Error();
+  Object.assign(error62, requirement);
+  error62.message = `[${requirement.code}] ${requirement.message} Reasons: ${requirement.reasons.join(", ")}. Suggested tool: ${requirement.suggestedTool}.`;
+  throw error62;
+}
+
+// mcp/server.mjs
 init_blackboard();
 init_worktree();
 
 // src/lib/retention.mjs
 init_seat_registry();
-import { existsSync as existsSync19 } from "node:fs";
+import { existsSync as existsSync18 } from "node:fs";
 import { chmod as chmod13, mkdir as mkdir14, readdir as readdir4, readFile as readFile12, rename as rename9, rm, stat as stat5, writeFile as writeFile11 } from "node:fs/promises";
 import { randomUUID as randomUUID10 } from "node:crypto";
 import { homedir as homedir21 } from "node:os";
-import { basename as basename2, dirname as dirname12, join as join17, resolve as resolve21, sep } from "node:path";
+import { basename as basename2, dirname as dirname12, join as join16, resolve as resolve22, sep as sep2 } from "node:path";
 init_cost_ledger();
 init_routing_experiment();
 init_worktree();
 function expandHome19(value) {
   if (typeof value !== "string") return value;
   if (value === "~") return homedir21();
-  if (value.startsWith("~/")) return resolve21(homedir21(), value.slice(2));
-  return resolve21(value);
+  if (value.startsWith("~/")) return resolve22(homedir21(), value.slice(2));
+  return resolve22(value);
 }
 function within(parent, child) {
-  const base = `${resolve21(parent)}${sep}`;
-  return resolve21(child).startsWith(base);
+  const base = `${resolve22(parent)}${sep2}`;
+  return resolve22(child).startsWith(base);
 }
 async function readJson4(path) {
   try {
@@ -46886,19 +47346,19 @@ async function readJson4(path) {
   }
 }
 async function listDirectories(root) {
-  if (!existsSync19(root)) return [];
+  if (!existsSync18(root)) return [];
   const entries = await readdir4(root, { withFileTypes: true });
   const result = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const path = join17(root, entry.name);
+    const path = join16(root, entry.name);
     const info = await stat5(path).catch(() => null);
     if (info) result.push({ name: entry.name, path, mtimeMs: info.mtimeMs });
   }
   return result.sort((a, b) => b.mtimeMs - a.mtimeMs);
 }
 async function readJsonl2(path) {
-  if (!existsSync19(path)) return [];
+  if (!existsSync18(path)) return [];
   try {
     return (await readFile12(path, "utf8")).split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
   } catch {
@@ -46952,7 +47412,7 @@ async function planRetention({ config: config2 = {}, now = Date.now() } = {}) {
   for (let index = 0; index < blackboardDirs.length; index += 1) {
     const task = blackboardDirs[index];
     if (activeTaskIds.has(task.name)) continue;
-    const checkpoint = await readJson4(join17(task.path, "checkpoint.json"));
+    const checkpoint = await readJson4(join16(task.path, "checkpoint.json"));
     const terminal = !checkpoint || ["completed", "partial", "cancelled"].includes(checkpoint.status);
     const tooOld = now - task.mtimeMs > policy.blackboard.maxAgeMs;
     const overLimit = index >= policy.blackboard.maxTasks;
@@ -46964,7 +47424,7 @@ async function planRetention({ config: config2 = {}, now = Date.now() } = {}) {
   const jobDirs = await listDirectories(jobsRoot());
   for (let index = 0; index < jobDirs.length; index += 1) {
     const jobDir2 = jobDirs[index];
-    const job = await readJson4(join17(jobDir2.path, "job.json"));
+    const job = await readJson4(join16(jobDir2.path, "job.json"));
     if (!job || ["queued", "running", "cancelling"].includes(job.status)) continue;
     const tooOld = now - jobDir2.mtimeMs > policy.jobs.maxAgeMs;
     const overLimit = index >= policy.jobs.maxJobs;
@@ -46974,7 +47434,7 @@ async function planRetention({ config: config2 = {}, now = Date.now() } = {}) {
   const worktrees = [];
   for (const seat of listSeats(readSeatRegistry())) {
     const path = seat.worktree;
-    if (!path || !within(managedWorktreeRoot, path) || existsSync19(path) === false) continue;
+    if (!path || !within(managedWorktreeRoot, path) || existsSync18(path) === false) continue;
     const info = await stat5(path).catch(() => null);
     if (!info || now - info.mtimeMs <= policy.worktrees.maxAgeMs) continue;
     const state = await inspectWorktree(path, { resultStatus: seat.status });
@@ -47065,8 +47525,10 @@ async function applyRetention({ config: config2 = {}, dryRun = true, now = Date.
 
 // mcp/server.mjs
 init_provider_state();
-var MODEL_IDS = ["kimi-k3", "kimi-2.8", "GLM-5.3", "GLM-5.3-flash", "DeepSeek-flash"];
+init_moa_mode();
+var MODEL_IDS = ["kimi-k3", "kimi-2.8", "kimi-k2.8", "GLM-5.3", "GLM-5.3-flash", "DeepSeek-flash"];
 var modelSchema = _enum2(MODEL_IDS);
+var orchestrationModeSchema = _enum2(["off", "auto", "force"]);
 var roleSchema = _enum2(["executor", "architect", "reviewer", "auditor", "vision", "researcher"]);
 var reasoningEffortSchema = _enum2(["off", "low", "medium", "high", "xhigh", "max"]);
 var budgetSchema = object2({
@@ -47078,6 +47540,7 @@ var budgetSchema = object2({
 }).optional();
 var assignmentSchema = object2({
   model: modelSchema,
+  harness: _enum2(["kimi", "zcode", "dsh"]).optional(),
   role: roleSchema.optional().default("executor"),
   mode: _enum2(["plan", "edit", "build"]).optional(),
   runtime: _enum2(["cli", "acp"]).optional().default("cli"),
@@ -47096,7 +47559,7 @@ var assignmentSchema = object2({
 });
 function pluginManifest() {
   try {
-    return JSON.parse(readFileSync9(resolve22(pluginRoot, ".codex-plugin", "plugin.json"), "utf8"));
+    return JSON.parse(readFileSync9(resolve23(pluginRoot, ".codex-plugin", "plugin.json"), "utf8"));
   } catch {
     return { name: "codex-moa", version: "unknown" };
   }
@@ -47135,15 +47598,31 @@ var server = new McpServer({
 });
 function textResult(value) {
   return {
-    content: [{ type: "text", text: JSON.stringify(value, null, 2) }]
+    content: [{ type: "text", text: JSON.stringify(redactValue(value), null, 2) }]
   };
 }
 function errorResult(error62) {
   return {
     isError: true,
-    content: [{ type: "text", text: error62?.stack ?? String(error62) }]
+    content: [{ type: "text", text: redactText(error62?.stack ?? String(error62)) }]
   };
 }
+server.registerTool("moa_mode", {
+  title: "Codex MOA Mode",
+  description: "Read or persist the orchestration mode: off keeps work in the Codex captain, auto delegates by task complexity, and force delegates even simple tasks.",
+  inputSchema: {
+    action: _enum2(["status", "set"]).optional().default("status"),
+    mode: orchestrationModeSchema.optional()
+  }
+}, async ({ action, mode }) => {
+  try {
+    if (action === "status") return textResult(await readMoAMode());
+    if (!mode) throw new Error("mode is required when action=set");
+    return textResult(await setMoAMode(mode));
+  } catch (error62) {
+    return errorResult(error62);
+  }
+});
 server.registerTool("moa_compat", {
   title: "Codex MOA Compatibility",
   description: "Return upgrade-safety and runtime compatibility information without loading external agents.",
@@ -47157,15 +47636,16 @@ server.registerTool("moa_compat", {
 });
 server.registerTool("moa_evolve", {
   title: "Codex MOA Evolution",
-  description: "Propose, inspect, approve, apply, or roll back policy evolution. Applying always requires explicit confirmation.",
+  description: "Analyze, propose, inspect, approve, apply, or roll back policy evolution. Approval and application require exact user-confirmation strings.",
   inputSchema: {
-    action: _enum2(["status", "record", "propose", "list", "get"]),
+    action: _enum2(["status", "record", "optimize", "propose", "list", "get", "approve", "reject", "apply", "rollback"]),
     taskId: string2().optional(),
     accepted: boolean2().optional(),
     testsPassed: boolean2().optional(),
     quality: number2().min(0).max(10).optional(),
     notes: string2().optional(),
     proposalId: string2().optional(),
+    confirmation: string2().optional(),
     draft: object2({
       title: string2(),
       problem: string2(),
@@ -47192,7 +47672,7 @@ server.registerTool("moa_evolve", {
         notes: input2.notes
       }));
     }
-    if (input2.action === "propose") {
+    if (input2.action === "optimize" || input2.action === "propose") {
       if (input2.draft) return textResult(await createProposal(input2.draft));
       return textResult(await proposeFromEvidence());
     }
@@ -47201,7 +47681,18 @@ server.registerTool("moa_evolve", {
       if (!input2.proposalId) throw new Error("proposalId is required for get");
       return textResult(await getProposal(input2.proposalId));
     }
-    throw new Error(`Unsupported evolution action: ${input2.action}. Approval and application are terminal-only.`);
+    if (["approve", "reject", "apply", "rollback"].includes(input2.action) && !input2.proposalId) {
+      throw new Error(`proposalId is required for ${input2.action}`);
+    }
+    if (input2.action === "approve") {
+      return textResult(await updateProposalStatus(input2.proposalId, "approved", input2.confirmation, `APPROVE ${input2.proposalId}`));
+    }
+    if (input2.action === "reject") {
+      return textResult(await updateProposalStatus(input2.proposalId, "rejected", input2.confirmation, `REJECT ${input2.proposalId}`));
+    }
+    if (input2.action === "apply") return textResult(await applyProposal(input2.proposalId, input2.confirmation));
+    if (input2.action === "rollback") return textResult(await rollbackProposal(input2.proposalId, input2.confirmation));
+    throw new Error(`Unsupported evolution action: ${input2.action}`);
   } catch (error62) {
     return errorResult(error62);
   }
@@ -47492,6 +47983,7 @@ server.registerTool("moa_plan", {
   inputSchema: {
     task: string2().min(1).describe("Task goal and acceptance criteria."),
     captainModel: string2().optional().describe("Codex main model currently selected by the user."),
+    orchestrationMode: orchestrationModeSchema.optional(),
     continuityKey: string2().optional(),
     memoryKey: string2().optional(),
     stakes: _enum2(["low", "medium", "high"]).optional().default("medium"),
@@ -47516,12 +48008,14 @@ server.registerTool("moa_plan", {
   try {
     const { planMoA: planMoA2 } = await Promise.resolve().then(() => (init_router(), router_exports));
     const captain = await resolveCaptain({ captainModel: input2.captainModel });
-    const plan = planMoA2({ ...input2, captain });
+    const orchestration = await resolveMoAMode(input2.orchestrationMode);
+    const plan = planMoA2({ ...input2, captain, orchestrationMode: orchestration.mode });
     const models = loadModels();
     const auditWarnings = auditConflict(captain, plan.seats, models);
     const snapshot = await readQuotaSnapshot();
     const result = {
       ...plan,
+      orchestration,
       captain,
       auditWarnings: auditWarnings.map((item) => ({
         type: item.reason,
@@ -47545,6 +48039,7 @@ server.registerTool("moa_start", {
     resume: boolean2().optional().default(false),
     routingExperiment: boolean2().optional().default(true),
     captainModel: string2().optional(),
+    orchestrationMode: orchestrationModeSchema.optional(),
     continuityKey: string2().optional(),
     memoryKey: string2().optional(),
     stakes: _enum2(["low", "medium", "high"]).optional().default("medium"),
@@ -47585,7 +48080,8 @@ server.registerTool("moa_start", {
 }, async (input2) => {
   try {
     const taskId = input2.taskId ?? createTaskId("moa-job");
-    return textResult(publicJob(await startJob({ input: { ...input2, taskId }, taskId })));
+    const job = publicJob(await startJob({ input: { ...input2, taskId }, taskId }));
+    return textResult({ ...job, kind: "job", canSteer: true, nextPollAfterMs: 5e3 });
   } catch (error62) {
     return errorResult(error62);
   }
@@ -47609,14 +48105,47 @@ server.registerTool("moa_job_status", {
 });
 server.registerTool("moa_job_wait", {
   title: "Wait for Codex MOA Job",
-  description: "Wait for a background job to reach a terminal state.",
+  description: "Wait briefly for a background job to reach a settled state; use status between waits.",
   inputSchema: {
     jobId: string2(),
-    timeoutMs: number2().int().positive().max(3e5).optional().default(3e4)
+    timeoutMs: number2().int().positive().max(1e4).optional().default(5e3)
   }
 }, async ({ jobId, timeoutMs }) => {
   try {
     return textResult(await waitForJob(jobId, timeoutMs));
+  } catch (error62) {
+    return errorResult(error62);
+  }
+});
+server.registerTool("moa_job_steer", {
+  title: "Steer Codex MOA Job",
+  description: "Persist an operator message for delivery at the next safe DAG boundary.",
+  inputSchema: { jobId: string2(), message: string2().min(1) }
+}, async ({ jobId, message }) => {
+  try {
+    return textResult(await steerJob(jobId, message));
+  } catch (error62) {
+    return errorResult(error62);
+  }
+});
+server.registerTool("moa_job_pause", {
+  title: "Pause Codex MOA Job",
+  description: "Request a safe pause and stop the active external seat. The checkpoint can be resumed later.",
+  inputSchema: { jobId: string2(), reason: string2().optional().default("operator request") }
+}, async ({ jobId, reason }) => {
+  try {
+    return textResult(await pauseJob(jobId, reason));
+  } catch (error62) {
+    return errorResult(error62);
+  }
+});
+server.registerTool("moa_job_resume", {
+  title: "Resume Codex MOA Job",
+  description: "Resume a paused background job from its checkpoint.",
+  inputSchema: { jobId: string2() }
+}, async ({ jobId }) => {
+  try {
+    return textResult(publicJob(await resumeJob(jobId)));
   } catch (error62) {
     return errorResult(error62);
   }
@@ -47645,6 +48174,7 @@ server.registerTool("moa_run", {
     resume: boolean2().optional().default(false),
     routingExperiment: boolean2().optional().default(true),
     captainModel: string2().optional().describe("Codex main model currently selected by the user."),
+    orchestrationMode: orchestrationModeSchema.optional(),
     continuityKey: string2().optional(),
     memoryKey: string2().optional(),
     stakes: _enum2(["low", "medium", "high"]).optional().default("medium"),
@@ -47680,6 +48210,7 @@ server.registerTool("moa_run", {
   }
 }, async (input2) => {
   try {
+    assertInteractiveRun(input2);
     return textResult(await runMoA(input2));
   } catch (error62) {
     return errorResult(error62);
@@ -47717,6 +48248,7 @@ server.registerTool("moa_delegate", {
     resume: boolean2().optional().default(false),
     routingExperiment: boolean2().optional().default(true),
     captainModel: string2().optional(),
+    orchestrationMode: orchestrationModeSchema.optional(),
     allowWrite: boolean2().optional().default(false),
     respectQuota: boolean2().optional().default(true),
     allowDepleted: boolean2().optional().default(false),
@@ -47729,6 +48261,7 @@ server.registerTool("moa_delegate", {
   }
 }, async (input2) => {
   try {
+    assertInteractiveRun(input2);
     return textResult(await runMoA({ ...input2, stakes: "high", mode: "implement" }));
   } catch (error62) {
     return errorResult(error62);
@@ -47786,8 +48319,22 @@ server.registerTool("moa_schedule", {
 }, async ({ at }) => {
   try {
     const schedule = loadSchedule();
+    const pricing = loadPricing();
     const date5 = at ? new Date(at) : /* @__PURE__ */ new Date();
-    return textResult({ at: date5.toISOString(), state: getScheduleState(date5, schedule) });
+    const state = getScheduleState(date5, schedule);
+    return textResult({
+      at: date5.toISOString(),
+      state,
+      pricing: {
+        currency: pricing.currency,
+        deepSeekFlash: {
+          billing: pricing.models?.["DeepSeek-flash"]?.billing ?? null,
+          period: state.deepSeekPricing,
+          activeRates: pricing.models?.["DeepSeek-flash"]?.rates?.[state.deepSeekPricing] ?? null,
+          verifiedAt: pricing.models?.["DeepSeek-flash"]?.verifiedAt ?? null
+        }
+      }
+    });
   } catch (error62) {
     return errorResult(error62);
   }

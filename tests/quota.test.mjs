@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseDeepSeekQuota, parseKimiQuota, parseZaiQuota } from "../src/lib/quota.mjs";
+import { depletedModels, parseDeepSeekQuota, parseKimiQuota, parseZaiQuota } from "../src/lib/quota.mjs";
 
 test("parses Kimi 5-hour and weekly quota", () => {
   const windows = parseKimiQuota({
@@ -12,6 +12,12 @@ test("parses Kimi 5-hour and weekly quota", () => {
   });
   assert.equal(windows.find((window) => window.kind === "session").remainingPercent, 90);
   assert.ok(Math.abs(windows.find((window) => window.kind === "weekly").remainingPercent - 24) < 0.001);
+});
+
+test("treats an empty DeepSeek currency balance as depleted", () => {
+  const models = { models: { "DeepSeek-flash": { id: "DeepSeek-flash", family: "deepseek" } }, aliases: {} };
+  const snapshot = { providers: { deepseek: { status: "ok", windows: [{ kind: "billing", remaining: 0, currency: "USD" }] } } };
+  assert.equal(depletedModels([{ model: "DeepSeek-flash" }], snapshot, models).length, 1);
 });
 
 test("parses Z.ai session and weekly quota", () => {

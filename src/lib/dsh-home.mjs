@@ -53,18 +53,27 @@ function ensureSymlink(target, source) {
   symlinkSync(source, target);
 }
 
-export async function prepareDshHome(reasoningEffort = "high", options = {}) {
+export async function prepareDshHome(reasoningEffort = null, options = {}) {
   const sourceHome = expandHome(options.sourceHome || process.env.DSH_HOME || "~/.dsh");
   const root = expandHome(options.targetRoot || "~/.codex-moa/dsh-homes");
-  const effort = ["off", "low", "high", "max"].includes(reasoningEffort) ? reasoningEffort : "high";
+  // 2026-09-15 用户裁决：不指定思考等级时不改写 reasoningEffort，交给源 settings 默认值
+  const effort = ["off", "low", "high", "max"].includes(reasoningEffort) ? reasoningEffort : null;
   const outputBudget = Number(options.outputBudget ?? 0);
-  const target = join(root, outputBudget > 0 ? `${effort}-out-${outputBudget}` : effort);
+  const provider = options.provider ?? null;
+  const model = options.model ?? null;
+  const routeLabel = [provider, model].filter(Boolean).join("-").replace(/[^A-Za-z0-9._-]+/g, "-");
+  const label = routeLabel ? `${routeLabel}-${effort ?? "default"}` : (effort ?? "default");
+  const target = join(root, outputBudget > 0 ? `${label}-out-${outputBudget}` : label);
   await mkdir(target, { recursive: true });
 
   const sourceSettings = join(sourceHome, "settings.yaml");
   let settings = existsSync(sourceSettings) ? readFileSync(sourceSettings, "utf8") : "";
-  settings = setTopLevelValue(settings, "agent-default-model", "reasoningEffort", effort);
-  settings = setTopLevelValue(settings, "llm-deepseek", "reasoningEffort", effort);
+  if (provider) settings = setTopLevelValue(settings, "agent-default-model", "provider", provider);
+  if (model) settings = setTopLevelValue(settings, "agent-default-model", "model", model);
+  if (effort) {
+    settings = setTopLevelValue(settings, "agent-default-model", "reasoningEffort", effort);
+    settings = setTopLevelValue(settings, "llm-deepseek", "reasoningEffort", effort);
+  }
   if (outputBudget > 0) settings = setModelMaxTokens(settings, "llm-deepseek", "deepseek-flash", outputBudget);
   await writeFile(join(target, "settings.yaml"), settings, "utf8");
 
@@ -74,5 +83,5 @@ export async function prepareDshHome(reasoningEffort = "high", options = {}) {
   ensureSymlink(join(target, "cordis.patch.yml"), join(sourceHome, "cordis.patch.yml"));
   mkdirSync(join(target, "sessions"), { recursive: true });
   mkdirSync(join(target, "storages"), { recursive: true });
-  return { home: target, effort, outputBudget: outputBudget > 0 ? outputBudget : null };
+  return { home: target, effort, provider, model, outputBudget: outputBudget > 0 ? outputBudget : null };
 }

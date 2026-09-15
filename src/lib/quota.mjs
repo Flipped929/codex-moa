@@ -288,7 +288,7 @@ export function depletedModels(assignments, snapshot, modelsConfig) {
   if (!snapshot) return [];
   return assignments.map((assignment) => ({ assignment, quota: modelQuota(assignment.model, snapshot, modelsConfig) }))
     .filter(({ quota }) => quota.window?.remainingPercent !== undefined && quota.window?.remainingPercent <= 0
-      || quota.window?.remaining !== undefined && quota.window?.remaining <= 0 && !quota.window?.currency);
+      || quota.window?.remaining !== undefined && quota.window?.remaining <= 0);
 }
 
 export function quotaForSeats(seats, snapshot, modelsConfig) {

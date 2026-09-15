@@ -5,6 +5,7 @@ const PATTERNS = [
   [/((?:api[_-]?key|token|secret|password|credential)\s*[:=]\s*)["']?[^"'\s,}]+/gi, "$1***REDACTED***"],
   [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "***JWT_REDACTED***"]
 ];
+const SECRET_KEY_RE = /(?:api[_-]?key|token|secret|password|credential|authorization|cookie)/i;
 
 export function redactText(value) {
   let text = typeof value === "string" ? value : JSON.stringify(value);
@@ -16,7 +17,10 @@ export function redactValue(value) {
   if (typeof value === "string") return redactText(value);
   if (Array.isArray(value)) return value.map(redactValue);
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactValue(item)]));
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+      key,
+      SECRET_KEY_RE.test(key) ? "***REDACTED***" : redactValue(item)
+    ]));
   }
   return value;
 }

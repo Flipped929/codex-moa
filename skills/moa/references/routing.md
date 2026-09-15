@@ -1,7 +1,7 @@
 # Routing Policy
 
 | Level | Task | Seats |
-|---|---|---|
+|---|---|---|---|
 | L0 | Simple explanation or small edit | Codex only |
 | L1 | Routine implementation | ZCode fast executor |
 | L2 | Refactor, debugging, tests, review | ZCode deep executor + DSH auditor |
@@ -10,7 +10,7 @@
 
 ## Scheduling
 
-DeepSeek peak hours in Asia/Shanghai are weekdays 09:00-12:00 and 14:00-18:00. Prefer batch DSH audits outside those windows.
+DeepSeek peak hours in Asia/Shanghai are weekdays 09:00-12:00 and 14:00-18:00. Prefer flexible DeepSeek-backed audits outside those windows; during peak, DeepSeekHarness may use a Kimi or GLM provider route.
 
 The GLM night campaign is temporary and currently applies to GLM-5.3-Flash from 23:00 to 09:00 Asia/Shanghai. Prefer ZCode + GLM-5.3-Flash for batch work during this window. Campaign dates are configuration, not hard-coded policy.
 
@@ -24,12 +24,12 @@ The GLM night campaign is temporary and currently applies to GLM-5.3-Flash from 
 
 ## Explicit model map
 
-| Model | Harness | Default role |
+| Model | Native Harness | Also supported | Default role |
 |---|---|---|
-| `kimi-k3` | KimiCode | architect, vision, research |
-| `kimi-2.8` | KimiCode | fast analysis |
-| `GLM-5.3` | ZCode | deep coding |
-| `GLM-5.3-flash` | ZCode | routine coding |
-| `DeepSeek-flash` | DeepSeekHarness | audit and verification |
+| `kimi-k3` | KimiCode | DeepSeekHarness | architect, vision, research |
+| `kimi-2.8` | KimiCode | DeepSeekHarness | fast analysis and triage |
+| `GLM-5.3` | ZCode | DeepSeekHarness | deep coding and repair |
+| `GLM-5.3-flash` | ZCode | DeepSeekHarness | routine and batch coding |
+| `DeepSeek-flash` | DeepSeekHarness | — | audit and verification |
 
-ZCode receives the model through `~/.zcode/cli/config.json`, not a CLI flag. KimiCode receives it through `-m`. DSH receives `deepseek-flash` from its dedicated audit profile.
+ZCode receives the model through `~/.zcode/cli/config.json`, not a CLI flag. KimiCode receives it through `-m`. DSH receives the provider/model pair through an isolated `$DSH_HOME/settings.yaml`; the source settings and credentials are not modified.

@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { runCommand } from "./process.mjs";
 
 function expandHome(value) {
@@ -150,9 +150,21 @@ export async function listWorktrees(cwd) {
 
 export async function removeWorktree(path, { repo = null, force = false } = {}) {
   if (!path || !existsSync(path)) return { removed: false, error: "Worktree does not exist" };
+  if (!repo) return { removed: false, error: "Repository root is required for managed worktree removal" };
+  const repository = await gitRoot(repo);
+  if (!repository) return { removed: false, error: "Not a Git repository" };
+  const target = resolve(path);
+  const managedRoot = resolve(worktreeRoot(repository));
+  if (!target.startsWith(`${managedRoot}${sep}`)) {
+    return { removed: false, path: target, error: `Refusing to remove a worktree outside the managed root: ${managedRoot}` };
+  }
+  const registered = await listWorktrees(repository);
+  if (!registered.some((entry) => resolve(entry.path) === target)) {
+    return { removed: false, path: target, error: "Refusing to remove a path not registered as a git worktree" };
+  }
   const args = ["worktree", "remove", ...(force ? ["--force"] : []), path];
-  const result = await runCommand({ command: "git", args, cwd: repo ?? path, timeoutMs: 60000 });
-  return { removed: result.ok, path, error: result.ok ? null : (result.stderr || `exit ${result.code}`) };
+  const result = await runCommand({ command: "git", args, cwd: repository, timeoutMs: 60000 });
+  return { removed: result.ok, path: target, error: result.ok ? null : (result.stderr || `exit ${result.code}`) };
 }
 
 export async function pruneWorktrees(cwd, { dryRun = true, expire = null } = {}) {

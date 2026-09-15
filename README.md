@@ -74,13 +74,15 @@ This repository currently implements the MVP control plane:
 
 - Codex plugin manifest and MCP configuration.
 - `codex-moa` Skill.
-- MCP tools: `moa_doctor`, `moa_models`, `moa_ccswitch`, `moa_quota`, `moa_health`, `moa_plan`, `moa_run`, `moa_start`, `moa_job_status`, `moa_job_wait`, `moa_job_cancel`, `moa_worktrees`, `moa_retention`, `moa_patch_metrics`, `moa_provider_recovery`, `moa_delegate`, `moa_audit`, `moa_interrupt`, `moa_schedule`, `moa_captain`, `moa_evolve`.
+- MCP tools: `moa_mode`, `moa_doctor`, `moa_models`, `moa_ccswitch`, `moa_quota`, `moa_health`, `moa_plan`, `moa_run`, `moa_start`, `moa_job_status`, `moa_job_wait`, `moa_job_steer`, `moa_job_pause`, `moa_job_resume`, `moa_job_cancel`, `moa_worktrees`, `moa_retention`, `moa_patch_metrics`, `moa_provider_recovery`, `moa_delegate`, `moa_audit`, `moa_interrupt`, `moa_schedule`, `moa_captain`, `moa_evolve`.
 - Five explicit models: `kimi-k3`, `kimi-2.8`, `GLM-5.3`, `GLM-5.3-flash`, `DeepSeek-flash`.
 - CC Switch 3.20.3 native Responses direct-mode detection, with routing retained only for Chat/Anthropic upstreams.
 - CC Switch routing audit: `npm run ccswitch:routing`.
 - KimiCode, ZCode, and DeepSeekHarness adapters.
 - Blackboard artifacts under `~/.codex-moa/blackboard`.
 - Time policy for DeepSeek peak/off-peak and the temporary GLM night campaign.
+- DeepSeekHarness multi-provider routes for Kimi and GLM, with native Harnesses retained as defaults.
+- Durable job steering plus pause/resume at checkpoint boundaries; synchronous runs are limited to interactive work.
 - Real ACP smoke harness for KimiCode, DeepSeekHarness, and the ZCode app-server bridge.
 - Task DAG checkpoint/resume, cost ledger, provider health, routing A/B experiments with automatic rollback.
 - Local control dashboard, interrupt/cancel requests, and richer ClaudeBar runtime status sections.
@@ -215,7 +217,9 @@ moa_schedule()
 
 ## Captain model
 
-Codex keeps the model selected by the user. Use `moa_captain` to inspect the resolved captain, or pass `captainModel` explicitly. Codex MOA never overrides the Codex main model.
+Codex keeps the model selected by the user. Pass `captainModel` only when the active page-level model is known; otherwise `moa_captain` reports the opaque `codex-selected` identity instead of guessing from global configuration. Codex MOA never overrides the Codex main model.
+
+The captain is not restricted to GPT or the OpenAI provider. Persistent orchestration modes are `off`, `auto` (default), and `force`; see `docs/MODES.md`. Canonical commands are `$codex-moa on|off|auto|status`; `$codex-moa <task>` is a one-task force override. Use `$codex-moa optimize` for proposal-first self-optimization.
 
 ## Async jobs
 
@@ -361,11 +365,29 @@ Reasoning effort is selected per sub-agent and can be explicit or task-policy dr
 npm run ccswitch:reasoning
 ```
 
-See `docs/REASONING.md` for provider mappings and enforcement channels. Patch missing CC Switch reasoning metadata with `npm run ccswitch:patch-reasoning:write`.
+CC Switch is the single source of truth for reasoning levels: every model managed by
+CC Switch takes its selectable levels and default from the provider cards, and `config/models.json`
+is only the fallback (`reasoningSources[modelId]` marks which one won; `CODEX_MOA_NO_CCSWITCH=1`
+skips the overlay). See `docs/REASONING.md` for provider mappings and enforcement channels. CC Switch metadata gaps are **reported, never patched**: `npm run ccswitch:patch-reasoning` is a read-only audit (codex-moa never writes CC Switch — provider cards, database, catalog, or skills).
+
+To make a Codex main-model reasoning level survive CC Switch provider switches, change it **in CC Switch** (provider card
+or 通用配置). `npm run ccswitch:codex-effort -- --provider DeepSeek --effort max` only reports the difference between the
+card and the live `config.toml`; it refuses to write either one.
 
 ## Controlled self-evolution
 
-MCP can propose and inspect changes, but approval/apply/rollback are terminal-only so Codex cannot self-approve:
+Use the English Skill commands for a proposal-first workflow:
+
+```text
+$codex-moa optimize
+$codex-moa optimize status
+$codex-moa optimize show <proposal-id>
+$codex-moa optimize approve <proposal-id>
+$codex-moa optimize apply <proposal-id>
+$codex-moa optimize rollback <proposal-id>
+```
+
+Approval and apply are separate exact-ID gates. Equivalent terminal commands remain available:
 
 ```bash
 npm run evolve:status
@@ -400,7 +422,7 @@ For macOS menu-bar and Notch visibility, install the included ClaudeBar extensio
 npm run claudebar:install:write
 ```
 
-Then restart ClaudeBar.
+Then restart ClaudeBar. The extension is self-contained and does not require a project-root setting.
 
 ## Design lineage and credits
 

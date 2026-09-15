@@ -68,3 +68,11 @@ test("creates isolated git worktrees and context packs", { skip: !process.env.CI
   const removed = await removeWorktree(worktree.path, { repo: root, force: true });
   assert.equal(removed.removed, true, removed.error);
 });
+
+test("refuses to remove arbitrary paths as worktrees", async () => {
+  const root = await mkdtemp(join(tmpdir(), "codex-moa-worktree-guard-"));
+  await runCommand({ command: "git", args: ["init"], cwd: root, timeoutMs: 10000 });
+  const result = await removeWorktree(root, { repo: root, force: true });
+  assert.equal(result.removed, false);
+  assert.match(result.error, /outside the managed root/);
+});

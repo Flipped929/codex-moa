@@ -6,9 +6,13 @@ Codex MOA 让 Codex 继续担任 captain，同时把任务分派给三个异构 
 
 - **KimiCode**：架构设计、长上下文、视觉理解和第二意见。
 - **ZCode**：基于 GLM fast/deep 模型的代码执行。
-- **DeepSeekHarness**：独立审计、验证和对抗性检查。
+- **DeepSeekHarness**：独立审计、验证和对抗性检查，也可承载 Kimi、GLM provider 模型。
 
 Codex 插件只暴露一个本地 MCP server。路由、DAG 调度、子进程执行、worktree、产物、脱敏、预算、健康检查和调度策略都由这个 server 负责。
+
+Codex 页面当前选择的模型始终是 captain。只有调用方明确知道页面级模型时才传入 `captainModel`；否则插件记录为 `codex-selected`，不会用全局 `config.toml`、环境变量或 CC Switch 卡片猜测当前任务的模型。
+
+Captain 不限于 GPT 或 OpenAI Provider。插件支持持久模式 `off`、`auto`（默认）和 `force`。规范命令统一为英文：`$codex-moa on|off|auto|status`；`$codex-moa <任务>` 只对当前任务强制启用，不改变持久模式；`$codex-moa optimize` 启动提案优先的自优化流程。详见 `docs/MODES.md`。
 
 ## 它解决什么问题
 
@@ -84,10 +88,11 @@ flowchart TB
 - 自动 Git worktree 隔离、diff 捕获、patch check/apply/revert。
 - 结构化 `SeatResult` 和 `AuditorFinding`。
 - auditor block 修复轮和 per-round checkpoint history。
-- 异步 job：start/status/wait/cancel。
+- 异步 job：start/status/steer/pause/resume/cancel；wait 单次最多 10 秒。
 - interrupt/cancel 控制平面和本地 Dashboard。
 - 任务级 token、USD、context、wall-time 预算熔断。
 - cost ledger、provider health、circuit breaker 和恢复探测。
+- Kimi/Z.ai 剩余额度与 DeepSeek 余额参与路由；DeepSeek 峰谷价格分别核算缓存命中、缓存未命中和输出费用。
 - routing A/B 实验与自动 rollback。
 - patch acceptance metrics。
 - retention/compaction。
@@ -317,6 +322,12 @@ npm run dashboard
 npm run control -- status
 ```
 
+如果要在 CC Switch 切换供应商后仍然保留 Codex 主模型的思考档位，需要同时更新 provider 卡和 live config：
+
+```bash
+npm run ccswitch:set-codex-effort -- --provider DeepSeek --effort max（只读，不写）
+```
+
 ClaudeBar extension 位于：
 
 ```text
@@ -329,6 +340,8 @@ integrations/claudebar/codex-moa/
 npm run claudebar:install:write
 ```
 
+扩展使用自包含探针入口，不需要再手工填写 codex-moa 项目根目录。安装后重启 ClaudeBar。
+
 ## 安全模型
 
 - Codex 是最终裁决者和最终写入者。
@@ -337,7 +350,7 @@ npm run claudebar:install:write
 - 子进程默认移除 secret environment。
 - 命令使用 `spawn` 且 `shell: false`。
 - 日志和产物经过脱敏。
-- MCP 不能自动批准 self-evolution；必须由用户在终端确认。
+- self-evolution 不能自批：`optimize` 只生成/复用提案，必须由用户用带明确 proposal ID 的 `approve`、`apply` 两个独立英文命令确认。
 
 ## 来源与借鉴
 

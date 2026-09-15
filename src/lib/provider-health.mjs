@@ -12,6 +12,8 @@ function providerState(quota, recent) {
   if (!quota || quota.status === "not_configured") return "inactive";
   if (quota.status === "unauthorized" || quota.status === "rate_limited") return "critical";
   if (quota.status !== "ok") return "warning";
+  const emptyBalance = (quota.windows ?? []).some((window) => window.kind === "billing" && Number.isFinite(Number(window.remaining)) && Number(window.remaining) <= 0);
+  if (emptyBalance) return "critical";
   const low = (quota.windows ?? []).some((window) => Number.isFinite(Number(window.remainingPercent)) && Number(window.remainingPercent) <= Number(quota.lowThreshold ?? 10));
   if (low) return "warning";
   if (recent?.runs >= 3 && recent.failures / recent.runs >= 0.5) return "warning";
@@ -107,6 +109,7 @@ export function applyProviderHealthRouting(seats, { health, modelsConfig, captai
     seat.originalModel = seat.model;
     seat.model = replacement.id;
     seat.providerModel = replacement.providerModel;
+    seat.dsh = replacement.dsh;
     seat.harness = replacement.harness;
     seat.modelTier = replacement.tier;
     seat.healthAdjusted = true;

@@ -1,7 +1,8 @@
-import { loadEvolutionPolicy, loadModels, loadSchedule } from "./config.mjs";
+import { loadEvolutionPolicy, loadSchedule } from "./config.mjs";
+import { loadEffectiveModels } from "./effective-models.mjs";
 import { getScheduleState, recommendedTier } from "./scheduler.mjs";
 import { createExplicitSeat, listModels, resolveModel, resolveSeatModel } from "./models.mjs";
-import { effortForTask, resolveReasoningEffort } from "./reasoning.mjs";
+import { effortForTask, resolveReasoningEffort } from "./reasoning.mjs"; // effortForTask retained as explicit-use util
 import { budgetForTask } from "./limits.mjs";
 import { buildTaskGraph } from "./task-graph.mjs";
 import { applyRoleDefaults, loadRoles } from "./roles.mjs";
@@ -25,20 +26,24 @@ function normalizeAssignments(assignments) {
 export function planMoA(input = {}, deps = {}) {
   const { task, stakes = "medium", mode = "implement", vision = false } = input;
   if (!task || typeof task !== "string") throw new Error("task is required");
-  const models = deps.models ?? loadModels();
+  const models = deps.models ?? loadEffectiveModels();
   const schedule = deps.schedule ?? loadSchedule();
   const policy = deps.policy ?? loadEvolutionPolicy();
   const roles = deps.roles ?? loadRoles();
   const scheduleState = deps.scheduleState ?? getScheduleState(new Date(), schedule);
   const explicitAssignments = normalizeAssignments(input.assignments);
   const explicitSeats = normalizeSeats(input.seats);
+  const orchestrationMode = input.orchestrationMode ?? "auto";
+  if (!["off", "auto", "force"].includes(orchestrationMode)) throw new Error(`Invalid orchestrationMode: ${orchestrationMode}`);
 
   let level = "L1";
   if (explicitAssignments) level = "explicit";
+  else if (!explicitSeats && orchestrationMode === "off") level = "L0";
   else if (stakes === "high" || HIGH_RISK_RE.test(task)) level = "L3";
   else if (stakes === "medium" || COMPLEX_RE.test(task)) level = "L2";
   else if (SIMPLE_RE.test(task)) level = "L0";
-  if (!explicitAssignments && (mode === "audit" || mode === "review")) level = level === "L3" ? "L3" : "L2";
+  if (!explicitAssignments && !explicitSeats && orchestrationMode === "force" && level === "L0") level = "L1";
+  if (!explicitAssignments && orchestrationMode !== "off" && (mode === "audit" || mode === "review")) level = level === "L3" ? "L3" : "L2";
 
   let plannedSeats;
   if (explicitAssignments) {
@@ -66,26 +71,66 @@ export function planMoA(input = {}, deps = {}) {
         seat: item.seat,
         model: resolved.id,
         providerModel: resolved.providerModel,
+        dsh: resolved.dsh,
         modelTier,
         harness: item.harness ?? definition.harness ?? resolved.harness
       }, roles);
     });
   }
 
+  if (!explicitAssignments && !explicitSeats && !scheduleState.deepSeekOffPeak && stakes !== "high") {
+    for (const seat of plannedSeats) {
+      if (seat.harness !== "dsh" || seat.model !== "DeepSeek-flash") continue;
+      const preferred = input.captain?.family === "zhipu" ? "kimi-2.8" : "GLM-5.3-flash";
+      const replacement = resolveModel(preferred, models);
+      seat.originalModel = seat.model;
+      seat.model = replacement.id;
+      seat.providerModel = replacement.providerModel;
+      seat.dsh = replacement.dsh;
+      seat.modelTier = replacement.tier;
+      seat.harness = "dsh";
+      seat.scheduleAdjusted = true;
+      seat.scheduleRationale = "DeepSeek peak pricing; keep the DeepSeekHarness agent and use a lower-cost provider model";
+    }
+  }
+
+  if (!explicitAssignments && !explicitSeats && input.captain?.family && policy.audit?.avoidCaptainFamily) {
+    const preferred = policy.audit.preferredByCaptainFamily?.[input.captain.family] ?? [];
+    for (const seat of plannedSeats) {
+      if (seat.role !== "auditor") continue;
+      const current = resolveModel(seat.model, models);
+      if (current.family === input.captain.family) {
+        const replacement = preferred.map((selector) => {
+          try { return resolveModel(selector, models); } catch { return null; }
+        }).find((model) => model && model.family !== input.captain.family);
+        if (replacement) {
+          const keepHarness = (replacement.supportedHarnesses ?? [replacement.harness]).includes(seat.harness);
+          seat.originalModel = seat.model;
+          seat.model = replacement.id;
+          seat.providerModel = replacement.providerModel;
+          seat.dsh = replacement.dsh;
+          seat.harness = keepHarness ? seat.harness : replacement.harness;
+          seat.modelTier = replacement.tier;
+          seat.evolutionAdjusted = true;
+        }
+      }
+    }
+  }
+
   for (const seat of plannedSeats) {
+    // 2026-09-15 用户裁决：codex-moa 不再自动指定思考等级，交给模型/harness 默认值。
+    // 仅当用户显式传入（seat.reasoningEffort / input.reasoningEffort）时才生效。
     const requested = seat.reasoningEffort ?? input.reasoningEffort ?? null;
-    const taskPolicy = effortForTask({
-      level,
-      role: seat.role,
-      stakes,
-      quotaPercent: Number.isFinite(input.quotaPercent) ? input.quotaPercent : null,
-      requested,
-      policy
-    });
     seat.reasoningRequested = requested;
-    seat.reasoningEffort = resolveReasoningEffort(seat.model, taskPolicy.effort, models);
-    seat.reasoningSource = requested ? "explicit" : "task-policy";
-    seat.reasoningRationale = taskPolicy.rationale;
+    if (requested) {
+      seat.reasoningEffort = resolveReasoningEffort(seat.model, requested, models);
+      seat.reasoningSource = "explicit";
+      seat.reasoningRationale = "explicit reasoningEffort";
+    } else {
+      delete seat.reasoningEffort;
+      seat.reasoningSource = "model-default";
+      seat.reasoningRationale = "hands-off: model/harness default";
+    }
     const limits = budgetForTask({
       selector: seat.model,
       level,
@@ -102,29 +147,9 @@ export function planMoA(input = {}, deps = {}) {
     seat.limitSource = limits.source;
   }
 
-  if (!explicitAssignments && !explicitSeats && input.captain?.family && policy.audit?.avoidCaptainFamily) {
-    const preferred = policy.audit.preferredByCaptainFamily?.[input.captain.family] ?? [];
-    for (const seat of plannedSeats) {
-      if (seat.role !== "auditor") continue;
-      const current = resolveModel(seat.model, models);
-      if (current.family === input.captain.family) {
-        const replacement = preferred.map((selector) => {
-          try { return resolveModel(selector, models); } catch { return null; }
-        }).find((model) => model && model.family !== input.captain.family);
-        if (replacement) {
-          seat.originalModel = seat.model;
-          seat.model = replacement.id;
-          seat.providerModel = replacement.providerModel;
-          seat.harness = replacement.harness;
-          seat.modelTier = replacement.tier;
-          seat.evolutionAdjusted = true;
-        }
-      }
-    }
-  }
-
   return {
     level,
+    orchestrationMode,
     captain: input.captain ?? null,
     evolutionPolicy: policy,
     mode,
@@ -150,6 +175,7 @@ export function planMoA(input = {}, deps = {}) {
     },
     rationale: [
       `classified as ${level}`,
+      `orchestration mode: ${orchestrationMode}`,
       `${plannedSeats.length} external seat(s)`,
       plannedSeats.some((seat) => seat.model) ? `models: ${plannedSeats.map((seat) => seat.model).join(", ")}` : "no external model",
       scheduleState.glmNightCampaignActive ? "GLM night campaign active" : "GLM night campaign inactive",

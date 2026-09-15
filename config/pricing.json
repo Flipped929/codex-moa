@@ -1,12 +1,19 @@
 {
   "version": 1,
   "currency": "USD",
-  "note": "Rates are intentionally null until verified. The ledger always records tokens and duration; add local rates in config/pricing.local.json to enable estimated USD.",
+  "note": "Subscription models are tracked by quota rather than invented token prices. DeepSeek V4.1 Flash rates were verified against the official pricing page on 2026-09-15.",
   "models": {
     "kimi-k3": { "inputPerMillion": null, "outputPerMillion": null, "billing": "subscription" },
     "kimi-2.8": { "inputPerMillion": null, "outputPerMillion": null, "billing": "subscription" },
     "GLM-5.3": { "inputPerMillion": null, "outputPerMillion": null, "billing": "subscription" },
     "GLM-5.3-flash": { "inputPerMillion": null, "outputPerMillion": null, "billing": "subscription" },
-    "DeepSeek-flash": { "inputPerMillion": null, "outputPerMillion": null, "billing": "balance" }
+    "DeepSeek-flash": {
+      "billing": "balance",
+      "verifiedAt": "2026-09-15",
+      "rates": {
+        "off-peak": { "cacheHitInputPerMillion": 0.003, "cacheMissInputPerMillion": 0.15, "outputPerMillion": 0.6 },
+        "peak": { "cacheHitInputPerMillion": 0.006, "cacheMissInputPerMillion": 0.3, "outputPerMillion": 1.2 }
+      }
+    }
   }
 }
