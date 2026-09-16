@@ -38,10 +38,14 @@ try {
 }
 
 const codex = await commandCheck("codexCli", "codex", ["--version"], false);
+await commandCheck("claudeCli", "claude", ["--version"], false);
+await commandCheck("piCli", "pi", ["--version"], false);
 await commandCheck("codexPluginList", "codex", ["plugin", "list"], false);
 if (checks.codexPluginList.ok) {
   checks.codexPluginList.installed = checks.codexPluginList.output.includes("codex-moa");
 delete checks.codexCli.output;
+delete checks.claudeCli.output;
+delete checks.piCli.output;
 delete checks.codexPluginList.output;
 }
 

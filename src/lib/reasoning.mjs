@@ -35,10 +35,14 @@ export function resolveReasoningEffort(selector, requested, modelsConfig) {
   return reasoning.default ?? supported[0] ?? "off";
 }
 
-export function effortForTask({ level = "L1", role = "executor", stakes = "medium", quotaPercent = null, requested, policy = null } = {}) {
+export function effortForTask({ selector = null, modelsConfig = null, level = "L1", role = "executor", stakes = "medium", quotaPercent = null, requested, policy = null } = {}) {
   if (requested) return { effort: requested, source: "explicit", rationale: "explicit reasoningEffort" };
   const rules = policy?.reasoning ?? {};
-  let effort = rules.defaultByLevel?.[level] ?? (level === "L0" ? "off" : level === "L1" ? "low" : level === "L3" ? "max" : "high");
+  const model = selector && modelsConfig ? resolveModel(selector, modelsConfig) : null;
+  const profile = rules.byModel?.[model?.id] ?? model?.reasoning?.vendorProfile ?? {};
+  let effort = profile.byLevel?.[level]
+    ?? rules.defaultByLevel?.[level]
+    ?? (level === "L0" ? "low" : level === "L1" ? "low" : level === "L3" ? "max" : "high");
   if (role === "auditor" || role === "reviewer") effort = rules.auditByStakes?.[stakes] ?? (stakes === "high" ? "max" : "high");
   if (role === "architect") effort = rules.architectByLevel?.[level] ?? (level === "L3" ? "max" : "high");
   if (role === "vision") effort = rules.vision ?? "high";
@@ -47,5 +51,9 @@ export function effortForTask({ level = "L1", role = "executor", stakes = "mediu
     const index = Math.max(0, RANK[effort] - 1);
     effort = CANONICAL_EFFORTS[index];
   }
-  return { effort, source: "task-policy", rationale: `${level}/${role}/${stakes}${quotaPercent !== null ? `/quota:${quotaPercent}` : ""}` };
+  return {
+    effort,
+    source: profile.byLevel?.[level] ? "vendor-profile" : "task-policy",
+    rationale: `${model?.id ?? "generic"}/${level}/${role}/${stakes}${quotaPercent !== null ? `/quota:${quotaPercent}` : ""}`
+  };
 }

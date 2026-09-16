@@ -23,7 +23,7 @@ The plugin ships defaults in `config/evolution.json`. The user-level policy is m
 - captain-family-aware audit routing
 - preferred cross-family auditors
 - timeout budgets
-- reasoning-effort policy by task, role, stakes, and quota
+- reasoning-effort mode and policy by model, task, role, stakes, and quota
 - quota and routing thresholds
 
 Source-code changes are reported as recommendations but are not auto-applied in v1.
@@ -43,6 +43,8 @@ Source-code changes are reported as recommendations but are not auto-applied in 
 ```text
 moa_evolve(action="record", taskId="...", accepted=true, testsPassed=true, quality=9)
 ```
+
+For staged review, use `stage="plan"`, `"execution"`, `"audit"`, or `"final"`. Automatic DAG-layer evidence is retained in each task checkpoint. Evolution analysis joins final captain outcomes to executor routes within the same complexity level and requires sufficient completion, acceptance, tests, and quality evidence before cost, latency, or TPS can influence a proposal.
 
 Generate proposals:
 
@@ -65,6 +67,15 @@ $codex-moa optimize
 
 It analyzes evidence and creates or reuses proposals; it never applies them. Active proposals with the same policy patch are deduplicated. Reliability rates based on fewer than three runs are descriptive only and cannot drive automatic routing changes.
 Unapproved proposals expire after 30 days so stale recommendations cannot be applied accidentally.
+
+Audit optimization additionally reads `~/.codex-moa/audit-metrics.jsonl`. Pair and Harness changes require at least five audit runs plus captain adjudication evidence. Completion, useful findings, false positives, critical-path latency, and cost are evaluated before TPS; shadow audit failures never count as gate failures.
+
+Failure-aware optimization reads `~/.codex-moa/failures.jsonl`. It preserves redacted failure signatures and route recoveries so proposals do not recommend a model/Harness combination with an active deterministic or repeated-transient guard.
+
+Reasoning optimization is capability-gated. Metrics are separated by
+`model@harness@effective-effort`, and proposals are checked against the current CC
+Switch/vendor capability table both when created and when applied. A stale proposal
+that names an unavailable effective effort is rejected instead of silently remapped.
 
 Review and control a proposal with separate, explicit commands:
 

@@ -13,3 +13,13 @@ test("builds layered task graph with executor and auditor dependencies", () => {
   assert.deepEqual(graph.layers[2], ["auditor"]);
   assert.deepEqual(graph.nodes.find((node) => node.id === "auditor").dependsOn, ["executor"]);
 });
+
+test("gate and shadow auditors share one parallel layer", () => {
+  const graph = buildTaskGraph([
+    { seat: "executor", role: "executor", model: "GLM-5.3" },
+    { seat: "gate", role: "auditor", auditMode: "gate", model: "kimi-2.8" },
+    { seat: "shadow", role: "auditor", auditMode: "shadow", blocking: false, model: "DeepSeek-flash" }
+  ]);
+  assert.deepEqual(graph.layers, [["executor"], ["gate", "shadow"]]);
+  assert.equal(graph.nodes.find((node) => node.id === "shadow").blocking, false);
+});

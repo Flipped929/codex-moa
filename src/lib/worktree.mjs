@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
-import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { runCommand } from "./process.mjs";
 
@@ -33,14 +33,49 @@ export async function createWorktree({ cwd, taskId, seat }) {
   const path = join(worktreeRoot(repo), taskId, seat);
   await mkdir(join(worktreeRoot(repo), taskId), { recursive: true });
   if (existsSync(path)) return { supported: true, repo, path, baseCommit: await currentHead(repo), existing: true };
+  const sourceHead = await currentHead(repo);
+  const status = await runCommand({ command: "git", args: ["status", "--porcelain=v1", "--untracked-files=all"], cwd: repo, timeoutMs: 30000 });
+  let snapshotCommit = sourceHead;
+  let includesWorkingTree = false;
+  if (status.ok && status.stdout.trim()) {
+    const temporary = await mkdtemp(join(tmpdir(), "codex-moa-index-"));
+    const indexPath = join(temporary, "index");
+    const env = {
+      GIT_INDEX_FILE: indexPath,
+      GIT_AUTHOR_NAME: "Codex MOA",
+      GIT_AUTHOR_EMAIL: "codex-moa@localhost",
+      GIT_COMMITTER_NAME: "Codex MOA",
+      GIT_COMMITTER_EMAIL: "codex-moa@localhost"
+    };
+    try {
+      const readTree = await runCommand({ command: "git", args: ["read-tree", "HEAD"], cwd: repo, env, timeoutMs: 30000 });
+      if (!readTree.ok) throw new Error(readTree.stderr || "git read-tree failed");
+      const add = await runCommand({ command: "git", args: ["add", "-A", "--", "."], cwd: repo, env, timeoutMs: 120000 });
+      if (!add.ok) throw new Error(add.stderr || "git add into temporary index failed");
+      const tree = await runCommand({ command: "git", args: ["write-tree"], cwd: repo, env, timeoutMs: 30000 });
+      if (!tree.ok || !tree.stdout.trim()) throw new Error(tree.stderr || "git write-tree failed");
+      const commit = await runCommand({
+        command: "git",
+        args: ["commit-tree", tree.stdout.trim(), "-p", sourceHead, "-m", `codex-moa workspace snapshot ${taskId}/${seat}`],
+        cwd: repo,
+        env,
+        timeoutMs: 30000
+      });
+      if (!commit.ok || !commit.stdout.trim()) throw new Error(commit.stderr || "git commit-tree failed");
+      snapshotCommit = commit.stdout.trim();
+      includesWorkingTree = true;
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  }
   const result = await runCommand({
     command: "git",
-    args: ["worktree", "add", "--detach", path, "HEAD"],
+    args: ["worktree", "add", "--detach", path, snapshotCommit],
     cwd: repo,
     timeoutMs: 120000
   });
   if (!result.ok && !existsSync(path)) throw new Error(result.stderr || `git worktree add failed with exit ${result.code}`);
-  return { supported: true, repo, path, baseCommit: await currentHead(repo) };
+  return { supported: true, repo, path, baseCommit: snapshotCommit, sourceHead, includesWorkingTree };
 }
 
 function parseStatus(output) {

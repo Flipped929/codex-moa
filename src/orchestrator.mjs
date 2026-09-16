@@ -15,15 +15,19 @@ import { captureWorktreeDiff, createWorktree, inspectWorktree, removeWorktree, w
 import { buildContextPack, renderContextPack } from "./lib/context-pack.mjs";
 import { navigatorReview } from "./lib/navigator.mjs";
 import { buildRepairContext, hasBlockingAudit, normalizeSeatResult } from "./lib/seat-result.mjs";
-import { applyProviderHealthRouting, summarizeProviderHealth } from "./lib/provider-health.mjs";
+import { applyProviderHealthRouting, reconcileAuditPairing, summarizeProviderHealth } from "./lib/provider-health.mjs";
 import { readProviderState, recordProviderOutcome } from "./lib/provider-state.mjs";
 import { accumulateBudget, budgetSummary, evaluateBudget, newBudgetTotals, normalizeBudgetPolicy } from "./lib/budget.mjs";
 import { getAdapter } from "./adapters/index.mjs";
 import { runAcpAdapter } from "./adapters/acp.mjs";
 import { checkpointPath, checkpointResultMap, completedSeatIds, createCheckpoint, mergeCheckpointIntoSeats, readCheckpoint, updateCheckpointNode, writeCheckpoint } from "./lib/task-checkpoint.mjs";
-import { makeCostEntry, readCostLedger, recordCostEntry } from "./lib/cost-ledger.mjs";
+import { makeCostEntry, readCostLedger, recordCostEntry, summarizeCostLedger } from "./lib/cost-ledger.mjs";
+import { captainAllocation, readCaptainUsage } from "./lib/captain-usage.mjs";
+import { auditMetricsPath, outputTps, recordAuditRun } from "./lib/audit-metrics.mjs";
 import { evaluateRoutingRollback, readRoutingExperimentState, recordRoutingOutcome, routingExperimentDefinition, selectRoutingVariant } from "./lib/routing-experiment.mjs";
 import { resolveMoAMode } from "./lib/moa-mode.mjs";
+import { resolveSkillPaths } from "./lib/skill-broker.mjs";
+import { applyFailureAvoidance, failureGuardFor, failureMemoryPath, readFailureMemory, recordSeatFailure, recordSeatRecovery, summarizeFailureMemory } from "./lib/failure-memory.mjs";
 
 function auditorPrompt({ task, diff, files, context }) {
   return [
@@ -94,7 +98,11 @@ function compactResult(result, maxOutputChars) {
     stopReason: result.stopReason ?? null,
     continuitySupport: result.continuitySupport ?? null,
     selectedProvider: result.selectedProvider ?? null,
+    loadedSkills: result.loadedSkills ?? [],
     role: result.role,
+    auditMode: result.auditMode ?? null,
+    blocking: result.blocking !== false,
+    pairedExecutor: result.pairedExecutor ?? null,
     mode: result.mode,
     status: result.status,
     exitCode: result.exitCode,
@@ -134,6 +142,9 @@ function resultFailure(seat, error) {
     harness: seat.harness,
     requestedModel: seat.model,
     role: seat.role,
+    auditMode: seat.auditMode ?? null,
+    blocking: seat.blocking !== false,
+    pairedExecutor: seat.pairedExecutor ?? null,
     mode: seat.mode,
     status: "error",
     timedOut: false,
@@ -166,7 +177,18 @@ function graphNodeMap(plan) {
 }
 
 function allNodesDone(plan, checkpoint) {
-  return (plan.graph?.nodes ?? []).every((node) => checkpoint.nodes?.[node.id]?.status === "done");
+  return (plan.graph?.nodes ?? []).every((node) => {
+    const status = checkpoint.nodes?.[node.id]?.status;
+    return status === "done" || (node.auditMode === "shadow" && ["failed", "error", "cancelled", "blocked"].includes(status));
+  });
+}
+
+function stagePhase(seats = []) {
+  const roles = new Set(seats.map((seat) => seat.role));
+  if ([...roles].every((role) => ["architect", "researcher", "vision"].includes(role))) return "planning";
+  if (roles.has("executor")) return "execution";
+  if ([...roles].every((role) => ["auditor", "reviewer"].includes(role))) return "verification";
+  return "mixed";
 }
 
 export function assertIsolatedExternalWrites({ allowWrite, worktree, seats }) {
@@ -203,6 +225,15 @@ export async function runMoA(input, deps = {}) {
   const hadCheckpoint = Boolean(checkpoint);
 
   const policy = deps.policy ?? loadEvolutionPolicy();
+  const ledger = await readCostLedger();
+  const captainUsage = input.captainUsage ?? await readCaptainUsage();
+  const allocation = captainAllocation(captain, captainUsage);
+  let quotaSnapshot = input.quotaSnapshot ?? (input.respectQuota !== false ? await readQuotaSnapshot(config) : null);
+  const quotaMaxAgeMs = Number(config.quota?.maxAgeMs ?? 300000);
+  const quotaStale = !quotaSnapshot?.updatedAt || Date.now() - Date.parse(quotaSnapshot.updatedAt) > quotaMaxAgeMs;
+  if (input.respectQuota !== false && config.quota?.refreshOnRun !== false && quotaStale) {
+    quotaSnapshot = await refreshQuota(config);
+  }
   const experimentEligible = input.routingExperiment !== false
     && !input.assignments?.length
     && !input.seats?.length
@@ -216,15 +247,22 @@ export async function runMoA(input, deps = {}) {
     state: experimentState,
     forceVariant: checkpoint?.plan?.routingExperiment?.variant ?? null
   }) : { enabled: false, id: null, variant: "control", policy, rationale: "routing experiment not eligible" };
-  const plan = planMoA({ ...input, captain, orchestrationMode: orchestration.mode, routingExperiment: route }, { models, schedule, policy: route.policy ?? policy });
+  const plan = planMoA({ ...input, captain, orchestrationMode: orchestration.mode, routingExperiment: route }, {
+    models,
+    schedule,
+    policy: route.policy ?? policy,
+    quotaSnapshot,
+    captainAllocation: allocation,
+    routePerformance: summarizeCostLedger(ledger).routes
+  });
   let healthRouting = null;
   let providerHealth = null;
   if (input.respectHealth !== false && !input.assignments?.length && !input.seats?.length) {
-    const healthSnapshot = input.quotaSnapshot ?? await readQuotaSnapshot(config);
+    const healthSnapshot = quotaSnapshot;
     if (healthSnapshot) {
       providerHealth = summarizeProviderHealth({
         snapshot: healthSnapshot,
-        ledger: await readCostLedger(),
+        ledger,
         lowThreshold: policy.routing?.quotaLowThreshold ?? 10,
         circuitState: await readProviderState(),
         config
@@ -238,6 +276,7 @@ export async function runMoA(input, deps = {}) {
       if (healthRouting.blocked.length > 0) {
         throw new Error(`Refusing to dispatch unhealthy provider(s): ${healthRouting.blocked.map((item) => `${item.model}(${item.provider}:${item.status})`).join(", ")}. Configure a healthy provider or set allowUnhealthy=true.`);
       }
+      healthRouting.adjustments.push(...reconcileAuditPairing(plan.seats, { health: providerHealth, modelsConfig: models, captain }));
       for (const node of plan.graph?.nodes ?? []) {
         const seat = plan.seats.find((item) => item.seat === node.id);
         if (seat) {
@@ -247,6 +286,28 @@ export async function runMoA(input, deps = {}) {
       }
       plan.healthRouting = healthRouting;
     }
+  }
+  const failureSummary = summarizeFailureMemory(await readFailureMemory(), { config });
+  let failureRouting = { adjustments: [], blocked: [] };
+  if (!input.assignments?.length && !input.seats?.length) {
+    failureRouting = applyFailureAvoidance(plan.seats, { summary: failureSummary, modelsConfig: models, captain, health: providerHealth });
+    if (failureRouting.blocked.length > 0) {
+      throw new Error(`Refusing to repeat guarded failed route(s): ${failureRouting.blocked.map((item) => item.route).join(", ")}. Wait for the guard to expire, repair the provider/Harness, or use an explicit assignment after review.`);
+    }
+    failureRouting.adjustments.push(...reconcileAuditPairing(plan.seats, {
+      health: providerHealth,
+      modelsConfig: models,
+      captain,
+      routeAllowed: (model, harness) => !failureGuardFor(failureSummary, model, harness)
+    }));
+    for (const node of plan.graph?.nodes ?? []) {
+      const seat = plan.seats.find((item) => item.seat === node.id);
+      if (seat) {
+        node.model = seat.model;
+        node.harness = seat.harness;
+      }
+    }
+    plan.failureRouting = failureRouting;
   }
   if (checkpoint) {
     const knownSeats = new Set(Object.keys(checkpoint.nodes ?? {}));
@@ -265,7 +326,9 @@ export async function runMoA(input, deps = {}) {
     input: sanitizeInput(input),
     plan: {
       level: plan.level,
-      seats: plan.seats.map((seat) => ({ seat: seat.seat, model: seat.model, harness: seat.harness, role: seat.role, runtime: seat.runtime ?? "cli" })),
+      seats: plan.seats.map((seat) => ({ seat: seat.seat, model: seat.model, harness: seat.harness, role: seat.role, runtime: seat.runtime ?? "cli", auditMode: seat.auditMode ?? null, pairedExecutor: seat.pairedExecutor ?? null })),
+      auditStrategy: plan.auditStrategy ?? null,
+      failureRouting: plan.failureRouting ?? null,
       routingExperiment: plan.routingExperiment ?? null
     },
     checkpoint: checkpointFile,
@@ -276,7 +339,8 @@ export async function runMoA(input, deps = {}) {
   let seatInputs = plan.seats.map((seat) => ({
     ...seat,
     taskId: workspace.taskId,
-    cwd: seat.cwd ?? input.cwd ?? config.defaultCwd
+    cwd: seat.cwd ?? input.cwd ?? config.defaultCwd,
+    skillPaths: resolveSkillPaths([...(input.skills ?? []), ...(seat.skills ?? [])], config)
   }));
   seatInputs = mergeCheckpointIntoSeats(seatInputs, checkpoint);
   const bySeat = new Map(seatInputs.map((seat) => [seat.seat, seat]));
@@ -284,7 +348,8 @@ export async function runMoA(input, deps = {}) {
   const completed = completedSeatIds(checkpoint);
   const resultMap = checkpointResultMap(checkpoint);
 
-  if (input.worktree !== false) {
+  const allowWrite = input.allowWrite === true;
+  if (allowWrite && input.worktree !== false) {
     for (const seat of seatInputs) {
       if (seat.role !== "executor" || completed.has(seat.seat)) continue;
       const worktree = await createWorktreeFn({ cwd: seat.originalCwd ?? seat.cwd, taskId: workspace.taskId, seat: seat.seat });
@@ -339,26 +404,25 @@ export async function runMoA(input, deps = {}) {
     throw new Error(auditWarnings.map((warning) => warning.message).join(" "));
   }
 
-  let quotaSnapshot = input.quotaSnapshot ?? (input.respectQuota !== false ? await readQuotaSnapshot(config) : null);
-  const maxAgeMs = Number(config.quota?.maxAgeMs ?? 300000);
-  const stale = !quotaSnapshot?.updatedAt || Date.now() - Date.parse(quotaSnapshot.updatedAt) > maxAgeMs;
-  if (input.respectQuota !== false && config.quota?.refreshOnRun !== false && stale) {
-    quotaSnapshot = await refreshQuota(config);
-  }
   const quota = quotaSnapshot ? quotaForSeats(seatInputs, quotaSnapshot, models) : [];
   const quotaBySeat = new Map(quota.map((item) => [item.seat, item]));
   if (input.respectQuota !== false && quotaSnapshot) {
-    const depleted = depletedModels(seatInputs, quotaSnapshot, models);
+    const depletedAll = depletedModels(seatInputs, quotaSnapshot, models);
+    for (const item of depletedAll.filter(({ assignment }) => assignment.auditMode === "shadow")) {
+      item.assignment.skipDispatch = true;
+      item.assignment.skipReason = `shadow provider quota depleted for ${item.assignment.model}`;
+    }
+    const depleted = depletedAll.filter(({ assignment }) => assignment.auditMode !== "shadow");
     if (depleted.length > 0 && !input.allowDepleted) {
       throw new Error(`Refusing to dispatch depleted model(s): ${depleted.map((item) => item.assignment.model).join(", ")}`);
     }
   }
 
-  const allowWrite = input.allowWrite === true;
   assertIsolatedExternalWrites({ allowWrite, worktree: input.worktree, seats: seatInputs });
   const runStartedAt = Date.now();
   const budgetPolicy = normalizeBudgetPolicy({ config, input });
   const budgetTotals = newBudgetTotals();
+  const taskCostEntries = [];
   let budgetViolations = [];
   const checkBudget = () => {
     budgetViolations = evaluateBudget(budgetTotals, budgetPolicy, runStartedAt);
@@ -419,6 +483,9 @@ export async function runMoA(input, deps = {}) {
       result = resultFailure(seat, error);
     }
     result.round = options?.round ?? 1;
+    result.auditMode = seat.auditMode ?? null;
+    result.blocking = seat.blocking !== false;
+    result.pairedExecutor = seat.pairedExecutor ?? null;
     result.structured = normalizeSeatResult(result, seat);
 
     if (seat.worktree?.path) {
@@ -505,9 +572,15 @@ export async function runMoA(input, deps = {}) {
         pricing
       });
       await recordCostEntry(costEntry);
+      taskCostEntries.push(costEntry);
       accumulateBudget(budgetTotals, costEntry);
     } catch {}
-    if (result.status !== "cancelled") {
+    if (result.status !== "done") {
+      try { await recordSeatFailure({ taskId: workspace.taskId, level: plan.level, seat, result }); } catch {}
+    } else {
+      try { await recordSeatRecovery({ taskId: workspace.taskId, level: plan.level, seat, result }); } catch {}
+    }
+    if (result.status !== "cancelled" && seat.auditMode !== "shadow") {
       try {
         await recordProviderOutcome({
           provider: providerForModel(seat.model, models),
@@ -545,6 +618,21 @@ export async function runMoA(input, deps = {}) {
       });
     }
   };
+  const dependencyContext = (seat) => {
+    if (seat.role !== "auditor" && seat.role !== "reviewer") return null;
+    const node = graphNodes.get(seat.seat);
+    const dependencies = (node?.dependsOn ?? []).map((id) => resultMap.get(id)).filter(Boolean);
+    if (dependencies.length === 0) return null;
+    return [
+      "## Upstream execution evidence",
+      ...dependencies.flatMap((result) => [
+        `### ${result.seat} (${result.requestedModel}@${result.harness})`,
+        `Status: ${result.status}`,
+        result.diffPath ? `Captured diff artifact: ${result.diffPath}` : "Captured diff artifact: none",
+        result.summary ? `Execution summary:\n${result.summary}` : "Execution summary: none"
+      ])
+    ].join("\n");
+  };
 
   const layers = plan.graph?.layers ?? [];
   for (let layerIndex = 0; layerIndex < layers.length; layerIndex += 1) {
@@ -566,6 +654,11 @@ export async function runMoA(input, deps = {}) {
       if (!seat) continue;
       const node = checkpoint.nodes?.[seatId];
       if (node?.status === "done") continue;
+      if (seat.skipDispatch) {
+        updateCheckpointNode(checkpoint, seatId, { status: "cancelled", cancelReason: seat.skipReason ?? "shadow dispatch skipped" });
+        appendEvent(eventsPath, { type: "shadow_skipped", seat: seatId, reason: seat.skipReason ?? null });
+        continue;
+      }
       if (await deps.isCancelled?.()) {
         updateCheckpointNode(checkpoint, seatId, { status: "cancelled", cancelReason: "job cancellation requested" });
         continue;
@@ -580,7 +673,8 @@ export async function runMoA(input, deps = {}) {
       runnable.push(seat);
     }
     if (runnable.length === 0) continue;
-    const settled = await Promise.allSettled(runnable.map((seat) => runSeat(seat, layerIndex)));
+    const stageStartedAt = new Date();
+    const settled = await Promise.allSettled(runnable.map((seat) => runSeat(seat, layerIndex, { extraContext: dependencyContext(seat) })));
     settled.forEach((entry, index) => {
       const seat = runnable[index];
       if (entry.status === "fulfilled") {
@@ -590,6 +684,35 @@ export async function runMoA(input, deps = {}) {
         resultMap.set(seat.seat, failure);
         updateCheckpointNode(checkpoint, seat.seat, { status: failure.status, result: failure });
       }
+    });
+    const stageFinishedAt = new Date();
+    const stageSeats = layer.map((seatId) => {
+      const seat = bySeat.get(seatId);
+      const node = checkpoint.nodes?.[seatId];
+      return {
+        seat: seatId,
+        role: seat?.role ?? null,
+        model: seat?.model ?? null,
+        harness: seat?.harness ?? null,
+        auditMode: seat?.auditMode ?? null,
+        blocking: seat?.blocking !== false,
+        status: node?.status ?? "pending",
+        durationMs: node?.durationMs ?? null,
+        tests: node?.result?.structured?.tests ?? []
+      };
+    });
+    const blockingSeats = stageSeats.filter((seat) => seat.blocking !== false);
+    checkpoint.stageReviews ??= [];
+    checkpoint.stageReviews.push({
+      layer: layerIndex,
+      attempt: checkpoint.stageReviews.filter((stage) => stage.layer === layerIndex).length + 1,
+      phase: stagePhase(layer.map((seatId) => bySeat.get(seatId)).filter(Boolean)),
+      startedAt: stageStartedAt.toISOString(),
+      finishedAt: stageFinishedAt.toISOString(),
+      durationMs: stageFinishedAt.getTime() - stageStartedAt.getTime(),
+      seats: stageSeats,
+      blockingPassed: blockingSeats.every((seat) => seat.status === "done"),
+      evidenceReadyForCaptain: true
     });
     await writeCheckpoint(workspace.dirs.root, checkpoint);
     await reportProgress({ type: "layer_finished", layer: layerIndex, activeSeat: null });
@@ -608,6 +731,9 @@ export async function runMoA(input, deps = {}) {
       harness: seat.harness,
       requestedModel: seat.model,
       role: seat.role,
+      auditMode: seat.auditMode ?? null,
+      blocking: seat.blocking !== false,
+      pairedExecutor: seat.pairedExecutor ?? null,
       mode: seat.mode,
       status: node?.status ?? "pending",
       summary: "",
@@ -639,10 +765,9 @@ export async function runMoA(input, deps = {}) {
         break;
       }
       const repairSummary = repaired.map((result) => `${result.seat}: ${result.summary}`).join("\n");
-      for (const seat of seatInputs.filter((item) => ["auditor", "reviewer"].includes(item.role))) {
-        const result = await runSeat(seat, undefined, { round, extraContext: `## Required repair from previous audit\n${repairContext}\n\n## Repair results\n${repairSummary}` });
-        resultMap.set(seat.seat, result);
-      }
+      const reauditSeats = seatInputs.filter((item) => ["auditor", "reviewer"].includes(item.role));
+      const reauditResults = await Promise.all(reauditSeats.map((seat) => runSeat(seat, undefined, { round, extraContext: `## Required repair from previous audit\n${repairContext}\n\n## Repair results\n${repairSummary}` })));
+      for (let index = 0; index < reauditSeats.length; index += 1) resultMap.set(reauditSeats[index].seat, reauditResults[index]);
       results = seatInputs.map((seat) => resultMap.get(seat.seat) ?? results.find((item) => item.seat === seat.seat));
       checkpoint.repairRounds = round - 1;
       await writeCheckpoint(workspace.dirs.root, checkpoint);
@@ -650,6 +775,43 @@ export async function runMoA(input, deps = {}) {
     }
   }
   if (cancellationRequested) cancelRemaining("job cancellation requested");
+  const executorBySeat = new Map(seatInputs.filter((seat) => seat.role === "executor").map((seat) => [seat.seat, seat]));
+  const auditDurations = results.filter((result) => result.role === "auditor").map((result) => Number(result.durationMs) || 0);
+  const auditLayerMs = Math.max(0, ...auditDurations);
+  const auditParallelSavedMs = Math.max(0, auditDurations.reduce((sum, value) => sum + value, 0) - auditLayerMs);
+  for (const result of results.filter((item) => item.role === "auditor")) {
+    const seat = bySeat.get(result.seat);
+    const executor = executorBySeat.get(result.pairedExecutor) ?? seatInputs.find((item) => item.role === "executor");
+    if (!seat || !executor) continue;
+    const estimate = makeCostEntry({ taskId: workspace.taskId, seat, result, quota: quotaBySeat.get(seat.seat) ?? null, pricing });
+    try {
+      await recordAuditRun({
+        taskId: workspace.taskId,
+        level: plan.level,
+        executorSeat: executor.seat,
+        executorModel: executor.model,
+        executorHarness: executor.harness,
+        auditorSeat: seat.seat,
+        auditorModel: seat.model,
+        auditorHarness: seat.harness,
+        auditMode: seat.auditMode ?? "gate",
+        blocking: seat.blocking !== false,
+        harnessExperiment: seat.harnessExperiment ?? null,
+        status: result.status,
+        timedOut: result.timedOut === true,
+        verdict: result.structured?.verdict ?? null,
+        findings: result.structured?.findings?.length ?? 0,
+        durationMs: result.durationMs ?? null,
+        outputTokens: result.usage?.outputTokens ?? null,
+        outputTps: outputTps(result),
+        auditLayerMs,
+        auditParallelSavedMs,
+        criticalPathContributor: (Number(result.durationMs) || 0) === auditLayerMs,
+        estimatedUsd: estimate.estimatedUsd,
+        pricingPeriod: estimate.pricingPeriod ?? null
+      });
+    } catch {}
+  }
   checkpoint.status = cancellationRequested ? "cancelled" : allNodesDone(plan, checkpoint) ? "completed" : "partial";
   await writeCheckpoint(workspace.dirs.root, checkpoint);
   for (let index = 0; index < seatInputs.length; index += 1) {
@@ -670,13 +832,13 @@ export async function runMoA(input, deps = {}) {
   let routingRollback = { rolledBack: false };
   if (plan.seats.length > 0) {
     try {
-      routingOutcome = await recordRoutingOutcome(route, { taskId: workspace.taskId, results });
+      routingOutcome = await recordRoutingOutcome(route, { taskId: workspace.taskId, results: results.filter((result) => result.auditMode !== "shadow") });
       routingRollback = await evaluateRoutingRollback(route, routingExperimentDefinition(policy));
     } catch (error) {
       routingRollback = { rolledBack: false, error: error.message };
     }
   }
-  const navigator = navigatorReview({ plan, results, auditWarnings, quota });
+  const navigator = navigatorReview({ plan, results, auditWarnings, quota, allowWrite });
   if (routingRollback.rolledBack) {
     navigator.findings.push({
       severity: "P1",
@@ -718,8 +880,16 @@ export async function runMoA(input, deps = {}) {
       quota,
       routing: { variant: route.variant, experimentId: route.id, outcome: routingOutcome, rollback: routingRollback },
       health: providerHealth ? { overall: providerHealth.overall, routing: healthRouting } : null,
+      failureRouting,
       budget: { ...budgetSummary(budgetPolicy, budgetTotals, runStartedAt), exceeded: budgetViolations },
       results: results.map((result) => ({
+        ...(() => {
+          const planned = plan.seats.find((seat) => seat.seat === result.seat);
+          return {
+            reasoningEffort: result.reasoningEffort ?? planned?.reasoningEffort ?? null,
+            reasoningSource: planned?.reasoningSource ?? "unknown"
+          };
+        })(),
         seat: result.seat,
         harness: result.harness,
         requestedModel: result.requestedModel,
@@ -728,10 +898,15 @@ export async function runMoA(input, deps = {}) {
         status: result.status,
         timedOut: result.timedOut,
         stopReason: result.stopReason ?? null,
-        durationMs: result.durationMs
-      }))
+        durationMs: result.durationMs,
+        usage: result.usage ?? null,
+        estimatedUsd: taskCostEntries.find((entry) => entry.seat === result.seat)?.estimatedUsd ?? null,
+        pricingKnown: taskCostEntries.find((entry) => entry.seat === result.seat)?.pricingKnown ?? false
+      })),
+      stageReviews: checkpoint.stageReviews ?? []
     });
   } catch {}
+  const finalFailureSummary = summarizeFailureMemory(await readFailureMemory(), { config });
 
   return {
     taskId: workspace.taskId,
@@ -748,6 +923,7 @@ export async function runMoA(input, deps = {}) {
     routingOutcome,
     routingRollback,
     health: providerHealth ? { summary: providerHealth, routing: healthRouting } : null,
+    failureMemory: { summary: finalFailureSummary, routing: failureRouting, path: failureMemoryPath() },
     budget: { ...budgetSummary(budgetPolicy, budgetTotals, runStartedAt), exceeded: budgetViolations },
     quota,
     navigator,
@@ -758,6 +934,7 @@ export async function runMoA(input, deps = {}) {
     checkpoint: {
       path: checkpointFile,
       status: checkpoint.status,
+      stageReviews: checkpoint.stageReviews ?? [],
       counts: results.reduce((counts, result) => {
         counts[result.status] = (counts[result.status] ?? 0) + 1;
         return counts;
@@ -769,7 +946,9 @@ export async function runMoA(input, deps = {}) {
       manifest: manifestPath,
       events: eventsPath,
       results: resultsPath,
-      navigator: join(workspace.dirs.root, "navigator.json")
+      navigator: join(workspace.dirs.root, "navigator.json"),
+      auditMetrics: auditMetricsPath(),
+      failureMemory: failureMemoryPath()
     },
     graph: {
       layers: plan.graph?.layers ?? [],

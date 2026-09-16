@@ -1,7 +1,57 @@
 # Changelog
 
+## 0.22.2
+
+- Bind background jobs to the originating Codex thread and deliver terminal-state continuation prompts through the official `codex queue` interface.
+- Persist notification delivery attempts separately from captain acknowledgement, with explicit retry and acknowledgement tools.
+- Preserve prior plugin cache directories during local reinstalls so already-open sessions do not lose their MCP config and worker resources.
+
+## 0.22.1
+
+- Delegate suitable L0 execution when the page captain is explicitly confirmed as GPT/OpenAI, while keeping GPT responsible for planning, staged evidence review, adjudication, integration, and the final answer.
+- Preserve opaque and non-OpenAI captain behavior, and never infer the page model from the global CC Switch provider card.
+- Persist DAG-layer stage reviews and captain judgments, then compare execution routes within the same complexity level using completion, acceptance, tests, and quality before cost, latency, and TPS.
+- Add a redacted model/Harness failure-memory ledger. Deterministic failures activate an immediate guard, repeated transient failures activate a temporary guard, and automatic routing changes route instead of repeating an active failure.
+- Record successful route recovery to clear active guards without deleting failure history; expose failure memory through health, evolution, artifacts, and retention.
+
+## 0.22.0
+
+- Pair GLM execution with a Kimi subscription gate and Kimi execution with a GLM subscription gate; reconcile the pair after health-based rerouting so the blocking audit remains cross-family.
+- Add a parallel, non-blocking DeepSeek shadow audit sampled at 25% during peak L2 work, 40% off-peak L2 work, and 100% for L3 work.
+- Compare DeepSeek audit Harnesses through a deterministic Codex/Pi/DeepSeekHarness experiment while keeping failures out of task gating, provider circuits, repair rounds, and routing health.
+- Record executor-auditor pairs, Harness, completion, latency, output TPS, cost, accepted findings, false positives, and critical-path contribution in a private audit ledger.
+- Add `moa_audit_metrics` for status and captain adjudication; feed the evidence into proposal-first self-optimization without automatically changing policy.
+- Add audit-ledger retention and regression coverage for parallel audit layers, shadow failure isolation, and post-reroute cross-family reconciliation.
+
+## 0.21.0
+
+- Fix third-party Codex CLI authentication by projecting each CC Switch card into an isolated provider `env_key` instead of relying on OpenAI `auth.json` semantics.
+- Strip unrelated desktop, marketplace, plugin, and project tables from isolated Codex homes.
+- Add GPT captain quota snapshots and dynamic delegation targets while keeping the page-selected model in control.
+- Record route/provider completion rates and observed output TPS; gate all performance preferences on sample size and completion quality.
+- Feed TPS and task completion evidence into proposal-first self-optimization analysis.
+
 ## Unreleased
 
+- Add CC Switch-managed Claude Code and Codex CLI as explicit, isolated sub-agent Harnesses; Pi remains the automatic default for Kimi/GLM and DeepSeekHarness remains the default independent DeepSeek audit path.
+- Add private per-provider Claude settings and Codex homes, including Codex catalog normalization and explicit Skill projection, so concurrent seats never switch the global CC Switch card.
+- Add `moa_capabilities` and `npm run ccswitch:capabilities` for declared capability inventory plus bounded read-only text/tool and image probes.
+- Add detect-only CLI lifecycle governance: doctor reports installed/minimum/latest versions and upgrade actions, but never upgrades a CLI automatically.
+- Record DeepSeek Flash's documented 384K output ceiling as 393,216 tokens.
+- Validate all five models through Pi and Claude Code text/tool probes; validate Pi image input for Kimi K3, GLM-5.3-Flash, and DeepSeek Flash.
+- Keep Codex CLI third-party routes explicit-only after live probes found invalid Kimi/DeepSeek credentials and an incomplete GLM Responses stream in the current CC Switch cards.
+
+- Add an explicit Pi Harness route for DeepSeek V4.1 Flash through the CC Switch `deepseek/deepseek-flash` provider while keeping DeepSeekHarness as the independent default route.
+- Add task-aware, vendor-profiled reasoning selection with a provider-default escape hatch, effective-capability clamping, and reasoning-aware self-optimization metrics and proposal validation.
+- Make CC Switch the runtime source of truth for Kimi/GLM Pi credentials, provider/model IDs, context/output limits, reasoning/extended-thinking metadata, and image input by projecting its `app_type=pi` cards into a private Pi home before every run; keep DeepSeekHarness independent.
+- Bind Pi-routed models to their exact configured CC Switch provider card instead of allowing an unrelated same-name Codex card to win metadata selection.
+- Add Pi as a first-class CLI Harness for Kimi Coding and Z.ai Coding Plan models, with provider/model selection, read-only tool enforcement, continuity IDs, and explicit reasoning flags.
+- Fix Kimi prompt-mode failures by no longer combining the incompatible `--prompt` and `--plan` flags.
+- Add an allowlisted Skill broker that resolves explicitly requested CC Switch/Pi/Codex Skill paths and passes them to Pi or Kimi without loading the full catalog.
+- Balance Kimi and GLM subscriptions by weekly remaining-percentage gap, prefer Pi→Kimi while Kimi is underused, and preserve ZCode during the GLM night campaign.
+- Track reliability separately for each `model@harness` route so a failing Kimi CLI route does not condemn Pi→Kimi.
+- Add an interaction-safe background handoff contract: `moa_start`, job status/wait, and steering now tell the captain to yield while a job is active, cap each wait at ten seconds, and explicitly distinguish queue-risk mitigation from an App-level queue fix.
+- Require the captain to stop repeated polling and substantial local work after background dispatch, preserving mid-run control through durable job steering.
 - Make the ClaudeBar extension self-contained so a fresh installation can find its probe without a manually configured project root.
 - Prevent long synchronous MCP calls from monopolizing a Codex turn: write-enabled, ACP, remote, benchmark, multi-stage, and over-60-second work must use `moa_start`.
 - Add durable `moa_job_steer`, `moa_job_pause`, and `moa_job_resume` controls with checkpoint-safe delivery and ten-second maximum waits.

@@ -3,9 +3,12 @@
     "kimi-k3": {
       "id": "kimi-k3",
       "displayName": "Kimi K3",
-      "harness": "kimi",
-      "supportedHarnesses": ["kimi", "dsh"],
+      "harness": "pi",
+      "supportedHarnesses": ["kimi", "pi", "claude", "codex", "dsh"],
       "providerModel": "kimi-code/k3",
+      "pi": { "provider": "cc-switch-kimi-for-coding", "model": "k3" },
+      "claude": { "provider": "ae913129-2134-4c83-a616-52892e14abc0", "model": "k3[1M]" },
+      "codex": { "provider": "2e904e2a-cf08-4593-a665-b34b7c54a21e", "model": "k3" },
       "dsh": { "provider": "kimi-coding", "model": "k3" },
       "family": "moonshot",
       "tier": "deep",
@@ -24,7 +27,13 @@
         ],
         "default": "high",
         "canDisable": false,
-        "inputAliases": { "medium": "high", "xhigh": "max" }
+        "inputAliases": { "medium": "high", "xhigh": "max" },
+        "vendorProfile": {
+          "supported": ["low", "high", "max"],
+          "default": "high",
+          "byLevel": { "L0": "low", "L1": "low", "L2": "high", "L3": "max" },
+          "source": "Kimi Code model documentation"
+        }
       },
       "limits": {
         "contextWindow": 1048576,
@@ -36,9 +45,12 @@
     "kimi-2.8": {
       "id": "kimi-2.8",
       "displayName": "Kimi 2.8 For Coding",
-      "harness": "kimi",
-      "supportedHarnesses": ["kimi", "dsh"],
+      "harness": "pi",
+      "supportedHarnesses": ["kimi", "pi", "claude", "codex", "dsh"],
       "providerModel": "kimi-code/kimi-for-coding",
+      "pi": { "provider": "cc-switch-kimi-for-coding", "model": "kimi-for-coding" },
+      "claude": { "provider": "ae913129-2134-4c83-a616-52892e14abc0", "model": "kimi-for-coding[1M]" },
+      "codex": { "provider": "2e904e2a-cf08-4593-a665-b34b7c54a21e", "model": "kimi-for-coding" },
       "dsh": { "provider": "kimi-coding", "model": "kimi-for-coding" },
       "family": "moonshot",
       "tier": "fast",
@@ -56,7 +68,13 @@
         ],
         "default": "max",
         "canDisable": false,
-        "inputAliases": { "medium": "high", "xhigh": "max" }
+        "inputAliases": { "medium": "high", "xhigh": "max" },
+        "vendorProfile": {
+          "supported": ["low", "high", "max"],
+          "default": "max",
+          "byLevel": { "L0": "low", "L1": "low", "L2": "high", "L3": "max" },
+          "source": "Kimi Code model documentation"
+        }
       },
       "limits": {
         "contextWindow": 1048576,
@@ -68,9 +86,12 @@
     "GLM-5.3": {
       "id": "GLM-5.3",
       "displayName": "GLM-5.3",
-      "harness": "zcode",
-      "supportedHarnesses": ["zcode", "dsh"],
+      "harness": "pi",
+      "supportedHarnesses": ["zcode", "pi", "claude", "codex", "dsh"],
       "providerModel": "GLM-5.3",
+      "pi": { "provider": "cc-switch-zhipu-glm", "model": "glm-5.3" },
+      "claude": { "provider": "1ed51e93-6d23-4342-8e54-e6820e8fb783", "model": "glm-5.3[1M]" },
+      "codex": { "provider": "eded9578-b9b3-4212-b400-79cb361ada2b", "model": "glm-5.3" },
       "dsh": { "provider": "zai-coding-cn", "model": "glm-5.3" },
       "family": "zhipu",
       "tier": "deep",
@@ -87,7 +108,13 @@
         ],
         "default": "max",
         "canDisable": false,
-        "inputAliases": { "medium": "high", "xhigh": "max" }
+        "inputAliases": { "off": "high", "low": "high", "medium": "high", "xhigh": "max" },
+        "vendorProfile": {
+          "supported": ["high", "max"],
+          "default": "max",
+          "byLevel": { "L0": "high", "L1": "high", "L2": "high", "L3": "max" },
+          "source": "Z.ai GLM thinking-mode documentation"
+        }
       },
       "limits": {
         "contextWindow": 1000000,
@@ -99,9 +126,12 @@
     "GLM-5.3-flash": {
       "id": "GLM-5.3-flash",
       "displayName": "GLM-5.3-Flash",
-      "harness": "zcode",
-      "supportedHarnesses": ["zcode", "dsh"],
+      "harness": "pi",
+      "supportedHarnesses": ["zcode", "pi", "claude", "codex", "dsh"],
       "providerModel": "GLM-5.3-Flash",
+      "pi": { "provider": "cc-switch-zhipu-glm", "model": "glm-5.3-flash" },
+      "claude": { "provider": "1ed51e93-6d23-4342-8e54-e6820e8fb783", "model": "glm-5.3-flash[1M]" },
+      "codex": { "provider": "eded9578-b9b3-4212-b400-79cb361ada2b", "model": "glm-5.3-flash" },
       "dsh": { "provider": "zai-coding-cn", "model": "glm-5.3-flash" },
       "family": "zhipu",
       "tier": "fast",
@@ -121,7 +151,13 @@
         ],
         "default": "max",
         "canDisable": false,
-        "inputAliases": { "medium": "high", "xhigh": "max" }
+        "inputAliases": { "off": "high", "low": "high", "medium": "high", "xhigh": "max" },
+        "vendorProfile": {
+          "supported": ["high", "max"],
+          "default": "max",
+          "byLevel": { "L0": "high", "L1": "high", "L2": "high", "L3": "max" },
+          "source": "Z.ai GLM thinking-mode documentation"
+        }
       },
       "limits": {
         "contextWindow": 1000000,
@@ -134,8 +170,11 @@
       "id": "DeepSeek-flash",
       "displayName": "DeepSeek V4.1 Flash",
       "harness": "dsh",
-      "supportedHarnesses": ["dsh"],
+      "supportedHarnesses": ["dsh", "pi", "claude", "codex"],
       "providerModel": "deepseek-flash",
+      "pi": { "provider": "deepseek", "model": "deepseek-flash" },
+      "claude": { "provider": "056edf2e-9574-4729-9f8a-7df0b15a009e", "model": "deepseek-flash[1M]" },
+      "codex": { "provider": "6cf2f462-8a8e-4c90-bfe3-6557f701f21a", "model": "deepseek-flash" },
       "dsh": { "provider": "deepseek-official", "model": "deepseek-flash" },
       "family": "deepseek",
       "tier": "fast",
@@ -155,11 +194,17 @@
         ],
         "default": "high",
         "canDisable": true,
-        "inputAliases": { "medium": "high", "xhigh": "high" }
+        "inputAliases": { "medium": "high", "xhigh": "high" },
+        "vendorProfile": {
+          "supported": ["off", "low", "high", "max"],
+          "default": "high",
+          "byLevel": { "L0": "low", "L1": "low", "L2": "high", "L3": "max" },
+          "source": "DeepSeek V4 thinking-mode documentation"
+        }
       },
       "limits": {
         "contextWindow": 1000000,
-        "maxOutputTokens": 384000,
+        "maxOutputTokens": 393216,
         "recommendedContextTokens": 262144,
         "recommendedOutputTokens": 32768
       }
@@ -186,16 +231,48 @@
   "tiers": {
     "fast": {
       "kimi": "kimi-2.8",
+      "pi": "kimi-2.8",
       "zcode": "GLM-5.3-flash",
-      "dsh": "DeepSeek-flash"
+      "dsh": "DeepSeek-flash",
+      "claude": "kimi-2.8",
+      "codex": "DeepSeek-flash"
     },
     "deep": {
       "kimi": "kimi-k3",
+      "pi": "kimi-k3",
+      "claude": "kimi-k3",
+      "codex": "GLM-5.3",
       "zcode": "GLM-5.3",
       "dsh": "DeepSeek-flash"
     }
   },
   "seats": {
+    "pi-executor-fast": {
+      "harness": "pi",
+      "modelTier": "fast",
+      "mode": "edit",
+      "role": "executor"
+    },
+    "pi-executor-deep": {
+      "harness": "pi",
+      "modelTier": "deep",
+      "mode": "build",
+      "role": "executor"
+    },
+    "pi-glm-executor-fast": {
+      "harness": "pi",
+      "model": "GLM-5.3-flash",
+      "modelTier": "fast",
+      "mode": "edit",
+      "role": "executor"
+    },
+    "pi-glm-executor-deep": {
+      "harness": "pi",
+      "model": "GLM-5.3",
+      "modelTier": "deep",
+      "mode": "build",
+      "role": "executor"
+    },
     "zcode-executor-fast": {
       "harness": "zcode",
       "modelTier": "fast",
@@ -209,13 +286,15 @@
       "role": "executor"
     },
     "kimi-architect": {
-      "harness": "kimi",
+      "harness": "pi",
+      "model": "kimi-k3",
       "modelTier": "deep",
       "mode": "plan",
       "role": "architect"
     },
     "kimi-vision": {
-      "harness": "kimi",
+      "harness": "pi",
+      "model": "kimi-k3",
       "modelTier": "deep",
       "mode": "plan",
       "role": "vision"

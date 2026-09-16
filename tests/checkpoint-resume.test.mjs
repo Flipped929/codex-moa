@@ -31,6 +31,7 @@ test("task DAG persists failed layers and resumes completed nodes", async () => 
   const previous = { ...process.env };
   process.env.CODEX_MOA_SEAT_REGISTRY = join(root, "seats.json");
   process.env.CODEX_MOA_COST_LEDGER = join(root, "cost.jsonl");
+  process.env.CODEX_MOA_FAILURE_MEMORY = join(root, "failures.jsonl");
   process.env.CODEX_MOA_ROUTING_EXPERIMENT_PATH = join(root, "routing.json");
   process.env.CODEX_MOA_EVOLUTION_HOME = join(root, "evolution");
   process.env.CODEX_MOA_CONTINUITY_PATH = join(root, "continuity.json");

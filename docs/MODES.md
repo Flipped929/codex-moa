@@ -5,7 +5,7 @@ The model selected in the active Codex conversation is always the captain. It ma
 Codex MOA persists one logical mode in `~/.codex-moa/mode.json`:
 
 - `off`: keep automatic work in the Codex captain. Explicit seat assignments still run.
-- `auto`: keep L0 tasks in the captain and delegate L1-L3 tasks by complexity.
+- `auto`: when the page captain is explicitly known to be GPT/OpenAI, delegate suitable L0 execution to one fast external seat while GPT retains planning, staged review, integration, and the final answer. Opaque or non-OpenAI captains keep L0 locally. Delegate L1-L3 by capability and complexity.
 - `force`: delegate at least one external seat, including otherwise-simple tasks.
 
 Use the canonical English Skill commands `$codex-moa on`, `$codex-moa off`, `$codex-moa auto`, and `$codex-moa status`. Translated aliases are intentionally unsupported. `$codex-moa <task>` forces delegation only for that task without changing the persisted mode.

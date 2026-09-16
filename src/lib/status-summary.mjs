@@ -12,6 +12,10 @@ import { readQuotaSnapshot } from "./quota.mjs";
 import { summarizeCheckpoint } from "./task-checkpoint.mjs";
 import { listJobs } from "./jobs.mjs";
 import { readPatchMetrics, summarizePatchMetrics } from "./patch-metrics.mjs";
+import { captainAllocation, readCaptainUsage } from "./captain-usage.mjs";
+import { resolveCaptain } from "./captain.mjs";
+import { readAuditMetrics, summarizeAuditMetrics } from "./audit-metrics.mjs";
+import { readFailureMemory, summarizeFailureMemory } from "./failure-memory.mjs";
 
 function expandHome(value) {
   if (typeof value !== "string") return value;
@@ -82,6 +86,11 @@ export async function buildStatusSummary({ config = loadConfig(), recentHours = 
   const blackboard = await latestBlackboardState(config);
   const jobs = await listJobs(50);
   const patchMetrics = summarizePatchMetrics(await readPatchMetrics());
+  const captain = await resolveCaptain();
+  const captainUsage = await readCaptainUsage();
+  const auditMetrics = summarizeAuditMetrics(await readAuditMetrics());
+  const failureMemory = summarizeFailureMemory(await readFailureMemory(), { config });
+  const activeFailureGuards = Object.values(failureMemory.routes).filter((route) => route.activeGuard).length;
   const activeJobs = jobs.filter((job) => ["queued", "running", "cancelling"].includes(job.status));
   const activeSeats = seats.filter((seat) => seat.status === "running");
   const completedSeats = seats.filter((seat) => seat.status === "done");
@@ -90,7 +99,7 @@ export async function buildStatusSummary({ config = loadConfig(), recentHours = 
   const navigator = blackboard.navigator;
   const statusLevel = (() => {
     if (health.overall === "critical" || navigator?.verdict === "block") return "critical";
-    if (health.overall === "warning" || navigator?.verdict === "warn" || navigator?.verdict === "unreviewed") return "warning";
+    if (health.overall === "warning" || navigator?.verdict === "warn" || navigator?.verdict === "unreviewed" || activeFailureGuards > 0) return "warning";
     return "healthy";
   })();
   const providerCounts = Object.values(health.providers).reduce((counts, provider) => {
@@ -129,6 +138,10 @@ export async function buildStatusSummary({ config = loadConfig(), recentHours = 
     } : null,
     checkpoints: blackboard.checkpoints,
     patchMetrics,
+    captainUsage,
+    captainAllocation: captainAllocation(captain, captainUsage),
+    auditMetrics,
+    failureMemory: { ...failureMemory, activeGuards: activeFailureGuards },
     providerHealth: health,
     providerCounts,
     cost,

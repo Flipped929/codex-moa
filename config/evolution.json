@@ -3,6 +3,19 @@
   "audit": {
     "avoidCaptainFamily": true,
     "strict": false,
+    "deepSeekShadow": {
+      "l2PeakRate": 0.25,
+      "l2OffPeakRate": 0.4,
+      "l3Rate": 1.0
+    },
+    "deepSeekHarnessExperiment": {
+      "id": "deepseek-audit-harness-v1",
+      "weights": {
+        "codex": 60,
+        "pi": 25,
+        "dsh": 15
+      }
+    },
     "preferredByCaptainFamily": {
       "deepseek": [
         "GLM-5.3",
@@ -23,8 +36,11 @@
     }
   },
   "routing": {
+    "delegateSimpleForOpenAiCaptain": true,
     "preferFastForMediumReview": true,
     "quotaLowThreshold": 10,
+    "balanceSubscriptions": true,
+    "subscriptionBalanceThreshold": 10,
     "experiment": {
       "id": "medium-review-tier",
       "enabled": true,
@@ -49,8 +65,9 @@
     "deepMs": 1200000
   },
   "reasoning": {
+    "mode": "task-aware",
     "defaultByLevel": {
-      "L0": "off",
+      "L0": "low",
       "L1": "low",
       "L2": "high",
       "L3": "max"
@@ -64,6 +81,13 @@
       "L3": "max"
     },
     "vision": "high",
-    "quotaDowngradeBelow": 10
+    "quotaDowngradeBelow": 10,
+    "byModel": {
+      "kimi-k3": { "byLevel": { "L0": "low", "L1": "low", "L2": "high", "L3": "max" } },
+      "kimi-2.8": { "byLevel": { "L0": "low", "L1": "low", "L2": "high", "L3": "max" } },
+      "GLM-5.3": { "byLevel": { "L0": "high", "L1": "high", "L2": "high", "L3": "max" } },
+      "GLM-5.3-flash": { "byLevel": { "L0": "high", "L1": "high", "L2": "high", "L3": "max" } },
+      "DeepSeek-flash": { "byLevel": { "L0": "low", "L1": "low", "L2": "high", "L3": "max" } }
+    }
   }
 }

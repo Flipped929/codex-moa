@@ -4,6 +4,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { loadEvolutionPolicy } from "./config.mjs";
+import { loadEffectiveModels } from "./effective-models.mjs";
+import { normalizeEffort, resolveReasoningEffort } from "./reasoning.mjs";
+import { resolveModel } from "./models.mjs";
+import { readAuditMetrics, summarizeAuditMetrics } from "./audit-metrics.mjs";
+import { readFailureMemory, summarizeFailureMemory } from "./failure-memory.mjs";
 
 function expandHome(value) {
   if (typeof value !== "string") return value;
@@ -59,6 +64,7 @@ function summarizeReliability(states, minimumSamples = 3) {
     successRate: state.runs ? state.done / state.runs : null,
     failureRate: state.runs ? state.failed / state.runs : null,
     timeoutRate: state.runs ? state.timedOut / state.runs : null,
+    outputTps: Number(state.durationMs) > 0 ? Number(state.outputTokens ?? 0) / (Number(state.durationMs) / 1000) : null,
     sampleSufficient: state.runs >= minimumSamples
   }]));
 }
@@ -77,6 +83,53 @@ export function validatePolicyPatch(patch, topLevel = true) {
   return patch;
 }
 
+function effortEntries(reasoning = {}) {
+  const entries = [];
+  for (const [field, values] of Object.entries({
+    defaultByLevel: reasoning.defaultByLevel,
+    auditByStakes: reasoning.auditByStakes,
+    architectByLevel: reasoning.architectByLevel
+  })) {
+    for (const [key, value] of Object.entries(values ?? {})) entries.push({ path: `reasoning.${field}.${key}`, value });
+  }
+  if (reasoning.vision !== undefined) entries.push({ path: "reasoning.vision", value: reasoning.vision });
+  for (const [model, profile] of Object.entries(reasoning.byModel ?? {})) {
+    for (const [level, value] of Object.entries(profile?.byLevel ?? {})) {
+      entries.push({ path: `reasoning.byModel.${model}.byLevel.${level}`, value, model });
+    }
+  }
+  return entries;
+}
+
+export function validateReasoningPolicyPatch(patch, modelsConfig = loadEffectiveModels()) {
+  const reasoning = patch?.reasoning;
+  if (!reasoning) return { ok: true, checks: [], modelCapabilities: {} };
+  if (reasoning.mode !== undefined && !["task-aware", "provider-default"].includes(reasoning.mode)) {
+    throw new Error(`Unsupported reasoning.mode: ${reasoning.mode}`);
+  }
+  const checks = [];
+  for (const entry of effortEntries(reasoning)) {
+    const normalized = normalizeEffort(entry.value);
+    if (!normalized) throw new Error(`Unsupported reasoning effort at ${entry.path}: ${entry.value}`);
+    if (entry.model) {
+      const model = resolveModel(entry.model, modelsConfig);
+      const effective = resolveReasoningEffort(model.id, normalized, modelsConfig);
+      if (effective !== normalized) {
+        throw new Error(`${entry.path}=${normalized} is not an effective effort for ${model.id}; current capability maps it to ${effective}`);
+      }
+      checks.push({ path: entry.path, requested: normalized, effective, model: model.id });
+    } else {
+      checks.push({ path: entry.path, requested: normalized, effective: null, model: null });
+    }
+  }
+  const modelCapabilities = Object.fromEntries(Object.entries(modelsConfig.models ?? {}).map(([id, model]) => [id, {
+    supported: model.reasoning?.supported ?? [],
+    default: model.reasoning?.default ?? null,
+    source: modelsConfig.reasoningSources?.[id] ?? "local"
+  }]));
+  return { ok: true, checks, modelCapabilities };
+}
+
 export function deepMerge(base, patch) {
   if (patch === null || typeof patch !== "object" || Array.isArray(patch)) return patch;
   const output = base && typeof base === "object" && !Array.isArray(base) ? { ...base } : {};
@@ -91,7 +144,7 @@ export async function recordEvolutionEvent(event, paths = evolutionPaths()) {
 
 export async function recordOutcome(outcome, paths = evolutionPaths()) {
   await ensureEvolutionStore(paths);
-  await appendFile(paths.outcomes, `${JSON.stringify({ time: new Date().toISOString(), ...outcome })}\n`, "utf8");
+  await appendFile(paths.outcomes, `${JSON.stringify({ time: new Date().toISOString(), ...outcome, stage: outcome.stage ?? "final" })}\n`, "utf8");
 }
 
 async function readJsonl(path) {
@@ -107,11 +160,17 @@ export async function analyzeEvolution(paths = evolutionPaths(), limit = 200) {
   const outcomes = (await readJsonl(paths.outcomes)).slice(-limit);
   const seatStates = {};
   const models = {};
+  const reasoningRoutes = {};
+  const executionRoutes = {};
   let auditWarnings = 0;
   let timeouts = 0;
+  const finalOutcomes = outcomes.filter((outcome) => !outcome.stage || outcome.stage === "final");
+  const finalOutcomeByTask = new Map(finalOutcomes.map((outcome) => [outcome.taskId, outcome]));
+  let automaticStageReviews = 0;
   for (const event of events) {
     if (event.type === "task_completed") {
       auditWarnings += event.auditWarnings?.length ?? 0;
+      automaticStageReviews += event.stageReviews?.length ?? 0;
       for (const result of event.results ?? []) {
         const seat = result.seat ?? "unknown";
         seatStates[seat] ??= { runs: 0, done: 0, failed: 0, timedOut: 0 };
@@ -125,26 +184,141 @@ export async function analyzeEvolution(paths = evolutionPaths(), limit = 200) {
         if (result.status === "done") models[model].done += 1;
         else models[model].failed += 1;
         if (result.timedOut) models[model].timedOut += 1;
+        const effort = result.reasoningEffort ?? "provider-default";
+        const harness = result.harness ?? "unknown";
+        const route = `${model}@${harness}@${effort}`;
+        reasoningRoutes[route] ??= { model, harness, effort, source: result.reasoningSource ?? "unknown", runs: 0, done: 0, failed: 0, timedOut: 0, durationMs: 0, totalTokens: 0, outputTokens: 0 };
+        reasoningRoutes[route].runs += 1;
+        reasoningRoutes[route].done += result.status === "done" ? 1 : 0;
+        reasoningRoutes[route].failed += result.status === "done" ? 0 : 1;
+        reasoningRoutes[route].timedOut += result.timedOut ? 1 : 0;
+        reasoningRoutes[route].durationMs += Number(result.durationMs) || 0;
+        reasoningRoutes[route].totalTokens += Number(result.usage?.totalTokens) || 0;
+        reasoningRoutes[route].outputTokens += Number(result.usage?.outputTokens) || 0;
+        if (result.role === "executor") {
+          const executionKey = `${event.level ?? "unknown"}:${model}@${harness}`;
+          executionRoutes[executionKey] ??= {
+            level: event.level ?? "unknown",
+            model,
+            harness,
+            runs: 0,
+            done: 0,
+            failed: 0,
+            timedOut: 0,
+            adjudicated: 0,
+            accepted: 0,
+            rejected: 0,
+            testsPassed: 0,
+            testsFailed: 0,
+            rated: 0,
+            qualityTotal: 0,
+            durationMs: 0,
+            outputTokens: 0,
+            estimatedUsd: 0,
+            pricedRuns: 0
+          };
+          const state = executionRoutes[executionKey];
+          const outcome = finalOutcomeByTask.get(event.taskId);
+          state.runs += 1;
+          state.done += result.status === "done" ? 1 : 0;
+          state.failed += result.status === "done" ? 0 : 1;
+          state.timedOut += result.timedOut ? 1 : 0;
+          state.durationMs += Number(result.durationMs) || 0;
+          state.outputTokens += Number(result.usage?.outputTokens) || 0;
+          if (Number.isFinite(Number(result.estimatedUsd))) {
+            state.estimatedUsd += Number(result.estimatedUsd);
+            state.pricedRuns += 1;
+          }
+          if (outcome) {
+            state.adjudicated += 1;
+            state.accepted += outcome.accepted === true ? 1 : 0;
+            state.rejected += outcome.accepted === false ? 1 : 0;
+            state.testsPassed += outcome.testsPassed === true ? 1 : 0;
+            state.testsFailed += outcome.testsPassed === false ? 1 : 0;
+            if (Number.isFinite(Number(outcome.quality))) {
+              state.rated += 1;
+              state.qualityTotal += Number(outcome.quality);
+            }
+          }
+        }
       }
     }
   }
-  const accepted = outcomes.filter((outcome) => outcome.accepted === true).length;
-  const rated = outcomes.filter((outcome) => Number.isFinite(Number(outcome.quality))).length;
+  for (const state of Object.values(executionRoutes)) {
+    state.completionRate = state.runs ? state.done / state.runs : null;
+    state.acceptanceRate = state.adjudicated ? state.accepted / state.adjudicated : null;
+    state.testsPassRate = state.testsPassed + state.testsFailed > 0 ? state.testsPassed / (state.testsPassed + state.testsFailed) : null;
+    state.averageQuality = state.rated ? state.qualityTotal / state.rated : null;
+    state.outputTps = state.durationMs > 0 ? state.outputTokens / (state.durationMs / 1000) : null;
+    state.costPerAcceptedTask = state.accepted > 0 && state.pricedRuns > 0 ? state.estimatedUsd / state.accepted : null;
+    state.sampleSufficient = state.runs >= 3 && state.adjudicated >= 3;
+    state.qualityGatePassed = state.sampleSufficient
+      && state.completionRate >= 0.75
+      && state.acceptanceRate >= 0.75
+      && (state.averageQuality === null || state.averageQuality >= 7);
+  }
+  const bestQualifiedRouteByLevel = {};
+  for (const level of new Set(Object.values(executionRoutes).map((state) => state.level))) {
+    const candidates = Object.entries(executionRoutes).filter(([, state]) => state.level === level && state.qualityGatePassed);
+    candidates.sort(([, left], [, right]) => {
+      for (const field of ["acceptanceRate", "averageQuality", "testsPassRate", "completionRate"]) {
+        const difference = (Number(right[field]) || 0) - (Number(left[field]) || 0);
+        if (difference !== 0) return difference;
+      }
+      if (left.costPerAcceptedTask !== null && right.costPerAcceptedTask !== null) {
+        const costDifference = left.costPerAcceptedTask - right.costPerAcceptedTask;
+        if (costDifference !== 0) return costDifference;
+      }
+      return (left.durationMs / left.runs) - (right.durationMs / right.runs);
+    });
+    if (candidates[0]) {
+      const [route, state] = candidates[0];
+      bestQualifiedRouteByLevel[level] = {
+        route,
+        qualityGatePassed: true,
+        acceptanceRate: state.acceptanceRate,
+        averageQuality: state.averageQuality,
+        testsPassRate: state.testsPassRate,
+        completionRate: state.completionRate,
+        costPerAcceptedTask: state.costPerAcceptedTask,
+        averageDurationMs: state.durationMs / state.runs,
+        note: "Observed leader only; routing changes require a separate proposal and user approval."
+      };
+    }
+  }
+  const accepted = finalOutcomes.filter((outcome) => outcome.accepted === true).length;
+  const ratedOutcomes = finalOutcomes.filter((outcome) => Number.isFinite(Number(outcome.quality)));
+  const rated = ratedOutcomes.length;
   const averageQuality = rated
-    ? outcomes.reduce((sum, outcome) => sum + Number(outcome.quality), 0) / rated
+    ? ratedOutcomes.reduce((sum, outcome) => sum + Number(outcome.quality), 0) / rated
     : null;
+  const auditMetrics = summarizeAuditMetrics(await readAuditMetrics());
+  const failureMemory = summarizeFailureMemory(await readFailureMemory());
   return {
     sample: { events: events.length, outcomes: outcomes.length },
     auditWarnings,
     timeouts,
     accepted,
-    acceptanceRate: outcomes.length ? accepted / outcomes.length : null,
+    acceptanceRate: finalOutcomes.length ? accepted / finalOutcomes.length : null,
     averageQuality,
     seats: summarizeReliability(seatStates),
     models: summarizeReliability(models),
+    reasoningRoutes: summarizeReliability(reasoningRoutes),
+    executionRoutes,
+    bestQualifiedRouteByLevel,
+    stageReviews: {
+      automatic: automaticStageReviews,
+      captainRecorded: outcomes.filter((outcome) => outcome.stage && outcome.stage !== "final").length,
+      byStage: Object.fromEntries(["plan", "execution", "audit", "final"].map((stage) => [stage, outcomes.filter((outcome) => (outcome.stage ?? "final") === stage).length]))
+    },
+    auditMetrics,
+    failureMemory,
     evidencePolicy: {
       minimumSamples: 3,
-      note: "Rates below the minimum sample size are descriptive only and must not change routing automatically."
+      qualityGate: "Task completion and accepted outcomes take precedence over throughput.",
+      throughputWeight: 0.2,
+      routeQualityGate: { completionRate: 0.75, acceptanceRate: 0.75, averageQuality: 7 },
+      note: "Compare routes within the same task level. Completion, captain acceptance, tests, and quality gate first; known cost, latency, and TPS are tie-breakers. Sparse evidence is descriptive and policy changes remain proposal-first."
     }
   };
 }
@@ -171,6 +345,7 @@ async function normalizeProposalExpiry(proposal, file) {
 
 export async function createProposal(input, paths = evolutionPaths()) {
   validatePolicyPatch(input.policyPatch ?? {});
+  const reasoningCompatibility = validateReasoningPolicyPatch(input.policyPatch ?? {});
   await ensureEvolutionStore(paths);
   const fingerprint = hash(stableJson(input.policyPatch ?? {}));
   const existing = (await listProposals(paths)).find((proposal) =>
@@ -188,6 +363,7 @@ export async function createProposal(input, paths = evolutionPaths()) {
     problem: input.problem,
     evidence: input.evidence ?? [],
     policyPatch: input.policyPatch,
+    reasoningCompatibility,
     fingerprint,
     expectedBenefit: input.expectedBenefit ?? null,
     risks: input.risks ?? [],
@@ -291,6 +467,7 @@ export async function applyProposal(proposalId, confirmation, paths = evolutionP
     hadTarget = false;
   }
   validatePolicyPatch(proposal.policyPatch ?? {});
+  proposal.reasoningCompatibility = validateReasoningPolicyPatch(proposal.policyPatch ?? {});
   const next = deepMerge(current, proposal.policyPatch ?? {});
   const backupDir = join(paths.backups, proposalId);
   await mkdir(backupDir, { recursive: true });

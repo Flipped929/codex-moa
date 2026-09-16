@@ -3,12 +3,16 @@ import { chmod, mkdir, open, readFile, readdir, rename, stat, unlink, writeFile 
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { requestCancellation } from "./control-store.mjs";
 import { pluginRoot } from "./config.mjs";
 
 const TERMINAL = new Set(["completed", "partial", "failed", "cancelled", "paused"]);
+const THREAD_ID_RE = /^[A-Za-z0-9._:-]{1,160}$/;
 const WORKER_ENV_KEYS = new Set(["PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TMP", "TEMP", "LANG", "LC_ALL", "TERM", "NO_COLOR", "FORCE_COLOR", "CODEX_HOME", "CC_SWITCH_HOME"]);
 const SECRET_ENV_RE = /(API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH|COOKIE)/i;
+const execFileAsync = promisify(execFile);
 
 export function buildJobWorkerEnv(source = process.env, overrides = {}) {
   const env = {};
@@ -73,8 +77,26 @@ export function assertJobInputSupported(input) {
   return input;
 }
 
-export function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`, taskId, input }) {
+function normalizeThreadId(value) {
+  const threadId = String(value ?? "").trim();
+  return THREAD_ID_RE.test(threadId) ? threadId : null;
+}
+
+function initialNotification(originThreadId) {
+  return {
+    state: originThreadId ? "pending" : "unavailable",
+    originThreadId,
+    attempts: 0,
+    lastAttemptAt: null,
+    acceptedAt: null,
+    acknowledgedAt: null,
+    lastError: originThreadId ? null : "No valid originating Codex thread ID was available at dispatch time."
+  };
+}
+
+export function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`, taskId, input, originThreadId = null }) {
   const now = new Date().toISOString();
+  const normalizedThreadId = normalizeThreadId(originThreadId);
   return {
     version: 1,
     jobId,
@@ -89,6 +111,7 @@ export function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${rand
     pid: null,
     progress: { phase: "queued", completed: 0, total: 0, activeSeat: null },
     control: { revision: 0, messages: [] },
+    notification: initialNotification(normalizedThreadId),
     input: publicInput(input),
     resultSummary: null,
     error: null
@@ -190,7 +213,8 @@ export function publicJob(job) {
       pendingMessages: (job.control?.messages ?? []).filter((item) => item.status === "pending").length,
       deliveredMessages: (job.control?.messages ?? []).filter((item) => item.status === "delivered").length,
       lastMessageId: job.control?.messages?.at(-1)?.id ?? null
-    }
+    },
+    notification: job.notification ?? initialNotification(null)
   };
 }
 
@@ -209,12 +233,95 @@ async function spawnJobWorker(record) {
   return updateJob(record.jobId, { pid: child.pid, status: "queued" });
 }
 
-export async function startJob({ input, jobId, taskId }) {
+export async function startJob({ input, jobId, taskId, originThreadId = input?.originThreadId ?? process.env.CODEX_THREAD_ID }) {
   assertJobInputSupported(input);
-  const record = createJobRecord({ jobId, taskId, input });
+  const record = createJobRecord({ jobId, taskId, input, originThreadId });
   await writeJob(record);
   await atomicWrite(jobInputPath(record.jobId), publicInput(input));
   return spawnJobWorker(record);
+}
+
+export function completionNotificationMessage(job) {
+  const navigator = job?.resultSummary?.navigator ? ` Navigator verdict: ${job.resultSummary.navigator}.` : "";
+  return [
+    `Codex MOA background job ${job.jobId} is now ${job.status}.${navigator}`,
+    `Call moa_job_status for ${job.jobId}, inspect its artifacts and stage evidence, then continue captain-side verification, conflict resolution, and integration without rerunning completed seats.`,
+    `After the completion has been handled, call moa_job_ack for ${job.jobId}.`
+  ].join(" ");
+}
+
+async function codexQueueNotification({ threadId, message }) {
+  const codexBin = process.env.CODEX_MOA_CODEX_BIN || "codex";
+  const { stdout = "", stderr = "" } = await execFileAsync(codexBin, ["queue", "--thread", threadId, "--message", message], {
+    timeout: 20_000,
+    maxBuffer: 256 * 1024,
+    env: buildJobWorkerEnv(process.env)
+  });
+  return { stdout: stdout.trim(), stderr: stderr.trim() };
+}
+
+export async function notifyJobCompletion(jobId, { deliver = codexQueueNotification, force = false, retries = 3 } = {}) {
+  let job = await readJob(jobId);
+  if (!job) throw new Error(`Job not found: ${jobId}`);
+  if (!TERMINAL.has(job.status)) throw new Error(`Job ${jobId} is ${job.status}; completion notification is only valid for terminal jobs.`);
+  const notification = job.notification ?? initialNotification(null);
+  if (!notification.originThreadId) return publicJob(job);
+  if (!force && ["delivered", "acknowledged"].includes(notification.state)) return publicJob(job);
+
+  const attempts = Math.max(1, Math.min(3, Number(retries) || 1));
+  let lastError = null;
+  for (let index = 0; index < attempts; index += 1) {
+    const attemptAt = new Date().toISOString();
+    job = await updateJob(jobId, (current) => ({
+      ...current,
+      notification: {
+        ...(current.notification ?? initialNotification(notification.originThreadId)),
+        state: "sending",
+        attempts: Number(current.notification?.attempts ?? 0) + 1,
+        lastAttemptAt: attemptAt,
+        lastError: null
+      }
+    }));
+    try {
+      await deliver({
+        threadId: notification.originThreadId,
+        message: completionNotificationMessage(job),
+        job: publicJob(job)
+      });
+      const delivered = await updateJob(jobId, (current) => ({
+        ...current,
+        notification: {
+          ...current.notification,
+          state: "delivered",
+          acceptedAt: new Date().toISOString(),
+          lastError: null
+        }
+      }));
+      return publicJob(delivered);
+    } catch (error) {
+      lastError = String(error?.message ?? error).slice(0, 1000);
+      await updateJob(jobId, (current) => ({
+        ...current,
+        notification: { ...current.notification, state: "failed", lastError }
+      }));
+      if (index + 1 < attempts) await new Promise((resolveDelay) => setTimeout(resolveDelay, 250 * (index + 1)));
+    }
+  }
+  return publicJob(await readJob(jobId));
+}
+
+export async function acknowledgeJobNotification(jobId) {
+  const job = await readJob(jobId);
+  if (!job) throw new Error(`Job not found: ${jobId}`);
+  const updated = await updateJob(jobId, (current) => ({
+    ...current,
+    notification: {
+      ...(current.notification ?? initialNotification(null)),
+      state: "acknowledged",
+      acknowledgedAt: new Date().toISOString()
+    }
+  }));
+  return publicJob(updated);
 }
 
 export async function steerJob(jobId, message) {
@@ -328,7 +435,7 @@ export async function runJobWorker(jobId, deps = {}) {
     const allDone = result.results.length > 0 && result.results.every((item) => item.status === "done");
     const status = paused ? "paused" : allDone || result.results.length === 0 ? "completed" : cancelled ? "cancelled" : "partial";
     const latest = await readJob(jobId);
-    const final = await updateJob(jobId, {
+    await updateJob(jobId, {
       status,
       finishedAt: new Date().toISOString(),
       progress: { ...(latest?.progress ?? job.progress ?? {}), phase: status, activeSeat: null },
@@ -341,17 +448,17 @@ export async function runJobWorker(jobId, deps = {}) {
         artifacts: result.artifacts
       }
     });
-    return publicJob(final);
+    return notifyJobCompletion(jobId, { deliver: deps.notifyCompletion });
   } catch (error) {
     const interrupted = await readJob(jobId);
     const interruptedStatus = interrupted?.pauseRequested ? "paused" : interrupted?.cancelRequested ? "cancelled" : "failed";
-    const final = await updateJob(jobId, {
+    await updateJob(jobId, {
       status: interruptedStatus,
       finishedAt: new Date().toISOString(),
       progress: { phase: interruptedStatus, activeSeat: null },
       error: interruptedStatus === "failed" ? (error?.stack ?? String(error)) : null
     });
-    return publicJob(final);
+    return notifyJobCompletion(jobId, { deliver: deps.notifyCompletion });
   }
 }
 

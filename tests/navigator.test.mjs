@@ -10,11 +10,22 @@ test("navigator warns on failed seats and missing diffs", () => {
       { seat: "auditor", role: "auditor", status: "failed", error: "timeout" }
     ],
     auditWarnings: [{ message: "same family" }],
-    quota: []
+    quota: [],
+    allowWrite: true
   });
   assert.equal(review.verdict, "warn");
   assert.ok(review.findings.some((item) => item.type === "missing-diff"));
   assert.ok(review.findings.some((item) => item.type === "seat-failed"));
+});
+
+test("navigator does not require a diff from read-only executors", () => {
+  const review = navigatorReview({
+    plan: { level: "L1" },
+    results: [{ seat: "executor", role: "executor", status: "done", diffPath: null }],
+    allowWrite: false
+  });
+  assert.equal(review.verdict, "pass");
+  assert.equal(review.checks.missingDiffs, 0);
 });
 
 test("navigator blocks conflict markers and warns on partial writes", () => {
@@ -30,4 +41,19 @@ test("navigator blocks conflict markers and warns on partial writes", () => {
   assert.equal(review.verdict, "block");
   assert.ok(review.findings.some((item) => item.type === "partial-write"));
   assert.ok(review.findings.some((item) => item.type === "worktree-conflict-markers"));
+});
+
+test("shadow audit failure is observable but non-gating", () => {
+  const review = navigatorReview({
+    plan: { level: "L2" },
+    results: [
+      { seat: "executor", role: "executor", status: "done" },
+      { seat: "gate", role: "auditor", auditMode: "gate", status: "done", structured: { kind: "audit", verdict: "pass", findings: [] } },
+      { seat: "shadow", role: "auditor", auditMode: "shadow", status: "failed", error: "timeout" }
+    ]
+  });
+  assert.equal(review.verdict, "warn");
+  assert.equal(review.checks.seatFailures, 0);
+  assert.equal(review.checks.shadowFailures, 1);
+  assert.ok(review.findings.some((item) => item.type === "shadow-audit-failed"));
 });

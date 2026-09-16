@@ -21,14 +21,21 @@ import { getScheduleState } from "../src/lib/scheduler.mjs";
 import { listControlRequests, readControlStore, requestCancellation } from "../src/lib/control-store.mjs";
 import { buildStatusSummary } from "../src/lib/status-summary.mjs";
 import { routingExperimentStatus } from "../src/lib/routing-experiment.mjs";
-import { listJobs, pauseJob, publicJob, readJob, requestJobCancellation, resumeJob, startJob, steerJob, waitForJob } from "../src/lib/jobs.mjs";
-import { assertInteractiveRun } from "../src/lib/interactive-run.mjs";
+import { acknowledgeJobNotification, listJobs, notifyJobCompletion, pauseJob, publicJob, readJob, requestJobCancellation, resumeJob, startJob, steerJob, waitForJob } from "../src/lib/jobs.mjs";
+import { assertInteractiveRun, backgroundJobHandoff, JOB_WAIT_LIMIT_MS } from "../src/lib/interactive-run.mjs";
 import { createTaskId } from "../src/lib/blackboard.mjs";
 import { applyPatch, checkPatch, inspectWorktree, listWorktrees, pruneWorktrees, removeWorktree, revertPatch } from "../src/lib/worktree.mjs";
 import { applyRetention, planRetention } from "../src/lib/retention.mjs";
 import { readPatchMetrics, recordPatchEvent, summarizePatchMetrics } from "../src/lib/patch-metrics.mjs";
 import { providerCircuitStatus, readProviderState, recoverProviders } from "../src/lib/provider-state.mjs";
 import { readMoAMode, resolveMoAMode, setMoAMode } from "../src/lib/moa-mode.mjs";
+import { loadEffectiveModels } from "../src/lib/effective-models.mjs";
+import { capabilityMatrix, liveCapabilityProbe } from "../src/lib/capability-probe.mjs";
+import { captainAllocation, readCaptainUsage, writeCaptainUsage } from "../src/lib/captain-usage.mjs";
+import { readCostLedger, summarizeCostLedger } from "../src/lib/cost-ledger.mjs";
+import { readAuditMetrics, recordAuditAdjudication, summarizeAuditMetrics } from "../src/lib/audit-metrics.mjs";
+import { applyFailureAvoidance, failureGuardFor, readFailureMemory, summarizeFailureMemory } from "../src/lib/failure-memory.mjs";
+import { reconcileAuditPairing } from "../src/lib/provider-health.mjs";
 
 const MODEL_IDS = ["kimi-k3", "kimi-2.8", "kimi-k2.8", "GLM-5.3", "GLM-5.3-flash", "DeepSeek-flash"];
 const modelSchema = z.enum(MODEL_IDS);
@@ -44,7 +51,7 @@ const budgetSchema = z.object({
 }).optional();
 const assignmentSchema = z.object({
   model: modelSchema,
-  harness: z.enum(["kimi", "zcode", "dsh"]).optional(),
+  harness: z.enum(["kimi", "zcode", "dsh", "pi", "claude", "codex"]).optional(),
   role: roleSchema.optional().default("executor"),
   mode: z.enum(["plan", "edit", "build"]).optional(),
   runtime: z.enum(["cli", "acp"]).optional().default("cli"),
@@ -59,7 +66,10 @@ const assignmentSchema = z.object({
   allowedTools: z.string().optional(),
   disallowedTools: z.string().optional(),
   profile: z.string().optional(),
-  env: z.record(z.string(), z.string()).optional()
+  env: z.record(z.string(), z.string()).optional(),
+  skills: z.array(z.string().min(1)).max(12).optional(),
+  auditMode: z.enum(["gate", "shadow"]).optional(),
+  blocking: z.boolean().optional()
 });
 
 function pluginManifest() {
@@ -153,9 +163,11 @@ server.registerTool("moa_evolve", {
   inputSchema: {
     action: z.enum(["status", "record", "optimize", "propose", "list", "get", "approve", "reject", "apply", "rollback"]),
     taskId: z.string().optional(),
+    originThreadId: z.string().optional().describe("Originating Codex thread. Normally captured automatically from CODEX_THREAD_ID; set only when the host explicitly provides it."),
     accepted: z.boolean().optional(),
     testsPassed: z.boolean().optional(),
     quality: z.number().min(0).max(10).optional(),
+    stage: z.enum(["plan", "execution", "audit", "final"]).optional().default("final"),
     notes: z.string().optional(),
     proposalId: z.string().optional(),
     confirmation: z.string().optional(),
@@ -182,6 +194,7 @@ server.registerTool("moa_evolve", {
         accepted: input.accepted,
         testsPassed: input.testsPassed,
         quality: input.quality,
+        stage: input.stage,
         notes: input.notes
       }));
     }
@@ -400,7 +413,7 @@ server.registerTool("moa_patch_metrics", {
 
 server.registerTool("moa_retention", {
   title: "Codex MOA Retention",
-  description: "Plan or apply retention/compaction for blackboard, jobs, worktrees, cost ledger, and routing history.",
+  description: "Plan or apply retention/compaction for blackboard, jobs, worktrees, cost ledger, audit metrics, failure memory, and routing history.",
   inputSchema: {
     action: z.enum(["plan", "apply"]),
     allowWrite: z.boolean().optional().default(false),
@@ -434,13 +447,42 @@ server.registerTool("moa_context", {
   }
 });
 
+server.registerTool("moa_capabilities", {
+  title: "Codex MOA Model Capabilities",
+  description: "Read the CC Switch and vendor capability matrix, or run one bounded read-only live model/Harness probe.",
+  inputSchema: {
+    live: z.boolean().optional().default(false),
+    model: modelSchema.optional(),
+    harness: z.enum(["pi", "claude", "codex"]).optional().default("pi"),
+    cwd: z.string().optional(),
+    reasoningEffort: reasoningEffortSchema.optional(),
+    feature: z.enum(["text-tool", "image"]).optional().default("text-tool"),
+    timeoutMs: z.number().int().positive().max(60000).optional().default(60000)
+  }
+}, async (input) => {
+  try {
+    if (!input.live) return textResult(await capabilityMatrix());
+    if (!input.model) throw new Error("model is required for a live capability probe");
+    return textResult(await liveCapabilityProbe({
+      model: input.model,
+      harness: input.harness,
+      cwd: input.cwd ?? process.cwd(),
+      reasoningEffort: input.reasoningEffort,
+      feature: input.feature,
+      timeoutMs: input.timeoutMs
+    }));
+  } catch (error) {
+    return errorResult(error);
+  }
+});
+
 server.registerTool("moa_doctor", {
   title: "Codex MOA Doctor",
-  description: "Check KimiCode, ZCode, DeepSeekHarness, and plugin dependencies.",
-  inputSchema: {}
-}, async () => {
+  description: "Check Pi, Claude Code, Codex CLI, compatibility fallbacks, lifecycle policy, and plugin dependencies.",
+  inputSchema: { checkLatest: z.boolean().optional().default(false) }
+}, async ({ checkLatest }) => {
   try {
-    return textResult(await doctor());
+    return textResult(await doctor({ checkLatest }));
   } catch (error) {
     return errorResult(error);
   }
@@ -484,6 +526,59 @@ server.registerTool("moa_captain", {
   }
 });
 
+server.registerTool("moa_captain_usage", {
+  title: "Codex MOA Captain Usage",
+  description: "Read or update the GPT captain quota snapshot used for dynamic delegation. The Codex caller obtains current account limits and supplies only normalized percentages.",
+  inputSchema: {
+    action: z.enum(["read", "update"]).optional().default("read"),
+    source: z.string().optional(),
+    observedAt: z.string().datetime().optional(),
+    planType: z.string().optional(),
+    ordinaryUsageAllowed: z.boolean().optional(),
+    limits: z.array(z.object({
+      limitId: z.string(),
+      usedPercent: z.number().min(0).max(100),
+      windowDurationMins: z.number().nonnegative().optional(),
+      resetsAt: z.number().nonnegative().optional()
+    })).optional()
+  }
+}, async (input) => {
+  try {
+    if (input.action === "update") {
+      if (!input.limits?.length) throw new Error("limits are required for action=update");
+      return textResult(await writeCaptainUsage(input));
+    }
+    return textResult(await readCaptainUsage() ?? { status: "not_recorded" });
+  } catch (error) {
+    return errorResult(error);
+  }
+});
+
+server.registerTool("moa_audit_metrics", {
+  title: "Codex MOA Audit Metrics",
+  description: "Read execution-audit pairing metrics or record captain adjudication of audit findings.",
+  inputSchema: {
+    action: z.enum(["status", "record"]).optional().default("status"),
+    taskId: z.string().optional(),
+    auditorSeat: z.string().optional(),
+    acceptedFindings: z.number().int().nonnegative().optional(),
+    falsePositives: z.number().int().nonnegative().optional(),
+    taskAccepted: z.boolean().optional(),
+    testsPassed: z.boolean().optional(),
+    notes: z.string().max(2000).optional()
+  }
+}, async (input) => {
+  try {
+    if (input.action === "record") {
+      if (!input.taskId || !input.auditorSeat) throw new Error("taskId and auditorSeat are required for action=record");
+      return textResult(await recordAuditAdjudication(input));
+    }
+    return textResult(summarizeAuditMetrics(await readAuditMetrics()));
+  } catch (error) {
+    return errorResult(error);
+  }
+});
+
 server.registerTool("moa_provider_recovery", {
   title: "Codex MOA Provider Recovery",
   description: "Inspect provider circuit state or probe half-open providers for automatic recovery.",
@@ -517,6 +612,7 @@ server.registerTool("moa_plan", {
     stakes: z.enum(["low", "medium", "high"]).optional().default("medium"),
     mode: z.enum(["implement", "review", "audit", "research"]).optional().default("implement"),
     vision: z.boolean().optional().default(false),
+    skills: z.array(z.string().min(1)).max(12).optional(),
     seats: z.array(z.object({
       seat: z.string(),
       model: modelSchema.optional(),
@@ -528,7 +624,8 @@ server.registerTool("moa_plan", {
       limitMode: z.enum(["balanced", "max"]).optional().default("balanced"),
       continuityKey: z.string().optional(),
       cwd: z.string().optional(),
-      mode: z.enum(["plan", "edit", "build"]).optional()
+      mode: z.enum(["plan", "edit", "build"]).optional(),
+      skills: z.array(z.string().min(1)).max(12).optional()
     })).optional(),
     assignments: z.array(assignmentSchema).optional()
   }
@@ -537,10 +634,32 @@ server.registerTool("moa_plan", {
     const { planMoA } = await import("../src/lib/router.mjs");
     const captain = await resolveCaptain({ captainModel: input.captainModel });
     const orchestration = await resolveMoAMode(input.orchestrationMode);
-    const plan = planMoA({ ...input, captain, orchestrationMode: orchestration.mode });
-    const models = loadModels();
-    const auditWarnings = auditConflict(captain, plan.seats, models);
     const snapshot = await readQuotaSnapshot();
+    const usage = await readCaptainUsage();
+    const routePerformance = summarizeCostLedger(await readCostLedger()).routes;
+    const models = loadEffectiveModels();
+    const plan = planMoA({ ...input, captain, orchestrationMode: orchestration.mode }, {
+      models,
+      quotaSnapshot: snapshot,
+      captainAllocation: captainAllocation(captain, usage),
+      routePerformance
+    });
+    const failureSummary = summarizeFailureMemory(await readFailureMemory());
+    const failureRouting = applyFailureAvoidance(plan.seats, { summary: failureSummary, modelsConfig: models, captain });
+    failureRouting.adjustments.push(...reconcileAuditPairing(plan.seats, {
+      modelsConfig: models,
+      captain,
+      routeAllowed: (model, harness) => !failureGuardFor(failureSummary, model, harness)
+    }));
+    for (const node of plan.graph?.nodes ?? []) {
+      const seat = plan.seats.find((item) => item.seat === node.id);
+      if (seat) {
+        node.model = seat.model;
+        node.harness = seat.harness;
+      }
+    }
+    plan.failureRouting = failureRouting;
+    const auditWarnings = auditConflict(captain, plan.seats, models);
     const result = {
       ...plan,
       orchestration,
@@ -560,7 +679,7 @@ server.registerTool("moa_plan", {
 
 server.registerTool("moa_start", {
   title: "Start Codex MOA Job",
-  description: "Start a persisted background MoA run and return immediately with a job handle.",
+  description: "Start a persisted background MoA run and return immediately with a job handle. After dispatch, return control to the user instead of keeping the Codex turn open with polling or unrelated local work.",
   inputSchema: {
     task: z.string().min(1),
     cwd: z.string().min(1),
@@ -574,6 +693,7 @@ server.registerTool("moa_start", {
     stakes: z.enum(["low", "medium", "high"]).optional().default("medium"),
     mode: z.enum(["implement", "review", "audit", "research"]).optional().default("implement"),
     vision: z.boolean().optional().default(false),
+    skills: z.array(z.string().min(1)).max(12).optional(),
     allowWrite: z.boolean().optional().default(false),
     respectQuota: z.boolean().optional().default(true),
     allowDepleted: z.boolean().optional().default(false),
@@ -602,7 +722,8 @@ server.registerTool("moa_start", {
       maxTurns: z.number().int().positive().optional(),
       allowedTools: z.string().optional(),
       disallowedTools: z.string().optional(),
-      env: z.record(z.string(), z.string()).optional()
+      env: z.record(z.string(), z.string()).optional(),
+      skills: z.array(z.string().min(1)).max(12).optional()
     })).optional(),
     assignments: z.array(assignmentSchema).optional()
   }
@@ -610,7 +731,13 @@ server.registerTool("moa_start", {
   try {
     const taskId = input.taskId ?? createTaskId("moa-job");
     const job = publicJob(await startJob({ input: { ...input, taskId }, taskId }));
-    return textResult({ ...job, kind: "job", canSteer: true, nextPollAfterMs: 5000 });
+    return textResult({
+      ...job,
+      kind: "job",
+      canSteer: true,
+      nextPollAfterMs: 5000,
+      interaction: backgroundJobHandoff(job, { event: "started" })
+    });
   } catch (error) {
     return errorResult(error);
   }
@@ -628,7 +755,8 @@ server.registerTool("moa_job_status", {
     if (!jobId) return textResult({ jobs: await listJobs(limit) });
     const job = await readJob(jobId);
     if (!job) throw new Error(`Job not found: ${jobId}`);
-    return textResult(publicJob(job));
+    const visible = publicJob(job);
+    return textResult({ ...visible, interaction: backgroundJobHandoff(visible, { event: "status" }) });
   } catch (error) {
     return errorResult(error);
   }
@@ -636,14 +764,44 @@ server.registerTool("moa_job_status", {
 
 server.registerTool("moa_job_wait", {
   title: "Wait for Codex MOA Job",
-  description: "Wait briefly for a background job to reach a settled state; use status between waits.",
+  description: "Wait once for at most ten seconds for a background job to settle. If it remains active, return control to the user; do not loop in the same Codex turn.",
   inputSchema: {
     jobId: z.string(),
-    timeoutMs: z.number().int().positive().max(10000).optional().default(5000)
+    timeoutMs: z.number().int().positive().max(JOB_WAIT_LIMIT_MS).optional().default(5000)
   }
 }, async ({ jobId, timeoutMs }) => {
   try {
-    return textResult(await waitForJob(jobId, timeoutMs));
+    const result = await waitForJob(jobId, timeoutMs);
+    return textResult({ ...result, interaction: backgroundJobHandoff(result.job, { event: "wait" }) });
+  } catch (error) {
+    return errorResult(error);
+  }
+});
+
+server.registerTool("moa_job_notify", {
+  title: "Retry Codex MOA Job Notification",
+  description: "Retry the durable completion notification to the originating Codex thread. Uses the official Codex queue command and records whether the daemon accepted it.",
+  inputSchema: {
+    jobId: z.string(),
+    force: z.boolean().optional().default(false)
+  }
+}, async ({ jobId, force }) => {
+  try {
+    const job = await notifyJobCompletion(jobId, { force });
+    return textResult({ ...job, interaction: backgroundJobHandoff(job, { event: "notified" }) });
+  } catch (error) {
+    return errorResult(error);
+  }
+});
+
+server.registerTool("moa_job_ack", {
+  title: "Acknowledge Codex MOA Job Notification",
+  description: "Mark a terminal background-job completion notice as handled after the captain has inspected its evidence and continued the workflow.",
+  inputSchema: { jobId: z.string() }
+}, async ({ jobId }) => {
+  try {
+    const job = await acknowledgeJobNotification(jobId);
+    return textResult({ ...job, interaction: backgroundJobHandoff(job, { event: "acknowledged" }) });
   } catch (error) {
     return errorResult(error);
   }
@@ -654,7 +812,10 @@ server.registerTool("moa_job_steer", {
   description: "Persist an operator message for delivery at the next safe DAG boundary.",
   inputSchema: { jobId: z.string(), message: z.string().min(1) }
 }, async ({ jobId, message }) => {
-  try { return textResult(await steerJob(jobId, message)); } catch (error) { return errorResult(error); }
+  try {
+    const result = await steerJob(jobId, message);
+    return textResult({ ...result, interaction: backgroundJobHandoff(result.job, { event: "steered" }) });
+  } catch (error) { return errorResult(error); }
 });
 
 server.registerTool("moa_job_pause", {
@@ -704,6 +865,7 @@ server.registerTool("moa_run", {
     stakes: z.enum(["low", "medium", "high"]).optional().default("medium"),
     mode: z.enum(["implement", "review", "audit", "research"]).optional().default("implement"),
     vision: z.boolean().optional().default(false),
+    skills: z.array(z.string().min(1)).max(12).optional(),
     allowWrite: z.boolean().optional().default(false),
     diff: z.string().optional(),
     files: z.array(z.string()).optional(),
@@ -728,7 +890,8 @@ server.registerTool("moa_run", {
       maxTurns: z.number().int().positive().optional(),
       allowedTools: z.string().optional(),
       disallowedTools: z.string().optional(),
-      env: z.record(z.string(), z.string()).optional()
+      env: z.record(z.string(), z.string()).optional(),
+      skills: z.array(z.string().min(1)).max(12).optional()
     })).optional(),
     assignments: z.array(assignmentSchema).optional()
   }
@@ -747,10 +910,12 @@ server.registerTool("moa_models", {
   inputSchema: {}
 }, async () => {
   try {
-    const models = loadModels();
+    const models = loadEffectiveModels();
     const snapshot = await readCcSwitchSnapshot();
     return textResult({
       models: listModels(models),
+      reasoningSources: models.reasoningSources ?? {},
+      metadataSources: models.metadataSources ?? {},
       ccswitch: snapshot.available ? {
         skill: ccSwitchSkillStatus(snapshot, "codex-moa"),
         bindings: bindModelsToCcSwitch(snapshot, models),

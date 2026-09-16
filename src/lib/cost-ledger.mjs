@@ -75,16 +75,22 @@ export function estimateUsageCost(model, usage, pricing = loadPricing(), at = ne
 export function makeCostEntry({ taskId, seat, result, quota = null, pricing = loadPricing() }) {
   const usage = normalizeUsage(result?.usage);
   const estimate = estimateUsageCost(seat.model, usage, pricing);
+  const durationMs = Number.isFinite(Number(result?.durationMs)) ? Number(result.durationMs) : null;
+  const outputTps = durationMs > 0 && usage.outputTokens !== null ? usage.outputTokens / (durationMs / 1000) : null;
+  const totalTps = durationMs > 0 && usage.totalTokens !== null ? usage.totalTokens / (durationMs / 1000) : null;
   return {
     time: new Date().toISOString(),
     taskId,
     seat: seat.seat,
     role: seat.role,
+    auditMode: seat.auditMode ?? null,
+    blocking: seat.blocking !== false,
     harness: seat.harness,
     runtime: seat.runtime ?? "cli",
     model: seat.model,
     status: result?.status ?? "unknown",
-    durationMs: Number.isFinite(Number(result?.durationMs)) ? Number(result.durationMs) : null,
+    durationMs,
+    throughput: { outputTps, totalTps },
     timedOut: result?.timedOut === true,
     stopReason: result?.stopReason ?? null,
     usage,
@@ -115,6 +121,7 @@ export function summarizeCostLedger(entries = [], { since = null } = {}) {
   const filtered = entries.filter((entry) => !cutoff || Date.parse(entry.time) >= cutoff);
   const models = {};
   const providers = {};
+  const routes = {};
   let totalTokens = 0;
   let totalDurationMs = 0;
   let peakContextUsed = 0;
@@ -124,8 +131,10 @@ export function summarizeCostLedger(entries = [], { since = null } = {}) {
   for (const entry of filtered) {
     const model = entry.model ?? "unknown";
     const provider = entry.quota?.provider ?? providerForModelName(model);
+    const route = `${model}@${entry.harness ?? "unknown"}`;
     models[model] ??= { runs: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, durationMs: 0, peakContextUsed: 0, estimatedUsd: 0, failures: 0 };
-    providers[provider] ??= { runs: 0, tokens: 0, peakContextUsed: 0, estimatedUsd: 0, failures: 0 };
+    providers[provider] ??= { runs: 0, successes: 0, tokens: 0, outputTokens: 0, durationMs: 0, peakContextUsed: 0, estimatedUsd: 0, failures: 0 };
+    routes[route] ??= { model, harness: entry.harness ?? "unknown", runs: 0, successes: 0, failures: 0, durationMs: 0, tokens: 0, outputTokens: 0 };
     const usage = entry.usage ?? {};
     const tokens = Number(usage.totalTokens) || (Number(usage.inputTokens) || 0) + (Number(usage.outputTokens) || 0);
     const duration = Number(entry.durationMs) || 0;
@@ -139,9 +148,18 @@ export function summarizeCostLedger(entries = [], { since = null } = {}) {
     models[model].peakContextUsed = Math.max(models[model].peakContextUsed, contextUsed);
     models[model].failures += failed ? 1 : 0;
     providers[provider].runs += 1;
+    providers[provider].successes += failed ? 0 : 1;
     providers[provider].tokens += tokens;
+    providers[provider].outputTokens += Number(usage.outputTokens) || 0;
+    providers[provider].durationMs += duration;
     providers[provider].peakContextUsed = Math.max(providers[provider].peakContextUsed, contextUsed);
     providers[provider].failures += failed ? 1 : 0;
+    routes[route].runs += 1;
+    routes[route].successes += failed ? 0 : 1;
+    routes[route].failures += failed ? 1 : 0;
+    routes[route].durationMs += duration;
+    routes[route].tokens += tokens;
+    routes[route].outputTokens += Number(usage.outputTokens) || 0;
     totalTokens += tokens;
     totalDurationMs += duration;
     peakContextUsed = Math.max(peakContextUsed, contextUsed);
@@ -155,6 +173,12 @@ export function summarizeCostLedger(entries = [], { since = null } = {}) {
       unknownCostModels.add(model);
     }
   }
+  for (const group of [...Object.values(providers), ...Object.values(routes)]) {
+    group.successRate = group.runs ? group.successes / group.runs : null;
+    group.outputTps = group.durationMs > 0 ? group.outputTokens / (group.durationMs / 1000) : null;
+    group.totalTps = group.durationMs > 0 ? group.tokens / (group.durationMs / 1000) : null;
+    group.sampleSufficient = group.runs >= 3;
+  }
   return {
     entries: filtered.length,
     totalTokens,
@@ -165,7 +189,8 @@ export function summarizeCostLedger(entries = [], { since = null } = {}) {
     unpricedEntries: filtered.length - pricedEntries,
     unknownCostModels: [...unknownCostModels],
     models,
-    providers
+    providers,
+    routes
   };
 }
 

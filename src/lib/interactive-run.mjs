@@ -1,6 +1,34 @@
 const LONG_TASK_RE = /(\bssh\b|remote host|remote server|benchmark|load test|stress test|soak test|model loading|multi[- ]stage|end[- ]to[- ]end|远程|压测|基准|模型加载|多阶段|全链路)/i;
 
 export const INTERACTIVE_LIMIT_MS = 60_000;
+export const JOB_WAIT_LIMIT_MS = 10_000;
+
+const ACTIVE_JOB_STATES = new Set(["queued", "running", "cancelling"]);
+
+export function backgroundJobHandoff(job, { event = "status" } = {}) {
+  const jobId = job?.jobId ?? null;
+  const active = ACTIVE_JOB_STATES.has(job?.status);
+  return {
+    policy: "yield-after-background-dispatch",
+    event,
+    jobIsBackground: true,
+    captainShouldYield: active,
+    foregroundBudgetMs: INTERACTIVE_LIMIT_MS,
+    maxWaitMs: JOB_WAIT_LIMIT_MS,
+    appQueueFixed: true,
+    notification: job?.notification ?? null,
+    instruction: active
+      ? "Return control to the user now. Do not keep this Codex turn open with repeated polling or unrelated local work; use a later status turn and moa_job_steer for new constraints."
+      : "The job is settled. Inspect its artifacts before accepting or integrating the result.",
+    commands: jobId ? {
+      status: `$codex-moa job status ${jobId}`,
+      steer: `$codex-moa job steer ${jobId} <message>`,
+      pause: `$codex-moa job pause ${jobId}`,
+      cancel: `$codex-moa job cancel ${jobId}`
+    } : null,
+    limitation: "Completion delivery uses the official Codex queue interface. A delivered state means the daemon accepted the message; moa_job_ack records that the captain actually handled it."
+  };
+}
 
 export function backgroundRequirement(input = {}) {
   const reasons = [];

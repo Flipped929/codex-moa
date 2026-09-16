@@ -2,10 +2,13 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-Codex MOA keeps Codex as the captain while delegating work to three heterogeneous agent harnesses:
+Codex MOA keeps Codex as the captain while delegating work to isolated heterogeneous agent harnesses:
 
-- **KimiCode** for architecture, long context, vision, and second opinions.
-- **ZCode** for code execution with GLM fast/deep models.
+- **Pi** for a unified Kimi/GLM Coding Plan route and explicit CC Switch-managed Skills.
+- **Claude Code** as a CC Switch-managed secondary execution route.
+- **Codex CLI** as an explicit Responses-compatible child route without automatically consuming OpenAI quota.
+- **KimiCode** as an explicit native Kimi fallback.
+- **ZCode** as an explicit native GLM compatibility fallback.
 - **DeepSeekHarness** for independent audit and verification.
 
 The Codex plugin exposes one local MCP server. The MCP server owns routing, subprocess execution, artifacts, redaction, and scheduling hints.
@@ -16,7 +19,14 @@ Codex MOA turns Codex into the captain of a heterogeneous multi-model runtime:
 
 - Plans a task into a dependency-aware DAG.
 - Selects models by capability, cost tier, quota, health, and task risk.
-- Runs KimiCode, ZCode, and DeepSeekHarness as independent ACP or CLI seats.
+- Runs Pi, Claude Code, Codex CLI, KimiCode, ZCode, and DeepSeekHarness as independent seats.
+- Detects CLI versions and optional latest releases without performing automatic upgrades.
+- Exposes declared and bounded live capability checks through `moa_capabilities`.
+- Tracks normalized GPT captain quota through `moa_captain_usage` and recommends a dynamic external-work share without ever replacing the page-selected captain.
+- In `auto`, a confirmed GPT/OpenAI captain delegates suitable routine execution while retaining planning, staged evidence review, integration, and the final answer; complex external routes are compared by quality before cost and speed.
+- Persists redacted model/Harness failure signatures, temporarily guards deterministic or repeated failures, and routes automatic work away from known-bad paths until recovery.
+- Records completion rate, latency, and output TPS per model/Harness route. Automatic preference requires at least three samples and a 75% completion gate; TPS remains a secondary tie-breaker.
+- Uses complementary GLM/Kimi subscription audits as gates and samples DeepSeek as a parallel non-gating shadow auditor for L2, with mandatory dual audit for L3. `moa_audit_metrics` records pair quality, Harness reliability, critical-path latency, cost, and captain adjudication.
 - Isolates write-capable executors in Git worktrees.
 - Captures structured execution and audit results.
 - Repairs auditor `block` findings in a bounded second round.
@@ -32,10 +42,12 @@ flowchart TB
   User[User task in Codex] --> Captain[Codex Captain]
   Captain --> Planner[Planner and Router<br/>task level, roles, DAG, budgets, quota, provider health]
 
+  Planner --> Pi[Pi seat<br/>Kimi/GLM, explicit Skills]
   Planner --> Kimi[KimiCode seat<br/>architecture, long context, vision]
   Planner --> ZCode[ZCode seat<br/>GLM executor]
   Planner --> DSH[DeepSeekHarness seat<br/>independent audit]
 
+  Pi --> Worktree
   Kimi --> ACP[ACP session runtime]
   ZCode --> ZBridge[ZCode Protocol bridge]
   DSH --> ACP
@@ -74,13 +86,15 @@ This repository currently implements the MVP control plane:
 
 - Codex plugin manifest and MCP configuration.
 - `codex-moa` Skill.
-- MCP tools: `moa_mode`, `moa_doctor`, `moa_models`, `moa_ccswitch`, `moa_quota`, `moa_health`, `moa_plan`, `moa_run`, `moa_start`, `moa_job_status`, `moa_job_wait`, `moa_job_steer`, `moa_job_pause`, `moa_job_resume`, `moa_job_cancel`, `moa_worktrees`, `moa_retention`, `moa_patch_metrics`, `moa_provider_recovery`, `moa_delegate`, `moa_audit`, `moa_interrupt`, `moa_schedule`, `moa_captain`, `moa_evolve`.
+- MCP tools: `moa_mode`, `moa_doctor`, `moa_models`, `moa_ccswitch`, `moa_quota`, `moa_health`, `moa_plan`, `moa_run`, `moa_start`, `moa_job_status`, `moa_job_wait`, `moa_job_steer`, `moa_job_pause`, `moa_job_resume`, `moa_job_cancel`, `moa_job_notify`, `moa_job_ack`, `moa_worktrees`, `moa_retention`, `moa_patch_metrics`, `moa_provider_recovery`, `moa_delegate`, `moa_audit`, `moa_interrupt`, `moa_schedule`, `moa_captain`, `moa_evolve`.
 - Five explicit models: `kimi-k3`, `kimi-2.8`, `GLM-5.3`, `GLM-5.3-flash`, `DeepSeek-flash`.
 - CC Switch 3.20.3 native Responses direct-mode detection, with routing retained only for Chat/Anthropic upstreams.
 - CC Switch routing audit: `npm run ccswitch:routing`.
-- KimiCode, ZCode, and DeepSeekHarness adapters.
+- Pi, Claude Code, Codex CLI, KimiCode, ZCode, and DeepSeekHarness adapters.
+- Weekly subscription-burn balancing between Kimi and GLM through Pi.
+- Allowlisted Skill resolution from CC Switch, Pi, Codex, and Agents directories.
 - Blackboard artifacts under `~/.codex-moa/blackboard`.
-- Time policy for DeepSeek peak/off-peak and the temporary GLM night campaign.
+- Time policy for DeepSeek peak/off-peak; the legacy GLM night campaign no longer changes the default Harness.
 - DeepSeekHarness multi-provider routes for Kimi and GLM, with native Harnesses retained as defaults.
 - Durable job steering plus pause/resume at checkpoint boundaries; synchronous runs are limited to interactive work.
 - Real ACP smoke harness for KimiCode, DeepSeekHarness, and the ZCode app-server bridge.
@@ -97,6 +111,8 @@ External writes are disabled by default. A seat cannot write unless `allowWrite`
 - KimiCode CLI installed and authenticated.
 - ZCode installed at `/Applications/ZCode.app`, or override the command in `config/local.json`.
 - DeepSeekHarness installed as `dsh` and authenticated.
+- Pi installed as `pi`. Kimi, GLM, and the optional DeepSeek Pi route read allowlisted provider cards from CC Switch into an isolated Pi home before every run; the default DeepSeekHarness route remains independently configured.
+- Claude Code and Codex CLI are optional explicit child Harnesses. Their CC Switch cards are projected into private per-provider homes and never replace the page-selected captain or global current card.
 - Git worktrees or disposable copies for code-writing seats.
 
 ## Documentation
@@ -125,7 +141,7 @@ npm run doctor
 npm run upgrade-check
 ```
 
-`npm run doctor` checks command availability, versions, the ZCode script path, and the DSH headless profile.
+`npm run doctor` checks command availability, minimum versions, CLI capabilities, the ZCode script path, and the DSH headless profile. `node scripts/doctor.mjs --latest` performs an opt-in registry lookup; codex-moa never upgrades a CLI automatically.
 
 ## Install as a local Codex plugin
 
@@ -137,6 +153,8 @@ codex plugin add codex-moa@codex-moa-local
 ```
 
 Start a new Codex task after installation so the plugin Skill and MCP tools are loaded.
+
+For upgrades while older Codex sessions are still open, update the manifest cachebuster and run `npm run plugin:reinstall`. The compatibility installer restores prior cache directories after installation so already-running MCP processes retain their config and worker files; only new sessions receive newly added tools.
 
 ## Configuration
 
@@ -154,7 +172,10 @@ Example:
       "command": "node",
       "args": ["/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"]
     },
-    "dsh": { "command": "dsh", "args": [] }
+    "dsh": { "command": "dsh", "args": [] },
+    "pi": { "command": "pi", "args": [] },
+    "claude": { "command": "claude", "args": [] },
+    "codex": { "command": "codex", "args": [] }
   },
   "profiles": {
     "dsh": {
@@ -168,6 +189,8 @@ Example:
   }
 }
 ```
+
+See [`docs/CLI-HARNESSES.md`](docs/CLI-HARNESSES.md) for isolation, upgrade detection, and live capability probes.
 
 ## Tool usage
 
@@ -228,11 +251,16 @@ Long runs can start in the background and survive the MCP request boundary:
 ```text
 moa_start(task="...", cwd="/repo", assignments=[...])
 moa_job_status(jobId="job-...")
-moa_job_wait(jobId="job-...", timeoutMs=30000)
+moa_job_wait(jobId="job-...", timeoutMs=10000)
+moa_job_steer(jobId="job-...", message="New constraint")
 moa_job_cancel(jobId="job-...", reason="superseded")
+moa_job_notify(jobId="job-...")
+moa_job_ack(jobId="job-...")
 ```
 
 Job state is persisted under `~/.codex-moa/jobs/<job-id>/`. The worker process owns the run; the MCP server only starts, observes, waits, or requests cancellation. Async jobs reject per-seat `env` values so credentials are not persisted; use provider configuration or synchronous `moa_run` for seat-local environment variables.
+
+`moa_start` also returns an `interaction` handoff contract. While a job is active, the captain should report the job ID and yield the Codex foreground turn instead of polling repeatedly or continuing substantial local work. One wait may last at most 10 seconds. Later constraints should use `moa_job_steer`. The worker binds the origin `CODEX_THREAD_ID` and sends terminal continuation through the official `codex queue` command. `delivered` means the daemon accepted the message; `acknowledged` means the captain actually handled it. Failed delivery is durable and can be retried with `moa_job_notify`.
 
 ## Retention and compaction
 
@@ -365,10 +393,19 @@ Reasoning effort is selected per sub-agent and can be explicit or task-policy dr
 npm run ccswitch:reasoning
 ```
 
-CC Switch is the single source of truth for reasoning levels: every model managed by
-CC Switch takes its selectable levels and default from the provider cards, and `config/models.json`
-is only the fallback (`reasoningSources[modelId]` marks which one won; `CODEX_MOA_NO_CCSWITCH=1`
-skips the overlay). See `docs/REASONING.md` for provider mappings and enforcement channels. CC Switch metadata gaps are **reported, never patched**: `npm run ccswitch:patch-reasoning` is a read-only audit (codex-moa never writes CC Switch — provider cards, database, catalog, or skills).
+CC Switch is the single source of truth for Kimi/GLM and optional DeepSeek models routed through Pi. The exact configured
+Pi provider card supplies credentials, provider/model IDs, selectable reasoning/default, extended
+thinking, context/output limits, and image input. `config/models.json` is only a fallback when the
+card is unavailable (`CODEX_MOA_NO_CCSWITCH=1` also skips the overlay). DeepSeekHarness is the
+explicit exception and keeps its own provider/profile configuration. See `docs/REASONING.md` for
+provider mappings and enforcement channels. CC Switch metadata gaps are **reported, never patched**:
+`npm run ccswitch:patch-reasoning` is a read-only audit (codex-moa never writes CC Switch — provider
+cards, database, catalog, or skills).
+
+Reasoning selection priority is: explicit assignment, task/vendor policy, then provider default.
+Set `reasoning.mode` in `config/evolution.json` or the approved user overlay to `task-aware` or
+`provider-default`. Self-optimization groups evidence by model, Harness, and effective effort and
+rejects proposals that are incompatible with the current capability table.
 
 To make a Codex main-model reasoning level survive CC Switch provider switches, change it **in CC Switch** (provider card
 or 通用配置). `npm run ccswitch:codex-effort -- --provider DeepSeek --effort max` only reports the difference between the

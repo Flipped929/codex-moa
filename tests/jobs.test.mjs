@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { assertJobInputSupported, buildJobWorkerEnv, consumeJobSteering, createJobRecord, jobInputPath, listJobs, pauseJob, readJob, requestJobCancellation, runJobWorker, steerJob, writeJob } from "../src/lib/jobs.mjs";
+import { acknowledgeJobNotification, assertJobInputSupported, buildJobWorkerEnv, consumeJobSteering, createJobRecord, jobInputPath, listJobs, notifyJobCompletion, pauseJob, readJob, requestJobCancellation, runJobWorker, steerJob, writeJob } from "../src/lib/jobs.mjs";
 
 async function fixture(name, input, root) {
   const jobId = `job-test-${name}`;
@@ -51,6 +51,39 @@ test("runs and persists an async job worker result", async () => {
     else process.env.CODEX_MOA_JOB_HOME = previousJobHome;
     if (previousControl === undefined) delete process.env.CODEX_MOA_CONTROL_PATH;
     else process.env.CODEX_MOA_CONTROL_PATH = previousControl;
+  }
+});
+
+test("binds completion to the origin thread, persists queue acceptance, and requires captain acknowledgement", async () => {
+  const previousJobHome = process.env.CODEX_MOA_JOB_HOME;
+  const root = await mkdtemp(join(tmpdir(), "codex-moa-jobs-notify-"));
+  process.env.CODEX_MOA_JOB_HOME = root;
+  const jobId = "job-test-notify";
+  const record = createJobRecord({
+    jobId,
+    taskId: "task-notify",
+    input: { task: "notify", cwd: process.cwd() },
+    originThreadId: "01-test-thread"
+  });
+  await writeJob({ ...record, status: "completed", finishedAt: new Date().toISOString() });
+  await writeFile(jobInputPath(jobId), `${JSON.stringify(record.input)}\n`, "utf8");
+  const deliveries = [];
+  try {
+    const notified = await notifyJobCompletion(jobId, {
+      deliver: async (payload) => deliveries.push(payload)
+    });
+    assert.equal(deliveries.length, 1);
+    assert.equal(deliveries[0].threadId, "01-test-thread");
+    assert.match(deliveries[0].message, /moa_job_ack/);
+    assert.equal(notified.notification.state, "delivered");
+    assert.equal(notified.notification.attempts, 1);
+
+    const acknowledged = await acknowledgeJobNotification(jobId);
+    assert.equal(acknowledged.notification.state, "acknowledged");
+    assert.ok(acknowledged.notification.acknowledgedAt);
+  } finally {
+    if (previousJobHome === undefined) delete process.env.CODEX_MOA_JOB_HOME;
+    else process.env.CODEX_MOA_JOB_HOME = previousJobHome;
   }
 });
 

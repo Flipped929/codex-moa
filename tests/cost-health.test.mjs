@@ -41,6 +41,7 @@ test("records and summarizes cost entries with provider health", async () => {
   const result = { status: "done", durationMs: 1000, usage: { inputTokens: 1_000_000, outputTokens: 500_000, totalTokens: 1_500_000, contextUsed: 12345, contextWindow: 200000 } };
   const entry = makeCostEntry({ taskId: "task-1", seat, result, quota: { provider: "zai" }, pricing });
   assert.equal(entry.estimatedUsd, 2);
+  assert.equal(entry.throughput.outputTps, 500_000);
   assert.equal(makeCostEntry({ taskId: "task-0", seat, result, pricing: { models: { "GLM-5.3-flash": { inputPerMillion: null, outputPerMillion: null } } } }).estimatedUsd, null);
   await recordCostEntry(entry, path);
   const entries = await readCostLedger(path);
@@ -48,6 +49,9 @@ test("records and summarizes cost entries with provider health", async () => {
   assert.equal(summary.totalTokens, 1_500_000);
   assert.equal(summary.estimatedUsd, 2);
   assert.equal(summary.peakContextUsed, 12345);
+  assert.equal(summary.routes["GLM-5.3-flash@zcode"].outputTps, 500_000);
+  assert.equal(summary.routes["GLM-5.3-flash@zcode"].successRate, 1);
+  assert.equal(summary.routes["GLM-5.3-flash@zcode"].sampleSufficient, false);
 
   const health = summarizeProviderHealth({
     snapshot: { updatedAt: new Date().toISOString(), providers: { kimi: { status: "ok", windows: [] }, zai: { status: "ok", windows: [] }, deepseek: { status: "not_configured", windows: [] } } },

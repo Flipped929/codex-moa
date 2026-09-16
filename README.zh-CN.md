@@ -2,10 +2,13 @@
 
 [English](README.md) | **简体中文**
 
-Codex MOA 让 Codex 继续担任 captain，同时把任务分派给三个异构 agent harness：
+Codex MOA 让 Codex 继续担任 captain，同时把任务分派给多个隔离的 agent harness：
 
-- **KimiCode**：架构设计、长上下文、视觉理解和第二意见。
-- **ZCode**：基于 GLM fast/deep 模型的代码执行。
+- **Pi**：统一承载 Kimi/GLM Coding Plan，并按需加载 CC Switch 管理的 Skill。
+- **Claude Code**：CC Switch 管理的第二执行通道，适合显式指定的长工具循环。
+- **Codex CLI**：CC Switch Responses 通道；第三方模型保持显式调用，OpenAI Official 不自动消耗。
+- **KimiCode**：显式指定时使用的 Kimi 原生回退通道。
+- **ZCode**：显式指定时使用的 GLM 原生兼容回退通道。
 - **DeepSeekHarness**：独立审计、验证和对抗性检查，也可承载 Kimi、GLM provider 模型。
 
 Codex 插件只暴露一个本地 MCP server。路由、DAG 调度、子进程执行、worktree、产物、脱敏、预算、健康检查和调度策略都由这个 server 负责。
@@ -43,10 +46,12 @@ flowchart TB
   User[用户在 Codex 中提交任务] --> Captain[Codex Captain]
   Captain --> Planner[规划与路由<br/>任务等级、角色、DAG、预算、配额、provider health]
 
+  Planner --> Pi[Pi seat<br/>Kimi/GLM、显式 Skill]
   Planner --> Kimi[KimiCode seat<br/>架构、长上下文、视觉]
   Planner --> ZCode[ZCode seat<br/>GLM executor]
   Planner --> DSH[DeepSeekHarness seat<br/>独立审计]
 
+  Pi --> Worktree
   Kimi --> ACP[ACP session runtime]
   ZCode --> ZBridge[ZCode Protocol bridge]
   DSH --> ACP
@@ -82,7 +87,14 @@ flowchart TB
 
 - Codex 插件 manifest、Skill 和本地 MCP server。
 - 五个规范模型：`kimi-k3`、`kimi-2.8`、`GLM-5.3`、`GLM-5.3-flash`、`DeepSeek-flash`。
-- KimiCode、ZCode、DeepSeekHarness adapter。
+- Pi、Claude Code、Codex CLI、KimiCode、ZCode、DeepSeekHarness adapter。
+- `moa_capabilities` 声明能力矩阵和 60 秒内的只读文本/工具/图片实测。
+- `moa_captain_usage` 保存由 Codex 读取的 GPT 额度快照，并据此动态调整建议的外部分工比例；非 GPT 主控不会套用该策略。
+- `auto` 模式下，已确认的 GPT/OpenAI 主控会把适合的简单执行交给快速外部席位，自身保留规划、阶段证据复核、整合和最终答复；复杂外部路线按质量优先、成本和速度次优进行比较。
+- 持久记录模型/Harness 的去敏失败指纹；确定性失败或重复瞬态失败会触发临时保护，自动任务绕开已知失败路线，成功恢复后解除保护但保留历史。
+- 成本账本按“模型 × Harness”记录完成率、耗时和输出 TPS。自动偏好至少需要 3 个样本且先通过 75% 完成率门槛，TPS 只占次要权重。
+- 自动 L2/L3 计划采用 GLM/Kimi 异族订阅主审，并让 DeepSeek 按峰谷价抽样或全量并行影子审计。影子失败不会阻塞任务，但其发现、TPS、成本、关键路径延迟及后续采纳情况都会记录到 `moa_audit_metrics`。
+- CLI 生命周期只检测不升级；`moa_doctor(checkLatest=true)` 可选联网检查最新版本。
 - 原生 Kimi/DSH ACP runtime，以及 ZCode Protocol bridge。
 - Task DAG、分层依赖、checkpoint 和 resume。
 - 自动 Git worktree 隔离、diff 捕获、patch check/apply/revert。
@@ -93,6 +105,8 @@ flowchart TB
 - 任务级 token、USD、context、wall-time 预算熔断。
 - cost ledger、provider health、circuit breaker 和恢复探测。
 - Kimi/Z.ai 剩余额度与 DeepSeek 余额参与路由；DeepSeek 峰谷价格分别核算缓存命中、缓存未命中和输出费用。
+- Kimi/GLM 周额度消耗差超过 10 个百分点时，自动执行席位通过 Pi 优先使用额度消耗较少的一方；GLM 夜间活动不再切换到 ZCode。
+- 显式 `skills` 会从受信的 CC Switch/Pi/Codex Skill 目录解析，并通过 Pi `--skill` 或 Kimi `--skills-dir` 加载。
 - routing A/B 实验与自动 rollback。
 - patch acceptance metrics。
 - retention/compaction。
@@ -108,6 +122,9 @@ flowchart TB
 - 已安装并认证的 KimiCode CLI。
 - ZCode，默认路径为 `/Applications/ZCode.app`，可通过 `config/local.json` 覆盖。
 - 已安装并认证的 DeepSeekHarness（`dsh`）。
+- 已安装 Pi（`pi`）。每次执行前，Kimi、GLM 及可选的 DeepSeek Pi provider 卡由 CC Switch 投影到隔离 Pi HOME；默认 DeepSeekHarness 路径继续独立配置。
+- 已安装 Claude Code（`claude`）和 Codex CLI（`codex`）时，可显式使用对应 Harness；每张 CC Switch provider 卡投影到独立私有 HOME，不切换全局当前卡。
+- Kimi/GLM/DeepSeek 的 Pi 路径按 `model.pi.provider/model` 精确读取 CC Switch 卡片；DSH 路径不读取也不覆盖该卡片。
 - 写代码的 seat 需要 Git worktree 或可丢弃副本。
 
 ## 本地安装
@@ -128,6 +145,8 @@ codex plugin add codex-moa@codex-moa-local
 ```
 
 安装后新建 Codex 任务，让 plugin Skill 和 MCP tools 重新加载。
+
+仍有旧 Codex 会话运行时升级，先更新 manifest cachebuster，再执行 `npm run plugin:reinstall`。兼容安装器会在安装后恢复旧版缓存目录，确保已启动的 MCP 进程仍能读取配置和 worker 文件；新增 MCP 工具仍需新会话加载。
 
 ## 配置
 
@@ -159,7 +178,10 @@ config/schedule.local.json
       "command": "node",
       "args": ["/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"]
     },
-    "dsh": { "command": "dsh", "args": [] }
+    "dsh": { "command": "dsh", "args": [] },
+    "pi": { "command": "pi", "args": [] },
+    "claude": { "command": "claude", "args": [] },
+    "codex": { "command": "codex", "args": [] }
   },
   "zcode": {
     "headlessProvider": "builtin:bigmodel-coding-plan",
@@ -167,6 +189,8 @@ config/schedule.local.json
   }
 }
 ```
+
+CLI 与能力详情见 [`docs/CLI-HARNESSES.md`](docs/CLI-HARNESSES.md)。
 
 ZCode UI `start-plan` provider 需要交互式 GUI captcha，不适合 headless ACP。`zcode.headlessProvider` 只影响 codex-moa，不覆盖 ZCode TUI/GUI 的默认 provider。
 
@@ -185,7 +209,7 @@ moa_delegate(
   task="审查并实现最安全的迁移方案",
   cwd="/path/to/repo",
   assignments=[
-    {"model": "kimi-k3", "role": "architect"},
+    {"model": "kimi-k3", "harness": "pi", "role": "architect", "skills": ["code-review-specialist"]},
     {"model": "GLM-5.3", "role": "executor"},
     {"model": "DeepSeek-flash", "role": "auditor"}
   ]
@@ -211,8 +235,11 @@ moa_audit(task="审计当前 diff", cwd="/path/to/repo", deep=false)
 ```text
 moa_start(task="...", cwd="/repo", assignments=[...])
 moa_job_status(jobId="job-...")
-moa_job_wait(jobId="job-...", timeoutMs=30000)
+moa_job_wait(jobId="job-...", timeoutMs=10000)
+moa_job_steer(jobId="job-...", message="新增约束")
 moa_job_cancel(jobId="job-...", reason="被新任务取代")
+moa_job_notify(jobId="job-...")
+moa_job_ack(jobId="job-...")
 ```
 
 Job 状态位于：
@@ -222,6 +249,8 @@ Job 状态位于：
 ```
 
 异步 job 拒绝持久化 seat 级 `env`，避免凭证写盘。
+
+`moa_start` 会同时返回 `interaction` 交接约束。Job 仍在运行时，captain 应报告 job ID 并尽快结束 Codex 前台回合，不得在同一回合反复轮询或继续大量本地工作。单次 wait 最长 10 秒；后续约束通过 `moa_job_steer` 持久投递。Worker 会绑定来源 `CODEX_THREAD_ID`，并通过 Codex 官方 `queue` 命令发送终态继续提示。`delivered` 只表示 daemon 已接收，`acknowledged` 才表示 captain 已实际处理；投递失败会持久记录，可用 `moa_job_notify` 重试。
 
 ## Worktree 与 Patch
 
@@ -327,6 +356,8 @@ npm run control -- status
 ```bash
 npm run ccswitch:set-codex-effort -- --provider DeepSeek --effort max（只读，不写）
 ```
+
+子模型思考档位优先级为：用户显式指定 > 任务/厂商策略 > provider 默认。`reasoning.mode` 可设为 `task-aware` 或 `provider-default`。自优化按“模型 + Harness + 实际档位”分别统计，并在提案创建和应用时重新校验当前能力，过期或不支持的档位不会被静默套用。
 
 ClaudeBar extension 位于：
 

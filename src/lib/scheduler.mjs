@@ -43,6 +43,7 @@ export function getScheduleState(date = new Date(), schedule) {
   const glm = schedule.glmNightCampaign;
   const glmCampaignActive = Boolean(
     glm &&
+    glm.enabled !== false &&
     inDateRange(local.date, glm.startDate, glm.endDate) &&
     inWindow(local.minutes, glm.startTime, glm.endTime)
   );
@@ -52,9 +53,9 @@ export function getScheduleState(date = new Date(), schedule) {
   const deepSeekOffPeak = !peak;
 
   const recommendations = [];
-  if (glmCampaignActive) recommendations.push("Prefer ZCode + GLM-5.3-Flash for batch coding.");
+  if (glmCampaignActive) recommendations.push("Legacy GLM night campaign is active, but Codex MOA keeps GLM on Pi unless explicitly overridden.");
   if (deepSeekOffPeak) recommendations.push("Prefer DeepSeekHarness for batch audits.");
-  if (!glmCampaignActive) recommendations.push("GLM-5.3-Flash night campaign is not active; use normal quota policy.");
+  if (!glmCampaignActive) recommendations.push("Use Pi for GLM and Kimi; balance their subscription quotas normally.");
   if (!deepSeekOffPeak) recommendations.push("DeepSeek is in peak pricing; reserve it for urgent or high-stakes audits.");
 
   return {

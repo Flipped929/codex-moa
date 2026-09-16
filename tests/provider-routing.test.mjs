@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyProviderHealthRouting, summarizeProviderHealth } from "../src/lib/provider-health.mjs";
+import { applyProviderHealthRouting, reconcileAuditPairing, summarizeProviderHealth } from "../src/lib/provider-health.mjs";
 
 const models = {
   models: {
@@ -33,4 +33,19 @@ test("summarizes provider health from quota and recent cost failures", () => {
   const health = summarizeProviderHealth({ snapshot, ledger: [] });
   assert.equal(health.providers.zai.status, "critical");
   assert.equal(health.providers.deepseek.status, "inactive");
+});
+
+test("reconciles the blocking auditor after health routing changes the executor family", () => {
+  const seats = [
+    { seat: "executor", role: "executor", harness: "zcode", model: "GLM-5.3", providerModel: "GLM-5.3", modelTier: "deep", family: "zhipu" },
+    { seat: "cross-family-auditor-gate", role: "auditor", harness: "pi", model: "kimi-k3", providerModel: "kimi-code/k3", modelTier: "deep", family: "moonshot", auditMode: "gate", pairedExecutor: "executor" }
+  ];
+  const health = { providers: { zai: { status: "healthy" }, kimi: { status: "critical" }, deepseek: { status: "healthy" } } };
+  applyProviderHealthRouting(seats, { health, modelsConfig: models });
+  const adjustments = reconcileAuditPairing(seats, { health, modelsConfig: models });
+  assert.equal(seats[0].model, "GLM-5.3");
+  assert.equal(seats[1].model, "DeepSeek-flash");
+  assert.equal(seats[1].family, "deepseek");
+  assert.notEqual(seats[0].family, seats[1].family);
+  assert.equal(adjustments[0].action, "reconciled_cross_family_gate");
 });

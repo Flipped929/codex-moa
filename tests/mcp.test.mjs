@@ -15,10 +15,12 @@ test("MCP server exposes expected tools", async () => {
     cwd: process.cwd(),
     env: {
       ...process.env,
+      CODEX_THREAD_ID: "",
       CODEX_MOA_JOB_HOME: join(root, "jobs"),
       CODEX_MOA_BLACKBOARD: join(root, "blackboard"),
       CODEX_MOA_SEAT_REGISTRY: join(root, "seats.json"),
       CODEX_MOA_COST_LEDGER: join(root, "cost.jsonl"),
+      CODEX_MOA_FAILURE_MEMORY: join(root, "failures.jsonl"),
       CODEX_MOA_CONTINUITY_PATH: join(root, "continuity.json"),
       CODEX_MOA_MEMORY_HOME: join(root, "memory"),
       CODEX_MOA_EVOLUTION_HOME: join(root, "evolution"),
@@ -32,7 +34,7 @@ test("MCP server exposes expected tools", async () => {
   try {
     const tools = await client.listTools();
     const names = tools.tools.map((tool) => tool.name).sort();
-    assert.deepEqual(names, ["moa_audit", "moa_captain", "moa_ccswitch", "moa_compat", "moa_context", "moa_delegate", "moa_doctor", "moa_evolve", "moa_health", "moa_interrupt", "moa_job_cancel", "moa_job_pause", "moa_job_resume", "moa_job_status", "moa_job_steer", "moa_job_wait", "moa_memory", "moa_mode", "moa_models", "moa_patch_metrics", "moa_plan", "moa_provider_recovery", "moa_quota", "moa_retention", "moa_run", "moa_schedule", "moa_seats", "moa_start", "moa_worktrees"]);
+    assert.deepEqual(names, ["moa_audit", "moa_audit_metrics", "moa_capabilities", "moa_captain", "moa_captain_usage", "moa_ccswitch", "moa_compat", "moa_context", "moa_delegate", "moa_doctor", "moa_evolve", "moa_health", "moa_interrupt", "moa_job_ack", "moa_job_cancel", "moa_job_notify", "moa_job_pause", "moa_job_resume", "moa_job_status", "moa_job_steer", "moa_job_wait", "moa_memory", "moa_mode", "moa_models", "moa_patch_metrics", "moa_plan", "moa_provider_recovery", "moa_quota", "moa_retention", "moa_run", "moa_schedule", "moa_seats", "moa_start", "moa_worktrees"]);
     const mode = await client.callTool({ name: "moa_mode", arguments: { action: "status" } });
     assert.equal(JSON.parse(mode.content[0].text).mode, "auto");
     const result = await client.callTool({
@@ -48,6 +50,8 @@ test("MCP server exposes expected tools", async () => {
     assert.ok(quota.content[0].text.length > 0);
     const ccswitch = await client.callTool({ name: "moa_ccswitch", arguments: {} });
     assert.ok(ccswitch.content[0].text.length > 0);
+    const capabilities = await client.callTool({ name: "moa_capabilities", arguments: {} });
+    assert.equal(JSON.parse(capabilities.content[0].text).models.length, 5);
     const captain = await client.callTool({ name: "moa_captain", arguments: { captainModel: "DeepSeek-flash" } });
     assert.equal(JSON.parse(captain.content[0].text).canonicalModel, "DeepSeek-flash");
     const evolution = await client.callTool({ name: "moa_evolve", arguments: { action: "status" } });
@@ -83,9 +87,14 @@ test("MCP server exposes expected tools", async () => {
     const jobs = await client.callTool({ name: "moa_job_status", arguments: {} });
     assert.ok(Array.isArray(JSON.parse(jobs.content[0].text).jobs));
     const started = await client.callTool({ name: "moa_start", arguments: { task: "explain this function", cwd: process.cwd(), stakes: "low", respectQuota: false, routingExperiment: false, contextPack: false } });
-    const jobId = JSON.parse(started.content[0].text).jobId;
+    const startedPayload = JSON.parse(started.content[0].text);
+    const jobId = startedPayload.jobId;
+    assert.equal(startedPayload.interaction.captainShouldYield, true);
+    assert.equal(startedPayload.interaction.maxWaitMs, 10000);
     const waited = await client.callTool({ name: "moa_job_wait", arguments: { jobId, timeoutMs: 10000 } });
-    assert.equal(JSON.parse(waited.content[0].text).job.status, "completed");
+    const waitedPayload = JSON.parse(waited.content[0].text);
+    assert.equal(waitedPayload.job.status, "completed");
+    assert.equal(waitedPayload.interaction.captainShouldYield, false);
   } finally {
     await client.close();
   }

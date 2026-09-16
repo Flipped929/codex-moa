@@ -18,8 +18,11 @@ export async function runKimiSeat({ seat, prompt, config, timeoutMs, allowWrite 
   ];
   const planOnly = seat.mode === "plan" || !allowWrite || !seat.autoApprove;
   if (seat.continuitySessionId) args.push("--session", seat.continuitySessionId);
-  if (planOnly) args.push("--plan");
-  else args.push("--yolo");
+  // Kimi Code rejects --prompt together with --plan. Prompt mode is already
+  // non-interactive, so enforce read-only work through the task contract and
+  // reserve --yolo for explicitly approved isolated writes.
+  if (!planOnly) args.push("--yolo");
+  for (const skillPath of seat.skillPaths ?? []) args.push("--skills-dir", skillPath);
 
   const run = await runCommand({
     command,
@@ -44,6 +47,6 @@ export async function runKimiSeat({ seat, prompt, config, timeoutMs, allowWrite 
     run,
     text,
     artifactPath: null,
-    extra: { modelSelection: "cli-flag", selectedModel: seat.providerModel ?? seat.model, reasoningEffort: seat.reasoningEffort, reasoningSelection: "env:KIMI_MODEL_THINKING_EFFORT", sessionId, usage, continuitySupport: "cli-session-resume" }
+    extra: { modelSelection: "cli-flag", selectedModel: seat.providerModel ?? seat.model, reasoningEffort: seat.reasoningEffort, reasoningSelection: "env:KIMI_MODEL_THINKING_EFFORT", sessionId, usage, loadedSkills: seat.skillPaths ?? [], continuitySupport: "cli-session-resume" }
   });
 }

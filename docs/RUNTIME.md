@@ -79,6 +79,10 @@ npm run acp:smoke -- --harness all --json
 
 The smoke test distinguishes transport success from external blockers such as missing authentication or provider-side model failures.
 
+## CC Switch-managed CLI Harnesses
+
+Pi, Claude Code, and Codex CLI run through private per-provider homes. They never change the globally selected CC Switch card. Pi is the automatic default; Claude Code and Codex CLI are explicit routes. See `docs/CLI-HARNESSES.md` for lifecycle policy, capability probes, and current route status.
+
 ## Async jobs
 
 Long-running MoA tasks can be started without blocking the MCP request:
@@ -87,8 +91,11 @@ Long-running MoA tasks can be started without blocking the MCP request:
 moa_start(task="...", cwd="/repo", assignments=[...])
 moa_job_status()
 moa_job_status(jobId="job-...")
-moa_job_wait(jobId="job-...", timeoutMs=30000)
+moa_job_wait(jobId="job-...", timeoutMs=10000)
+moa_job_steer(jobId="job-...", message="New constraint")
 moa_job_cancel(jobId="job-...", reason="superseded")
+moa_job_notify(jobId="job-...", force=false)
+moa_job_ack(jobId="job-...")
 ```
 
 Each job is persisted at:
@@ -103,6 +110,18 @@ Each job is persisted at:
 The worker runs `runMoA` independently of the MCP connection. `moa_job_cancel` marks the job cancelled and writes scoped ACP cancellation requests. Nodes that have not started are marked cancelled; running CLI seats are allowed to finish, while ACP/ZCode seats are interrupted through their protocol cancel path.
 
 Async jobs reject per-seat `env` values so credentials are not persisted to disk. Put credentials in provider configuration, or use synchronous `moa_run` when seat-local environment variables are required.
+
+### Interaction-safe handoff
+
+Starting a detached worker is only half of the handoff. `moa_start`, single-job `moa_job_status`, `moa_job_wait`, and `moa_job_steer` return an `interaction` object that tells the captain whether it should yield the foreground turn. When `captainShouldYield` is true:
+
+1. Report the job ID and the durable status/steer commands.
+2. Do not loop on status/wait or continue substantial local work in the same turn.
+3. Use at most one wait of 10 seconds, then return control to the user.
+4. The worker queues a continuation prompt to the originating thread when the job settles.
+5. Perform captain-side verification and integration in that later turn, then call `moa_job_ack`.
+
+Completion delivery uses the official `codex queue` command and is persisted in `job.json`. `notification.state="delivered"` means the daemon accepted the message, not that the captain handled it. `notification.state="acknowledged"` is the end-to-end confirmation. A failed or missing prompt remains visible and can be retried with `moa_job_notify`; `force=true` intentionally permits duplicate delivery.
 
 ## Interrupt and control plane
 
@@ -136,7 +155,7 @@ moa_delegate(task="...", cwd="/repo", taskId="stable-task-id", resume=true, assi
 
 ## Retention and compaction
 
-`moa_retention` plans deletion/compaction for blackboard runs, jobs, managed clean worktrees, cost-ledger entries, and routing history. Active jobs and running seats are protected. Apply requires `allowWrite=true`.
+`moa_retention` plans deletion/compaction for blackboard runs, jobs, managed clean worktrees, cost-ledger entries, audit metrics, failure memory, and routing history. Active jobs and running seats are protected. Apply requires `allowWrite=true`.
 
 ## Patch acceptance metrics
 
@@ -162,6 +181,14 @@ Seat summaries are normalized into structured execution/audit results:
 - audit: verdict, findings, missing evidence, verified commands
 
 Auditor responses are parsed from raw JSON or fenced JSON. Invalid auditor JSON is surfaced as a Navigator warning instead of being treated as a pass. An auditor `block` can trigger a repair round when `plan.budget.maxRounds > 1`: executors rerun with the P0/P1 findings, then auditors re-check the repaired result. Checkpoint nodes keep a `rounds` history while `node.result` remains the latest result.
+
+Gate auditors participate in Navigator blocking and repair rounds. Shadow auditors run in parallel, remain read-only, and are excluded from gate failure, provider-circuit, routing-outcome, and repair decisions. Their failures and block verdicts remain visible for captain adjudication and Harness comparison.
+
+`moa_audit_metrics(action="status")` summarizes executor-auditor pairs. After reviewing findings, the captain records accepted findings and false positives with `moa_audit_metrics(action="record", ...)`; this evidence feeds proposal-first self-optimization.
+
+Every completed DAG layer is persisted in `checkpoint.stageReviews` with phase, model/Harness route, status, duration, tests, and blocking-gate outcome. `moa_evolve(action="record", stage="plan|execution|audit|final", ...)` adds the captain's judgment. Evolution analysis compares execution routes only within the same task level and gates cost/TPS optimization behind completion, acceptance, tests, and quality.
+
+External seat failures are appended to `~/.codex-moa/failures.jsonl` with model, Harness, phase, failure class, timeout/stop metadata, and a redacted signature. Authentication/capability failures activate an immediate route guard; repeated matching transient failures activate a short guard. Automatic routing changes family or Harness instead of repeating an active guard, while exact user assignments are never silently rewritten. A later successful run clears the active guard but preserves the historical record.
 
 ## Cost ledger and provider health
 

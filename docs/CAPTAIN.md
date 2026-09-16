@@ -17,6 +17,8 @@ provider, but provider metadata is not treated as proof of the page-level model.
 
 MCP stdio does not receive the current Codex session model by default, so explicit input is the most reliable option.
 
+When the captain is explicitly confirmed as GPT/OpenAI and mode is `auto`, routine L0 execution is delegated to a fast external seat. This preserves GPT capacity for the parts where its higher capability matters: task contracts, staged evidence review, adjudication, integration, and the final answer. An opaque captain is never guessed from CC Switch or global configuration.
+
 ## Usage
 
 Inspect the resolved captain:

@@ -42,6 +42,9 @@ export function createExplicitSeat(assignment, index, modelsConfig) {
     model: model.id,
     providerModel: model.providerModel,
     dsh: model.dsh,
+    pi: model.pi,
+    claude: model.claude,
+    codex: model.codex,
     modelTier: model.tier,
     role,
     mode: assignment.mode ?? defaultMode,
@@ -54,6 +57,9 @@ export function createExplicitSeat(assignment, index, modelsConfig) {
     allowedTools: assignment.allowedTools,
     disallowedTools: assignment.disallowedTools,
     profile: assignment.profile,
-    env: assignment.env
+    env: assignment.env,
+    skills: assignment.skills,
+    auditMode: assignment.auditMode,
+    blocking: assignment.blocking
   };
 }

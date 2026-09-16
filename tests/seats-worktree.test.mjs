@@ -76,3 +76,21 @@ test("refuses to remove arbitrary paths as worktrees", async () => {
   assert.equal(result.removed, false);
   assert.match(result.error, /outside the managed root/);
 });
+
+test("worktree snapshot includes uncommitted tracked and untracked source files", async () => {
+  const root = await mkdtemp(join(tmpdir(), "codex-moa-worktree-snapshot-"));
+  await runCommand({ command: "git", args: ["init"], cwd: root, timeoutMs: 10000 });
+  await writeFile(join(root, "tracked.txt"), "committed\n", "utf8");
+  await runCommand({ command: "git", args: ["add", "tracked.txt"], cwd: root, timeoutMs: 10000 });
+  await runCommand({ command: "git", args: ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"], cwd: root, timeoutMs: 10000 });
+  await writeFile(join(root, "tracked.txt"), "working tree\n", "utf8");
+  await writeFile(join(root, "untracked.txt"), "new\n", "utf8");
+
+  const worktree = await createWorktree({ cwd: root, taskId: "task-snapshot", seat: "executor" });
+  assert.equal(worktree.includesWorkingTree, true);
+  assert.equal(await readFile(join(worktree.path, "tracked.txt"), "utf8"), "working tree\n");
+  assert.equal(await readFile(join(worktree.path, "untracked.txt"), "utf8"), "new\n");
+  assert.equal((await runCommand({ command: "git", args: ["status", "--porcelain"], cwd: worktree.path, timeoutMs: 10000 })).stdout, "");
+  assert.equal((await runCommand({ command: "git", args: ["status", "--porcelain"], cwd: root, timeoutMs: 10000 })).stdout.includes("tracked.txt"), true);
+  await removeWorktree(worktree.path, { repo: root, force: true });
+});

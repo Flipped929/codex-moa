@@ -2,11 +2,11 @@ import { loadModels } from "./config.mjs";
 import { applyCcSwitchReasoning, readCcSwitchSnapshotSync } from "./ccswitch.mjs";
 
 /**
- * 有效模型表 —— 思考等级的唯一真源是 cc-switch（用户裁决 2026-09-15）。
+ * 有效模型表 —— CC Switch 是 Pi 模型运行元数据的唯一真源。
  *
- * 规则：cc-switch 纳管的模型，其 reasoning.supported / reasoning.default 以 cc-switch
- * 卡片声明为准；cc-switch 未覆盖的模型（或 cc-switch 不可用/离线）回落到本地
- * config/models.json。返回表额外带 reasoningSources: { [modelId]: "cc-switch" | "local" }。
+ * 规则：Pi 模型按 model.pi.provider/model 精确采用 CC Switch 卡片中的思考、
+ * 上下文、输出与图片输入元数据；DSH 独立，不读取 CC Switch 的同名卡片。
+ * CC Switch 不可用或未覆盖时回落 config/models.json。
  *
  * 逃生阀：CODEX_MOA_NO_CCSWITCH=1（测试/离线确定性场景）跳过叠加，纯用本地表。
  */

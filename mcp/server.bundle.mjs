@@ -4528,7 +4528,7 @@ function isRef(value) {
 function cloneIssues(issues) {
   return issues.map((iss) => iss.path ? { ...iss, path: iss.path.slice() } : { ...iss });
 }
-function isRecursive(inst, stack, resolve24) {
+function isRecursive(inst, stack, resolve30) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE;
@@ -4538,7 +4538,7 @@ function isRecursive(inst, stack, resolve24) {
   let result = NONE;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve24);
+      const answer = isRecursive(child, stack, resolve30);
       if (answer > result)
         result = answer;
     }
@@ -4549,7 +4549,7 @@ function isRecursive(inst, stack, resolve24) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve24) : NONE;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve30) : NONE;
       if (child > answer)
         answer = child;
     }
@@ -4613,7 +4613,7 @@ function isRecursive(inst, stack, resolve24) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve24 ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve30 ? inst._zod.innerType : void 0);
       merge3(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -23034,18 +23034,18 @@ var require_validate = __commonJS({
         const { schemaCode } = this;
         this.fail((0, codegen_1._)`${schemaCode} !== undefined && (${(0, codegen_1.or)(this.invalid$data(), condition)})`);
       }
-      error(append, errorParams, errorPaths) {
+      error(append2, errorParams, errorPaths) {
         if (errorParams) {
           this.setParams(errorParams);
-          this._error(append, errorPaths);
+          this._error(append2, errorPaths);
           this.setParams({});
           return;
         }
-        this._error(append, errorPaths);
+        this._error(append2, errorPaths);
       }
-      _error(append, errorPaths) {
+      _error(append2, errorPaths) {
         ;
-        (append ? errors_1.reportExtraError : errors_1.reportError)(this, this.def.error, errorPaths);
+        (append2 ? errors_1.reportExtraError : errors_1.reportError)(this, this.def.error, errorPaths);
       }
       $dataError() {
         (0, errors_1.reportError)(this, this.def.$dataError || errors_1.keyword$DataError);
@@ -23349,7 +23349,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve24.call(this, root, ref);
+      let _sch = resolve30.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -23376,7 +23376,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve24(root, ref) {
+    function resolve30(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -24206,7 +24206,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve24(baseURI, relativeURI, options) {
+    function resolve30(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const {
         parsed: baseParsed,
@@ -24239,49 +24239,49 @@ var require_fast_uri = __commonJS({
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative, options, skipNormalization) {
+    function resolveComponent(base, relative2, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse3(serialize(base, options), options);
-        relative = parse3(serialize(relative, options), options);
+        relative2 = parse3(serialize(relative2, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative.scheme) {
-        target.scheme = relative.scheme;
-        target.userinfo = relative.userinfo;
-        target.host = relative.host;
-        target.port = relative.port;
-        target.path = removeDotSegments(relative.path || "");
-        target.query = relative.query;
+      if (!options.tolerant && relative2.scheme) {
+        target.scheme = relative2.scheme;
+        target.userinfo = relative2.userinfo;
+        target.host = relative2.host;
+        target.port = relative2.port;
+        target.path = removeDotSegments(relative2.path || "");
+        target.query = relative2.query;
       } else {
-        if (relative.userinfo !== void 0 || relative.host !== void 0 || relative.port !== void 0) {
-          target.userinfo = relative.userinfo;
-          target.host = relative.host;
-          target.port = relative.port;
-          target.path = removeDotSegments(relative.path || "");
-          target.query = relative.query;
+        if (relative2.userinfo !== void 0 || relative2.host !== void 0 || relative2.port !== void 0) {
+          target.userinfo = relative2.userinfo;
+          target.host = relative2.host;
+          target.port = relative2.port;
+          target.path = removeDotSegments(relative2.path || "");
+          target.query = relative2.query;
         } else {
-          if (!relative.path) {
+          if (!relative2.path) {
             target.path = base.path;
-            if (relative.query !== void 0) {
-              target.query = relative.query;
+            if (relative2.query !== void 0) {
+              target.query = relative2.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative.path[0] === "/") {
-              target.path = removeDotSegments(relative.path);
+            if (relative2.path[0] === "/") {
+              target.path = removeDotSegments(relative2.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative.path;
+                target.path = "/" + relative2.path;
               } else if (!base.path) {
-                target.path = relative.path;
+                target.path = relative2.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative2.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative.query;
+            target.query = relative2.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -24289,7 +24289,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative.fragment;
+      target.fragment = relative2.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -24574,7 +24574,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize: normalize2,
-      resolve: resolve24,
+      resolve: resolve30,
       resolveComponent,
       equal,
       serialize,
@@ -27677,6 +27677,9 @@ function createExplicitSeat(assignment, index, modelsConfig) {
     model: model.id,
     providerModel: model.providerModel,
     dsh: model.dsh,
+    pi: model.pi,
+    claude: model.claude,
+    codex: model.codex,
     modelTier: model.tier,
     role,
     mode: assignment.mode ?? defaultMode,
@@ -27689,7 +27692,10 @@ function createExplicitSeat(assignment, index, modelsConfig) {
     allowedTools: assignment.allowedTools,
     disallowedTools: assignment.disallowedTools,
     profile: assignment.profile,
-    env: assignment.env
+    env: assignment.env,
+    skills: assignment.skills,
+    auditMode: assignment.auditMode,
+    blocking: assignment.blocking
   };
 }
 var init_models = __esm({
@@ -27704,9 +27710,9 @@ __export(process_exports, {
   runCommand: () => runCommand
 });
 import { spawn } from "node:child_process";
-function buildEnv(extra = {}, stripSecretEnv = true) {
+function buildEnv(extra = {}, stripSecretEnv = true, allowSecretExtraEnv = false) {
   const base = stripSecretEnv ? Object.fromEntries(Object.entries(process.env).filter(([key]) => !SECRET_ENV_RE.test(key))) : { ...process.env };
-  const safeExtra = stripSecretEnv ? Object.fromEntries(Object.entries(extra).filter(([key]) => !SECRET_ENV_RE.test(key))) : extra;
+  const safeExtra = stripSecretEnv && !allowSecretExtraEnv ? Object.fromEntries(Object.entries(extra).filter(([key]) => !SECRET_ENV_RE.test(key))) : extra;
   return { ...base, ...safeExtra };
 }
 function killTree(child, signal = "SIGTERM") {
@@ -27729,9 +27735,10 @@ function runCommand({
   env = {},
   timeoutMs = 3e5,
   maxOutputBytes = 8 * 1024 * 1024,
-  stripSecretEnv = true
+  stripSecretEnv = true,
+  allowSecretExtraEnv = false
 }) {
-  return new Promise((resolve24) => {
+  return new Promise((resolve30) => {
     const startedAt = Date.now();
     let stdout = "";
     let stderr = "";
@@ -27741,13 +27748,13 @@ function runCommand({
     try {
       child = spawn(command, args, {
         cwd,
-        env: buildEnv(env, stripSecretEnv),
+        env: buildEnv(env, stripSecretEnv, allowSecretExtraEnv),
         detached: process.platform !== "win32",
         shell: false,
         stdio: ["pipe", "pipe", "pipe"]
       });
     } catch (error62) {
-      return resolve24({
+      return resolve30({
         ok: false,
         code: null,
         signal: null,
@@ -27757,21 +27764,21 @@ function runCommand({
         durationMs: Date.now() - startedAt
       });
     }
-    const append = (target, chunk) => {
+    const append2 = (target, chunk) => {
       const next = target + chunk.toString("utf8");
       return Buffer.byteLength(next, "utf8") <= maxOutputBytes ? next : next.slice(0, maxOutputBytes);
     };
     child.stdout.on("data", (chunk) => {
-      stdout = append(stdout, chunk);
+      stdout = append2(stdout, chunk);
     });
     child.stderr.on("data", (chunk) => {
-      stderr = append(stderr, chunk);
+      stderr = append2(stderr, chunk);
     });
     child.on("error", (error62) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve24({ ok: false, code: null, signal: null, stdout, stderr: String(error62?.message ?? error62), timedOut, durationMs: Date.now() - startedAt });
+      resolve30({ ok: false, code: null, signal: null, stdout, stderr: String(error62?.message ?? error62), timedOut, durationMs: Date.now() - startedAt });
     });
     const timer = setTimeout(() => {
       timedOut = true;
@@ -27782,7 +27789,7 @@ function runCommand({
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve24({ ok: code === 0 && !timedOut, code, signal, stdout, stderr, timedOut, durationMs: Date.now() - startedAt });
+      resolve30({ ok: code === 0 && !timedOut, code, signal, stdout, stderr, timedOut, durationMs: Date.now() - startedAt });
     });
     if (input2 !== void 0) child.stdin.end(String(input2));
     else child.stdin.end();
@@ -27831,7 +27838,9 @@ function extractModelEntries(settingsConfig) {
         levels: unique(model?.reasoningLevels ?? []).map(normalizeReasoningLevel),
         defaultLevel: model?.defaultReasoningLevel ? normalizeReasoningLevel(model.defaultReasoningLevel) : null,
         contextWindow: model?.contextWindow ?? null,
-        maxTokens: model?.maxOutputTokens ?? model?.maxTokens ?? null
+        maxTokens: model?.maxOutputTokens ?? model?.maxTokens ?? null,
+        input: unique(model?.input ?? model?.modalities ?? []),
+        reasoningEnabled: typeof model?.reasoning === "boolean" ? model.reasoning : null
       });
     }
     for (const model of parsed.models ?? []) {
@@ -27839,10 +27848,14 @@ function extractModelEntries(settingsConfig) {
       entries.push({
         id: model?.id ?? null,
         name: model?.name ?? null,
-        levels: levels.length > 0 ? levels : model?.reasoning ? ["high"] : [],
+        // An empty map means CC Switch enabled reasoning but did not constrain
+        // selectable efforts. The model's vendor profile supplies that baseline.
+        levels,
         defaultLevel: model?.defaultEffort ? normalizeReasoningLevel(model.defaultEffort) : null,
         contextWindow: model?.contextWindow ?? null,
-        maxTokens: model?.maxTokens ?? null
+        maxTokens: model?.maxTokens ?? null,
+        input: unique(model?.input ?? []),
+        reasoningEnabled: typeof model?.reasoning === "boolean" ? model.reasoning : null
       });
     }
   }
@@ -28063,6 +28076,55 @@ async function readCcSwitchSnapshot() {
     }))
   };
 }
+async function readCcSwitchPiProviderConfigs() {
+  const paths = ccSwitchPaths();
+  if (!existsSync2(paths.database)) return { available: false, reason: "cc-switch database not found", providers: {} };
+  const rows = await querySqlite(paths.database, `
+    SELECT id, name, settings_config
+    FROM providers
+    WHERE app_type = 'pi'
+    ORDER BY name
+  `);
+  const providers = {};
+  const errors = [];
+  for (const row of rows) {
+    try {
+      const value = JSON.parse(row.settings_config || "{}");
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("provider config must be an object");
+      if (!value.baseUrl || !value.api || !Array.isArray(value.models)) throw new Error("baseUrl, api, and models are required");
+      providers[row.id] = value;
+    } catch (error62) {
+      errors.push({ id: row.id, name: row.name, error: error62.message });
+    }
+  }
+  return { available: true, providers, errors, source: paths.database };
+}
+async function readCcSwitchCliProviderConfig(appType, providerId) {
+  if (!["claude", "codex"].includes(appType)) throw new Error(`Unsupported CC Switch CLI app type: ${appType}`);
+  if (!providerId) throw new Error(`Missing CC Switch ${appType} provider id`);
+  const paths = ccSwitchPaths();
+  if (!existsSync2(paths.database)) return { available: false, reason: "cc-switch database not found" };
+  const escapedAppType = String(appType).replaceAll("'", "''");
+  const escapedProviderId = String(providerId).replaceAll("'", "''");
+  const rows = await querySqlite(paths.database, `
+    SELECT id, name, settings_config
+    FROM providers
+    WHERE app_type = '${escapedAppType}' AND id = '${escapedProviderId}'
+    LIMIT 1
+  `);
+  const row = rows[0];
+  if (!row) return { available: false, reason: `CC Switch ${appType} provider not found: ${providerId}` };
+  let settings;
+  try {
+    settings = JSON.parse(row.settings_config || "{}");
+  } catch (error62) {
+    throw new Error(`Invalid CC Switch ${appType} provider config for ${providerId}: ${error62.message}`);
+  }
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+    throw new Error(`Invalid CC Switch ${appType} provider config for ${providerId}`);
+  }
+  return { available: true, id: row.id, name: row.name, settings, source: paths.database };
+}
 function normalize(value) {
   return String(value ?? "").toLowerCase().replace(/\[[^\]]+\]/g, "").replace(/[^a-z0-9]+/g, "");
 }
@@ -28192,6 +28254,26 @@ function selectReasoningProvider(providers) {
     return Number(right.isCurrent) - Number(left.isCurrent);
   })[0] ?? null;
 }
+function exactPiProvider(snapshot, model) {
+  const providerId = model?.pi?.provider;
+  const modelId = model?.pi?.model;
+  if (!providerId || !modelId) return null;
+  const provider = (snapshot?.providers ?? []).find((item) => item.appType === "pi" && item.id === providerId);
+  if (!provider) return null;
+  const entry = (provider.modelEntries ?? []).find((item) => normalize(item.id) === normalize(modelId));
+  if (!entry) return null;
+  return {
+    ...provider,
+    matchedModels: [entry.id],
+    matchedEntries: [entry],
+    matchedReasoningLevels: unique(entry.levels ?? []),
+    matchedReasoningDefaults: unique([entry.defaultLevel])
+  };
+}
+function selectedProviderForModel(snapshot, model, fallbackProviders) {
+  if (model?.harness === "dsh") return null;
+  return exactPiProvider(snapshot, model) ?? selectReasoningProvider(fallbackProviders);
+}
 function querySqliteSync(dbPath, sql) {
   try {
     const require2 = createRequire(import.meta.url);
@@ -28233,13 +28315,14 @@ function ccSwitchReasoningIndex(snapshot, modelsConfig = loadModels()) {
   const index = {};
   for (const [modelId, providers] of Object.entries(bindings)) {
     const list = Array.isArray(providers) ? providers : [];
-    const selected = selectReasoningProvider(list);
+    const selected = selectedProviderForModel(snapshot, modelsConfig.models?.[modelId], list);
     const levels = unique(selected?.matchedReasoningLevels ?? []);
     const defaults = unique(selected?.matchedReasoningDefaults ?? []);
-    if (levels.length === 0 && defaults.length === 0) continue;
+    if (levels.length === 0 && defaults.length === 0 && !selected?.matchedEntries?.length) continue;
     index[modelId] = {
       levels,
       defaultLevel: defaults[0] ?? null,
+      entry: selected?.matchedEntries?.[0] ?? null,
       selectedProvider: selected ? { id: selected.id, name: selected.name, appType: selected.appType, isCurrent: selected.isCurrent } : null,
       providers: list.map((provider) => ({ id: provider.id, name: provider.name, appType: provider.appType, isCurrent: provider.isCurrent })),
       conflicts: list.filter((provider) => provider.id !== selected?.id).filter((provider) => JSON.stringify(unique(provider.matchedReasoningLevels ?? [])) !== JSON.stringify(levels)).map((provider) => ({ id: provider.id, name: provider.name, levels: unique(provider.matchedReasoningLevels ?? []) }))
@@ -28251,28 +28334,45 @@ function applyCcSwitchReasoning(modelsConfig = loadModels(), snapshot) {
   const index = ccSwitchReasoningIndex(snapshot, modelsConfig);
   const models = {};
   const reasoningSources = {};
+  const metadataSources = {};
   for (const [id2, model] of Object.entries(modelsConfig.models ?? {})) {
     const managed = index[id2];
     const localSupported = model.reasoning?.supported ?? [];
-    if (!managed || managed.levels.length === 0) {
+    const entry = managed?.entry ?? null;
+    if (!managed) {
       models[id2] = { ...model };
       reasoningSources[id2] = "local";
+      metadataSources[id2] = "local";
       continue;
     }
-    const supported = managed.levels;
-    const defaultLevel = (managed.defaultLevel && supported.includes(managed.defaultLevel) ? managed.defaultLevel : null) ?? supported[supported.length - 1] ?? null;
+    const vendor = model.reasoning?.vendorProfile ?? {};
+    const supported = managed.levels.length > 0 ? managed.levels : entry?.reasoningEnabled === false ? ["off"] : vendor.supported ?? localSupported;
+    const defaultLevel = (managed.defaultLevel && supported.includes(managed.defaultLevel) ? managed.defaultLevel : null) ?? (vendor.default && supported.includes(vendor.default) ? vendor.default : null) ?? supported[supported.length - 1] ?? null;
+    const capabilities = [...model.capabilities ?? []].filter((capability) => capability !== "image");
+    if (entry?.input?.includes("image")) capabilities.push("image");
+    const hasManagedReasoning = managed.levels.length > 0 || typeof entry?.reasoningEnabled === "boolean";
+    const reasoning = hasManagedReasoning ? {
+      ...model.reasoning ?? {},
+      supported,
+      default: defaultLevel,
+      canDisable: supported.includes("off"),
+      extendedThinking: entry?.reasoningEnabled ?? null,
+      source: "cc-switch"
+    } : { ...model.reasoning ?? {} };
     models[id2] = {
       ...model,
-      reasoning: {
-        ...model.reasoning ?? {},
-        supported,
-        default: defaultLevel,
-        source: "cc-switch"
+      capabilities: entry?.input?.length ? unique(capabilities) : [...model.capabilities ?? []],
+      reasoning,
+      limits: {
+        ...model.limits ?? {},
+        ...Number.isFinite(entry?.contextWindow) ? { contextWindow: entry.contextWindow } : {},
+        ...Number.isFinite(entry?.maxTokens) ? { maxOutputTokens: entry.maxTokens } : {}
       }
     };
-    reasoningSources[id2] = "cc-switch";
+    reasoningSources[id2] = hasManagedReasoning ? managed.levels.length > 0 || entry?.reasoningEnabled === false ? "cc-switch" : "cc-switch+vendor" : "local";
+    metadataSources[id2] = entry ? "cc-switch" : "local";
   }
-  return { ...modelsConfig, models, reasoningSources };
+  return { ...modelsConfig, models, reasoningSources, metadataSources };
 }
 var PROVIDER_SNAPSHOT_SQL;
 var init_ccswitch = __esm({
@@ -28429,6 +28529,92 @@ function extractOutput(stdout) {
   }
   return raw;
 }
+function jsonEvents(stdout) {
+  const raw = String(stdout ?? "").trim();
+  if (!raw) return [];
+  const events = [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+  }
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) continue;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) events.push(...parsed);
+      else events.push(parsed);
+    } catch {
+    }
+  }
+  return events;
+}
+function messageText(message) {
+  if (!message || message.role !== "assistant") return "";
+  if (typeof message.content === "string") return message.content.trim();
+  if (!Array.isArray(message.content)) return "";
+  return message.content.filter((item) => item?.type === "text" && typeof item.text === "string").map((item) => item.text.trim()).filter(Boolean).join("\n").trim();
+}
+function extractPiOutput(stdout) {
+  const assistantMessages = jsonEvents(stdout).filter((event) => event?.type === "message_end").map((event) => event.message).filter((message) => message?.role === "assistant");
+  for (let index = assistantMessages.length - 1; index >= 0; index -= 1) {
+    const text = messageText(assistantMessages[index]);
+    if (text) return text;
+  }
+  if (assistantMessages.length > 0) return "";
+  return extractOutput(stdout);
+}
+function extractClaudeOutput(stdout) {
+  const events = jsonEvents(stdout);
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type === "result" && typeof event.result === "string" && event.result.trim()) return event.result.trim();
+    const text = messageText(event?.message ?? event);
+    if (text) return text;
+  }
+  return extractOutput(stdout);
+}
+function extractCodexOutput(stdout) {
+  const events = jsonEvents(stdout);
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    const item = event?.item ?? event;
+    if (["agent_message", "message"].includes(item?.type) && typeof item.text === "string" && item.text.trim()) {
+      return item.text.trim();
+    }
+    if (event?.type === "turn.completed" && typeof event.final_output === "string" && event.final_output.trim()) {
+      return event.final_output.trim();
+    }
+  }
+  return extractOutput(stdout);
+}
+function extractPiError(stdout) {
+  const assistantMessages = jsonEvents(stdout).filter((event) => event?.type === "message_end").map((event) => event.message).filter((message) => message?.role === "assistant");
+  const last = assistantMessages.at(-1);
+  if (!last) return null;
+  if (last.stopReason === "error" || last.errorMessage) {
+    return String(last.errorMessage || "Pi assistant stopped with an error");
+  }
+  return null;
+}
+function extractPiUsage(stdout) {
+  const usages = jsonEvents(stdout).filter((event) => event?.type === "message_end" && event.message?.role === "assistant").map((event) => event.message.usage).filter((usage) => usage && typeof usage === "object");
+  if (usages.length === 0) return extractUsage(stdout);
+  const number5 = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
+  const inputTokens = usages.reduce((sum, usage) => sum + number5(usage.input ?? usage.inputTokens ?? usage.input_tokens), 0);
+  const outputTokens = usages.reduce((sum, usage) => sum + number5(usage.output ?? usage.outputTokens ?? usage.output_tokens), 0);
+  const cacheReadTokens = usages.reduce((sum, usage) => sum + number5(usage.cacheRead ?? usage.cacheReadTokens ?? usage.cache_read_tokens), 0);
+  const cacheWriteTokens = usages.reduce((sum, usage) => sum + number5(usage.cacheWrite ?? usage.cacheWriteTokens ?? usage.cache_write_tokens), 0);
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    contextTokens: number5(usages.at(-1)?.totalTokens ?? usages.at(-1)?.contextTokens) || null
+  };
+}
 function findSessionId(value, depth = 0) {
   if (depth > 8 || value == null) return null;
   if (typeof value !== "object") return null;
@@ -28563,15 +28749,15 @@ function getScheduleState(date5 = /* @__PURE__ */ new Date(), schedule) {
   const local = zonedParts(date5, timeZone);
   const glm = schedule.glmNightCampaign;
   const glmCampaignActive = Boolean(
-    glm && inDateRange(local.date, glm.startDate, glm.endDate) && inWindow(local.minutes, glm.startTime, glm.endTime)
+    glm && glm.enabled !== false && inDateRange(local.date, glm.startDate, glm.endDate) && inWindow(local.minutes, glm.startTime, glm.endTime)
   );
   const deepseek = schedule.deepseek ?? {};
   const peak = isWeekday(local.weekday) && (deepseek.peakWeekdays ?? []).some((window) => inWindow(local.minutes, window.start, window.end));
   const deepSeekOffPeak = !peak;
   const recommendations = [];
-  if (glmCampaignActive) recommendations.push("Prefer ZCode + GLM-5.3-Flash for batch coding.");
+  if (glmCampaignActive) recommendations.push("Legacy GLM night campaign is active, but Codex MOA keeps GLM on Pi unless explicitly overridden.");
   if (deepSeekOffPeak) recommendations.push("Prefer DeepSeekHarness for batch audits.");
-  if (!glmCampaignActive) recommendations.push("GLM-5.3-Flash night campaign is not active; use normal quota policy.");
+  if (!glmCampaignActive) recommendations.push("Use Pi for GLM and Kimi; balance their subscription quotas normally.");
   if (!deepSeekOffPeak) recommendations.push("DeepSeek is in peak pricing; reserve it for urgent or high-stakes audits.");
   return {
     timeZone,
@@ -28625,6 +28811,26 @@ function resolveReasoningEffort(selector, requested, modelsConfig) {
   }
   return reasoning.default ?? supported[0] ?? "off";
 }
+function effortForTask({ selector = null, modelsConfig = null, level = "L1", role = "executor", stakes = "medium", quotaPercent = null, requested, policy = null } = {}) {
+  if (requested) return { effort: requested, source: "explicit", rationale: "explicit reasoningEffort" };
+  const rules = policy?.reasoning ?? {};
+  const model = selector && modelsConfig ? resolveModel(selector, modelsConfig) : null;
+  const profile = rules.byModel?.[model?.id] ?? model?.reasoning?.vendorProfile ?? {};
+  let effort = profile.byLevel?.[level] ?? rules.defaultByLevel?.[level] ?? (level === "L0" ? "low" : level === "L1" ? "low" : level === "L3" ? "max" : "high");
+  if (role === "auditor" || role === "reviewer") effort = rules.auditByStakes?.[stakes] ?? (stakes === "high" ? "max" : "high");
+  if (role === "architect") effort = rules.architectByLevel?.[level] ?? (level === "L3" ? "max" : "high");
+  if (role === "vision") effort = rules.vision ?? "high";
+  const downgradeBelow = Number(rules.quotaDowngradeBelow ?? 10);
+  if (quotaPercent !== null && quotaPercent < downgradeBelow && !["auditor", "reviewer"].includes(role)) {
+    const index = Math.max(0, RANK[effort] - 1);
+    effort = CANONICAL_EFFORTS[index];
+  }
+  return {
+    effort,
+    source: profile.byLevel?.[level] ? "vendor-profile" : "task-policy",
+    rationale: `${model?.id ?? "generic"}/${level}/${role}/${stakes}${quotaPercent !== null ? `/quota:${quotaPercent}` : ""}`
+  };
+}
 var CANONICAL_EFFORTS, RANK;
 var init_reasoning = __esm({
   "src/lib/reasoning.mjs"() {
@@ -28671,6 +28877,9 @@ function buildTaskGraph(seats2 = []) {
     role: seat.role,
     model: seat.model,
     runtime: seat.runtime ?? "cli",
+    auditMode: seat.auditMode ?? null,
+    blocking: seat.blocking !== false,
+    pairedExecutor: seat.pairedExecutor ?? null,
     dependsOn: []
   }));
   const byRole = (role) => nodes.filter((node2) => node2.role === role);
@@ -28756,6 +28965,7 @@ var router_exports = {};
 __export(router_exports, {
   planMoA: () => planMoA
 });
+import { createHash } from "node:crypto";
 function normalizeSeats(seats2) {
   if (!seats2) return null;
   if (!Array.isArray(seats2)) throw new Error("seats must be an array");
@@ -28765,6 +28975,162 @@ function normalizeAssignments(assignments) {
   if (!assignments) return null;
   if (!Array.isArray(assignments) || assignments.length === 0) throw new Error("assignments must be a non-empty array");
   return assignments;
+}
+function weeklyRemaining(snapshot, provider) {
+  const source = snapshot?.providers?.[provider];
+  if (source?.status !== "ok") return null;
+  const weekly = (source.windows ?? []).find((window) => window.kind === "weekly");
+  const value = Number(weekly?.remainingPercent);
+  return Number.isFinite(value) ? value : null;
+}
+function balanceSubscriptionExecutor(seats2, { input: input2, models, policy, scheduleState, quotaSnapshot }) {
+  if (input2.assignments?.length || input2.seats?.length || input2.stakes === "high") return null;
+  if (policy.routing?.balanceSubscriptions === false) return null;
+  const kimiRemaining = weeklyRemaining(quotaSnapshot, "kimi");
+  const zaiRemaining = weeklyRemaining(quotaSnapshot, "zai");
+  if (kimiRemaining === null || zaiRemaining === null) return null;
+  const threshold = Number(policy.routing?.subscriptionBalanceThreshold ?? 10);
+  const gap = kimiRemaining - zaiRemaining;
+  const targetFamily = scheduleState.glmNightCampaignActive ? "zhipu" : gap >= threshold ? "moonshot" : gap <= -threshold ? "zhipu" : null;
+  if (!targetFamily) return null;
+  const seat = seats2.find((item) => item.role === "executor");
+  if (!seat) return null;
+  const current = resolveModel(seat.model, models);
+  if (current.family === targetFamily && !(targetFamily === "moonshot" && seat.harness !== "pi")) return null;
+  const selector = targetFamily === "moonshot" ? seat.modelTier === "deep" ? "kimi-k3" : "kimi-2.8" : seat.modelTier === "deep" ? "GLM-5.3" : "GLM-5.3-flash";
+  const replacement = resolveModel(selector, models);
+  const harness = "pi";
+  if (!(replacement.supportedHarnesses ?? [replacement.harness]).includes(harness)) return null;
+  const previous = { model: seat.model, harness: seat.harness };
+  seat.originalModel = seat.model;
+  seat.model = replacement.id;
+  seat.providerModel = replacement.providerModel;
+  seat.dsh = replacement.dsh;
+  seat.pi = replacement.pi;
+  seat.harness = harness;
+  seat.modelTier = replacement.tier;
+  seat.quotaBalanced = true;
+  seat.quotaRationale = `subscription burn gap ${Math.abs(gap).toFixed(1)}pp; prefer the less-used ${targetFamily === "moonshot" ? "Kimi" : "GLM"} subscription through Pi`;
+  return { seat: seat.seat, from: previous, to: { model: seat.model, harness }, kimiRemaining, zaiRemaining, gap };
+}
+function routePerformanceSignals(seats2, routes = {}) {
+  const eligibleTps = Object.values(routes).filter((route) => route?.sampleSufficient === true && Number(route?.successRate) >= 0.75).map((route) => Number(route.outputTps)).filter(Number.isFinite);
+  const maxTps = Math.max(0, ...eligibleTps);
+  const candidates = seats2.map((seat) => {
+    const key = `${seat.model}@${seat.harness}`;
+    const observed = routes[key] ?? null;
+    const eligible = observed?.sampleSufficient === true && Number(observed?.successRate) >= 0.75;
+    const tpsIndex = eligible && maxTps > 0 ? Math.min(1, Number(observed.outputTps) / maxTps) : null;
+    return {
+      seat: seat.seat,
+      route: key,
+      runs: observed?.runs ?? 0,
+      successRate: observed?.successRate ?? null,
+      outputTps: observed?.outputTps ?? null,
+      sampleSufficient: observed?.sampleSufficient === true,
+      eligibleForAutomaticPreference: eligible,
+      routingScore: eligible ? 0.8 * Number(observed.successRate) + 0.2 * (tpsIndex ?? 0) : null
+    };
+  });
+  return {
+    minimumSamples: 3,
+    qualityGate: 0.75,
+    weighting: { taskCompletion: 0.8, tps: 0.2 },
+    note: "TPS is only a tie-breaker after the completion-quality gate; sparse samples are descriptive only.",
+    routes: candidates
+  };
+}
+function applyModelToSeat(seat, model, harness = model.harness) {
+  seat.model = model.id;
+  seat.providerModel = model.providerModel;
+  seat.dsh = model.dsh;
+  seat.pi = model.pi;
+  seat.claude = model.claude;
+  seat.codex = model.codex;
+  seat.harness = harness;
+  seat.modelTier = model.tier;
+  seat.family = model.family;
+  return seat;
+}
+function stablePercent(...parts) {
+  return createHash("sha256").update(parts.join("\n")).digest()[0] / 255;
+}
+function deepSeekHarness(model, input2, policy) {
+  const configured = policy.audit?.deepSeekHarnessExperiment?.weights ?? { codex: 60, pi: 25, dsh: 15 };
+  const supported = new Set(model.supportedHarnesses ?? [model.harness]);
+  const entries = Object.entries(configured).filter(([harness, weight]) => supported.has(harness) && Number(weight) > 0).map(([harness, weight]) => ({ harness, weight: Number(weight) }));
+  if (entries.length === 0) return model.harness;
+  const total = entries.reduce((sum, item) => sum + item.weight, 0);
+  let bucket = stablePercent(input2.task, input2.cwd ?? "", "deepseek-harness") * total;
+  for (const item of entries) {
+    bucket -= item.weight;
+    if (bucket < 0) return item.harness;
+  }
+  return entries.at(-1).harness;
+}
+function configureAutomaticAudits(seats2, { input: input2, models, policy, level, scheduleState, quotaSnapshot, roles }) {
+  if (input2.assignments?.length || input2.seats?.length) return { enabled: false, reason: "explicit routing" };
+  const executor = seats2.find((seat) => seat.role === "executor");
+  const gate = seats2.find((seat) => seat.role === "auditor");
+  if (!executor || !gate) return { enabled: false, reason: "no automatic executor/auditor pair" };
+  const executorModel = resolveModel(executor.model, models);
+  const tier = level === "L3" ? "deep" : "fast";
+  const kimi = tier === "deep" ? "kimi-k3" : "kimi-2.8";
+  const glm = tier === "deep" ? "GLM-5.3" : "GLM-5.3-flash";
+  let candidates = executorModel.family === "zhipu" ? [kimi, "DeepSeek-flash"] : executorModel.family === "moonshot" ? [glm, "DeepSeek-flash"] : weeklyRemaining(quotaSnapshot, "kimi") >= weeklyRemaining(quotaSnapshot, "zai") ? [kimi, glm] : [glm, kimi];
+  if (policy.audit?.avoidCaptainFamily && input2.captain?.family) {
+    candidates = candidates.sort((a, b) => {
+      const af = resolveModel(a, models).family === input2.captain.family ? 1 : 0;
+      const bf = resolveModel(b, models).family === input2.captain.family ? 1 : 0;
+      return af - bf;
+    });
+  }
+  const gateModel = candidates.map((id2) => {
+    try {
+      return resolveModel(id2, models);
+    } catch {
+      return null;
+    }
+  }).find((model) => model && model.family !== executorModel.family);
+  if (!gateModel) return { enabled: false, reason: "no cross-family gate model" };
+  const gateHarness = gateModel.family === "deepseek" ? deepSeekHarness(gateModel, input2, policy) : "pi";
+  gate.seat = "cross-family-auditor-gate";
+  gate.auditMode = "gate";
+  gate.blocking = true;
+  gate.pairedExecutor = executor.seat;
+  applyModelToSeat(gate, gateModel, gateHarness);
+  const peakRate = Number(policy.audit?.deepSeekShadow?.l2PeakRate ?? 0.25);
+  const offPeakRate = Number(policy.audit?.deepSeekShadow?.l2OffPeakRate ?? 0.4);
+  const sampleRate = level === "L3" ? Number(policy.audit?.deepSeekShadow?.l3Rate ?? 1) : scheduleState.deepSeekOffPeak ? offPeakRate : peakRate;
+  const sampled = executorModel.family !== "deepseek" && gateModel.family !== "deepseek" && stablePercent(input2.task, input2.cwd ?? "", "deepseek-shadow") < sampleRate;
+  let shadow = null;
+  if (sampled) {
+    try {
+      const model = resolveModel("DeepSeek-flash", models);
+      const harness = deepSeekHarness(model, input2, policy);
+      shadow = applyRoleDefaults(applyModelToSeat({
+        seat: "deepseek-auditor-shadow",
+        role: "auditor",
+        mode: "plan",
+        runtime: "cli",
+        auditMode: "shadow",
+        blocking: false,
+        pairedExecutor: executor.seat,
+        harnessExperiment: policy.audit?.deepSeekHarnessExperiment?.id ?? "deepseek-audit-harness-v1"
+      }, model, harness), roles);
+      seats2.push(shadow);
+    } catch {
+    }
+  }
+  return {
+    enabled: true,
+    executor: { seat: executor.seat, model: executor.model, harness: executor.harness, family: executorModel.family },
+    gate: { seat: gate.seat, model: gate.model, harness: gate.harness, family: gateModel.family },
+    shadow: shadow ? { seat: shadow.seat, model: shadow.model, harness: shadow.harness, family: "deepseek" } : null,
+    shadowSampleRate: sampleRate,
+    shadowSampled: Boolean(shadow),
+    parallel: true
+  };
 }
 function planMoA(input2 = {}, deps = {}) {
   const { task, stakes = "medium", mode = "implement", vision = false } = input2;
@@ -28784,6 +29150,9 @@ function planMoA(input2 = {}, deps = {}) {
   else if (stakes === "high" || HIGH_RISK_RE.test(task)) level = "L3";
   else if (stakes === "medium" || COMPLEX_RE.test(task)) level = "L2";
   else if (SIMPLE_RE.test(task)) level = "L0";
+  const classifiedLevel = level;
+  const delegateSimpleForOpenAiCaptain = !explicitAssignments && !explicitSeats && orchestrationMode === "auto" && level === "L0" && policy.routing?.delegateSimpleForOpenAiCaptain !== false && input2.captain?.family === "openai";
+  if (delegateSimpleForOpenAiCaptain) level = "L1";
   if (!explicitAssignments && !explicitSeats && orchestrationMode === "force" && level === "L0") level = "L1";
   if (!explicitAssignments && orchestrationMode !== "off" && (mode === "audit" || mode === "review")) level = level === "L3" ? "L3" : "L2";
   let plannedSeats;
@@ -28792,12 +29161,12 @@ function planMoA(input2 = {}, deps = {}) {
   } else {
     let seatNames;
     if (level === "L0") seatNames = [];
-    else if (level === "L1") seatNames = ["zcode-executor-fast"];
-    else if (level === "L2") seatNames = ["zcode-executor-deep", "dsh-auditor-fast"];
-    else seatNames = ["zcode-executor-deep", "kimi-architect", "dsh-auditor-deep"];
+    else if (level === "L1") seatNames = ["pi-executor-fast"];
+    else if (level === "L2") seatNames = ["pi-glm-executor-deep", "dsh-auditor-fast"];
+    else seatNames = ["pi-glm-executor-deep", "kimi-architect", "dsh-auditor-deep"];
     if (vision && !seatNames.includes("kimi-vision")) seatNames.push("kimi-vision");
-    if (level === "L2" && mode === "review" && policy.routing?.preferFastForMediumReview && seatNames[0] === "zcode-executor-deep") {
-      seatNames[0] = "zcode-executor-fast";
+    if (level === "L2" && mode === "review" && policy.routing?.preferFastForMediumReview && seatNames[0] === "pi-glm-executor-deep") {
+      seatNames[0] = "pi-glm-executor-fast";
     }
     const requestedSeats = explicitSeats ?? seatNames.map((seat) => ({ seat }));
     plannedSeats = requestedSeats.map((item) => {
@@ -28812,6 +29181,8 @@ function planMoA(input2 = {}, deps = {}) {
         model: resolved.id,
         providerModel: resolved.providerModel,
         dsh: resolved.dsh,
+        pi: resolved.pi,
+        family: resolved.family,
         modelTier,
         harness: item.harness ?? definition.harness ?? resolved.harness
       }, roles);
@@ -28827,7 +29198,7 @@ function planMoA(input2 = {}, deps = {}) {
       seat.providerModel = replacement.providerModel;
       seat.dsh = replacement.dsh;
       seat.modelTier = replacement.tier;
-      seat.harness = "dsh";
+      seat.harness = replacement.harness;
       seat.scheduleAdjusted = true;
       seat.scheduleRationale = "DeepSeek peak pricing; keep the DeepSeekHarness agent and use a lower-cost provider model";
     }
@@ -28851,13 +29222,31 @@ function planMoA(input2 = {}, deps = {}) {
           seat.model = replacement.id;
           seat.providerModel = replacement.providerModel;
           seat.dsh = replacement.dsh;
-          seat.harness = keepHarness ? seat.harness : replacement.harness;
+          seat.pi = replacement.pi;
+          seat.harness = seat.scheduleAdjusted && keepHarness ? seat.harness : replacement.harness;
           seat.modelTier = replacement.tier;
           seat.evolutionAdjusted = true;
         }
       }
     }
   }
+  const quotaBalancing = balanceSubscriptionExecutor(plannedSeats, {
+    input: input2,
+    models,
+    policy,
+    scheduleState,
+    quotaSnapshot: deps.quotaSnapshot
+  });
+  const auditStrategy = configureAutomaticAudits(plannedSeats, {
+    input: input2,
+    models,
+    policy,
+    level,
+    scheduleState,
+    quotaSnapshot: deps.quotaSnapshot,
+    roles
+  });
+  const performanceSignals = routePerformanceSignals(plannedSeats, deps.routePerformance);
   for (const seat of plannedSeats) {
     const requested = seat.reasoningEffort ?? input2.reasoningEffort ?? null;
     seat.reasoningRequested = requested;
@@ -28865,10 +29254,22 @@ function planMoA(input2 = {}, deps = {}) {
       seat.reasoningEffort = resolveReasoningEffort(seat.model, requested, models);
       seat.reasoningSource = "explicit";
       seat.reasoningRationale = "explicit reasoningEffort";
+    } else if ((policy.reasoning?.mode ?? "task-aware") === "task-aware") {
+      const selected = effortForTask({
+        selector: seat.model,
+        modelsConfig: models,
+        level,
+        role: seat.role,
+        stakes,
+        policy
+      });
+      seat.reasoningEffort = resolveReasoningEffort(seat.model, selected.effort, models);
+      seat.reasoningSource = selected.source;
+      seat.reasoningRationale = `${selected.rationale}; requested=${selected.effort}; effective=${seat.reasoningEffort}`;
     } else {
       delete seat.reasoningEffort;
       seat.reasoningSource = "model-default";
-      seat.reasoningRationale = "hands-off: model/harness default";
+      seat.reasoningRationale = "provider-default mode";
     }
     const limits = budgetForTask({
       selector: seat.model,
@@ -28902,6 +29303,16 @@ function planMoA(input2 = {}, deps = {}) {
       forced: input2.routingExperiment.forced === true,
       rationale: input2.routingExperiment.rationale ?? null
     } : null,
+    quotaBalancing,
+    auditStrategy,
+    captainDelegation: {
+      simpleDelegated: delegateSimpleForOpenAiCaptain,
+      classifiedLevel,
+      effectiveLevel: level,
+      rationale: delegateSimpleForOpenAiCaptain ? "Confirmed OpenAI/GPT captain keeps planning, verification, integration, and final answer while a fast external seat handles routine execution." : null
+    },
+    captainAllocation: deps.captainAllocation ?? { active: false, reason: "captain usage was not supplied" },
+    performanceSignals,
     seats: plannedSeats,
     graph: buildTaskGraph(plannedSeats),
     roles: [...roles.values()].map((role) => ({ name: role.name, description: role.description, defaults: role.defaults, origin: role.origin })),
@@ -28913,12 +29324,14 @@ function planMoA(input2 = {}, deps = {}) {
     },
     rationale: [
       `classified as ${level}`,
+      delegateSimpleForOpenAiCaptain ? "GPT captain delegated routine execution and retained quality control" : null,
       `orchestration mode: ${orchestrationMode}`,
       `${plannedSeats.length} external seat(s)`,
       plannedSeats.some((seat) => seat.model) ? `models: ${plannedSeats.map((seat) => seat.model).join(", ")}` : "no external model",
       scheduleState.glmNightCampaignActive ? "GLM night campaign active" : "GLM night campaign inactive",
-      scheduleState.deepSeekOffPeak ? "DeepSeek off-peak" : "DeepSeek peak"
-    ]
+      scheduleState.deepSeekOffPeak ? "DeepSeek off-peak" : "DeepSeek peak",
+      deps.captainAllocation?.active ? `GPT quota tier ${deps.captainAllocation.tier}; external target ${deps.captainAllocation.externalTargetPercent}%` : "captain quota allocation inactive"
+    ].filter(Boolean)
   };
 }
 var HIGH_RISK_RE, COMPLEX_RE, SIMPLE_RE;
@@ -29289,19 +29702,591 @@ var init_captain = __esm({
   }
 });
 
-// src/lib/evolution.mjs
-import { appendFile, chmod as chmod3, copyFile, mkdir as mkdir3, readFile as readFile3, rename as rename3, writeFile as writeFile3 } from "node:fs/promises";
-import { createHash, randomUUID as randomUUID3 } from "node:crypto";
+// src/lib/audit-metrics.mjs
+import { existsSync as existsSync5 } from "node:fs";
+import { appendFile, chmod as chmod3, mkdir as mkdir3, readFile as readFile3 } from "node:fs/promises";
 import { homedir as homedir5 } from "node:os";
-import { dirname as dirname4, join as join5, resolve as resolve5 } from "node:path";
+import { dirname as dirname4, resolve as resolve5 } from "node:path";
 function expandHome4(value) {
-  if (typeof value !== "string") return value;
   if (value === "~") return homedir5();
-  if (value.startsWith("~/")) return resolve5(homedir5(), value.slice(2));
+  if (typeof value === "string" && value.startsWith("~/")) return resolve5(homedir5(), value.slice(2));
   return resolve5(value);
 }
+function auditMetricsPath() {
+  return expandHome4(process.env.CODEX_MOA_AUDIT_METRICS || "~/.codex-moa/audit-metrics.jsonl");
+}
+async function append(entry, path = auditMetricsPath()) {
+  await mkdir3(dirname4(path), { recursive: true });
+  await appendFile(path, `${JSON.stringify({ time: (/* @__PURE__ */ new Date()).toISOString(), ...entry })}
+`, { encoding: "utf8", mode: 384 });
+  await chmod3(path, 384).catch(() => {
+  });
+  return entry;
+}
+function outputTps(result) {
+  const durationMs = Number(result?.durationMs);
+  const outputTokens = Number(result?.usage?.outputTokens);
+  return durationMs > 0 && Number.isFinite(outputTokens) ? outputTokens / (durationMs / 1e3) : null;
+}
+async function recordAuditRun(event, path = auditMetricsPath()) {
+  return append({ type: "audit_run", ...event }, path);
+}
+async function recordAuditAdjudication(event, path = auditMetricsPath()) {
+  return append({
+    type: "audit_adjudication",
+    taskId: event.taskId,
+    auditorSeat: event.auditorSeat,
+    acceptedFindings: Number(event.acceptedFindings ?? 0),
+    falsePositives: Number(event.falsePositives ?? 0),
+    taskAccepted: event.taskAccepted ?? null,
+    testsPassed: event.testsPassed ?? null,
+    notes: event.notes ?? null
+  }, path);
+}
+async function readAuditMetrics(path = auditMetricsPath(), limit = 1e4) {
+  if (!existsSync5(path)) return [];
+  try {
+    return (await readFile3(path, "utf8")).split(/\r?\n/).filter(Boolean).slice(-limit).map(JSON.parse);
+  } catch {
+    return [];
+  }
+}
+function rate(value, total) {
+  return total > 0 ? value / total : null;
+}
+function summarizeAuditMetrics(entries = []) {
+  const adjudications = new Map(entries.filter((entry) => entry.type === "audit_adjudication").map((entry) => [`${entry.taskId}:${entry.auditorSeat}`, entry]));
+  const routes = {};
+  const pairs = {};
+  for (const entry of entries.filter((item) => item.type === "audit_run")) {
+    const routeKey = `${entry.auditorModel}@${entry.auditorHarness}@${entry.auditMode}`;
+    const pairKey = `${entry.executorModel}@${entry.executorHarness}->${routeKey}`;
+    for (const [key, target] of [[routeKey, routes], [pairKey, pairs]]) {
+      target[key] ??= { runs: 0, completed: 0, failed: 0, timedOut: 0, passes: 0, warns: 0, blocks: 0, durationMs: 0, outputTokens: 0, estimatedUsd: 0, pricedRuns: 0, acceptedFindings: 0, falsePositives: 0, adjudicatedRuns: 0 };
+      const state = target[key];
+      state.runs += 1;
+      state.completed += entry.status === "done" ? 1 : 0;
+      state.failed += entry.status === "done" ? 0 : 1;
+      state.timedOut += entry.timedOut ? 1 : 0;
+      if (entry.verdict === "pass") state.passes += 1;
+      if (entry.verdict === "warn") state.warns += 1;
+      if (entry.verdict === "block") state.blocks += 1;
+      state.durationMs += Number(entry.durationMs) || 0;
+      state.outputTokens += Number(entry.outputTokens) || 0;
+      if (Number.isFinite(Number(entry.estimatedUsd))) {
+        state.estimatedUsd += Number(entry.estimatedUsd);
+        state.pricedRuns += 1;
+      }
+      const adjudication = adjudications.get(`${entry.taskId}:${entry.auditorSeat}`);
+      if (adjudication) {
+        state.adjudicatedRuns += 1;
+        state.acceptedFindings += Number(adjudication.acceptedFindings) || 0;
+        state.falsePositives += Number(adjudication.falsePositives) || 0;
+      }
+    }
+  }
+  for (const collection of [routes, pairs]) {
+    for (const state of Object.values(collection)) {
+      state.completionRate = rate(state.completed, state.runs);
+      state.timeoutRate = rate(state.timedOut, state.runs);
+      state.outputTps = state.durationMs > 0 ? state.outputTokens / (state.durationMs / 1e3) : null;
+      state.usefulFindingRate = rate(state.acceptedFindings, state.acceptedFindings + state.falsePositives);
+      state.costPerAcceptedFinding = state.acceptedFindings > 0 && state.pricedRuns > 0 ? state.estimatedUsd / state.acceptedFindings : null;
+      state.sampleSufficient = state.runs >= 5;
+    }
+  }
+  return {
+    entries: entries.length,
+    auditRuns: entries.filter((entry) => entry.type === "audit_run").length,
+    adjudications: entries.filter((entry) => entry.type === "audit_adjudication").length,
+    routes,
+    pairs,
+    evidencePolicy: { minimumRuns: 5, note: "Harness and pairing changes require completion, latency, and adjudicated finding evidence; TPS alone is insufficient." }
+  };
+}
+var init_audit_metrics = __esm({
+  "src/lib/audit-metrics.mjs"() {
+  }
+});
+
+// src/lib/json-store.mjs
+import { existsSync as existsSync6 } from "node:fs";
+import { chmod as chmod4, mkdir as mkdir4, open as open2, readFile as readFile4, rename as rename3, stat, unlink, writeFile as writeFile3 } from "node:fs/promises";
+import { randomUUID as randomUUID3 } from "node:crypto";
+import { dirname as dirname5 } from "node:path";
+async function withFileLock(filePath, fn, { timeoutMs = 1e4, staleMs = 3e4, pollMs = 20 } = {}) {
+  const lockPath = `${filePath}.lock`;
+  await mkdir4(dirname5(filePath), { recursive: true });
+  const started = Date.now();
+  let handle;
+  while (!handle) {
+    try {
+      handle = await open2(lockPath, "wx", 384);
+    } catch (error62) {
+      if (error62?.code !== "EEXIST") throw error62;
+      try {
+        const info = await stat(lockPath);
+        if (Date.now() - info.mtimeMs > staleMs) {
+          await unlink(lockPath).catch(() => {
+          });
+          continue;
+        }
+      } catch {
+      }
+      if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for lock: ${filePath}`);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, pollMs));
+    }
+  }
+  try {
+    await handle.writeFile(`${process.pid}
+`);
+    return await fn();
+  } finally {
+    await handle.close().catch(() => {
+    });
+    await unlink(lockPath).catch(() => {
+    });
+  }
+}
+async function writeJsonAtomic(path, value, { mode = 384 } = {}) {
+  await mkdir4(dirname5(path), { recursive: true });
+  const temporary = `${path}.${randomUUID3()}.tmp`;
+  await writeFile3(temporary, `${JSON.stringify(value, null, 2)}
+`, { mode });
+  await rename3(temporary, path);
+  await chmod4(path, mode).catch(() => {
+  });
+  return path;
+}
+function migrateJsonStore(value, { version: version2, defaultValue, migrations = {} }) {
+  let current = value && typeof value === "object" ? { ...value } : structuredClone(defaultValue);
+  if (current.__invalid__) return structuredClone(defaultValue);
+  let currentVersion = Number(current.version ?? 1);
+  while (currentVersion < version2) {
+    const nextVersion = currentVersion + 1;
+    const migrate = migrations[currentVersion] ?? migrations[`${currentVersion}->${nextVersion}`];
+    current = migrate ? migrate(current) : current;
+    current.version = nextVersion;
+    currentVersion = nextVersion;
+  }
+  return { ...structuredClone(defaultValue), ...current, version: version2 };
+}
+async function readJsonStore(path, { version: version2 = 1, defaultValue = {}, migrations = {} } = {}) {
+  if (!existsSync6(path)) return migrateJsonStore(structuredClone(defaultValue), { version: version2, defaultValue, migrations });
+  try {
+    const parsed = JSON.parse(await readFile4(path, "utf8"));
+    return migrateJsonStore(parsed, { version: version2, defaultValue, migrations });
+  } catch {
+    return migrateJsonStore({ __invalid__: true }, { version: version2, defaultValue, migrations });
+  }
+}
+async function updateJsonStore(path, updater, options = {}) {
+  const {
+    version: version2 = 1,
+    defaultValue = {},
+    migrations = {},
+    mode = 384,
+    lock = {}
+  } = options;
+  return withFileLock(path, async () => {
+    const current = await readJsonStore(path, { version: version2, defaultValue, migrations });
+    const next = await updater(current);
+    await writeJsonAtomic(path, next, { mode });
+    return next;
+  }, lock);
+}
+var init_json_store = __esm({
+  "src/lib/json-store.mjs"() {
+  }
+});
+
+// src/lib/provider-state.mjs
+import { homedir as homedir6 } from "node:os";
+import { resolve as resolve6 } from "node:path";
+function expandHome5(value) {
+  if (typeof value !== "string") return value;
+  if (value === "~") return homedir6();
+  if (value.startsWith("~/")) return resolve6(homedir6(), value.slice(2));
+  return resolve6(value);
+}
+function providerStatePath() {
+  return expandHome5(process.env.CODEX_MOA_PROVIDER_STATE || "~/.codex-moa/provider-state.json");
+}
+function providerHealthPolicy(config2 = {}) {
+  const source = config2.providerHealth ?? {};
+  return {
+    failureThreshold: Number(source.failureThreshold ?? 3),
+    baseOpenMs: Number(source.baseOpenMs ?? 6e4),
+    maxOpenMs: Number(source.maxOpenMs ?? 36e5),
+    latencyWarningMs: Number(source.latencyWarningMs ?? 1e4),
+    windowSize: Number(source.windowSize ?? 100)
+  };
+}
+function classifyProviderError(error62, statusCode = null) {
+  const code = Number(statusCode);
+  if (code === 429 || /rate.?limit|too many requests/i.test(String(error62))) return "rate_limit";
+  if (code === 401 || code === 403 || /auth|unauthori[sz]ed|login required/i.test(String(error62))) return "auth";
+  if (code >= 500 || /server error|bad gateway|unavailable/i.test(String(error62))) return "server";
+  if (/timeout|timed out|abort/i.test(String(error62))) return "timeout";
+  if (/captcha|business|model request|provider/i.test(String(error62))) return "provider_business";
+  return "unknown";
+}
+async function readProviderState(path = providerStatePath()) {
+  return readJsonStore(path, { version: STATE_VERSION, defaultValue: DEFAULT_STATE, migrations: MIGRATIONS });
+}
+async function recordProviderOutcome({ provider, model = null, ok, latencyMs = null, statusCode = null, error: error62 = null }, path = providerStatePath(), config2 = {}) {
+  const policy = providerHealthPolicy(config2);
+  let snapshot;
+  await updateJsonStore(path, (state) => {
+    const current = state.providers[provider] ??= {
+      circuit: "closed",
+      consecutiveFailures: 0,
+      openUntil: null,
+      outcomes: []
+    };
+    const now = Date.now();
+    current.outcomes = [...current.outcomes ?? [], {
+      time: new Date(now).toISOString(),
+      model,
+      ok: ok === true,
+      latencyMs: Number.isFinite(Number(latencyMs)) ? Number(latencyMs) : null,
+      statusCode,
+      errorKind: ok ? null : classifyProviderError(error62, statusCode),
+      error: error62 ? String(error62).slice(0, 1e3) : null
+    }].slice(-policy.windowSize);
+    if (ok) {
+      current.circuit = "closed";
+      current.consecutiveFailures = 0;
+      current.openUntil = null;
+      current.lastErrorKind = null;
+    } else {
+      current.consecutiveFailures += 1;
+      current.lastErrorKind = classifyProviderError(error62, statusCode);
+      if (current.consecutiveFailures >= policy.failureThreshold) {
+        current.circuit = "open";
+        const exponent = Math.max(0, current.consecutiveFailures - policy.failureThreshold);
+        current.openUntil = new Date(now + Math.min(policy.baseOpenMs * 2 ** exponent, policy.maxOpenMs)).toISOString();
+      }
+    }
+    current.updatedAt = new Date(now).toISOString();
+    snapshot = current;
+    return state;
+  }, { version: STATE_VERSION, defaultValue: DEFAULT_STATE, migrations: MIGRATIONS });
+  return snapshot;
+}
+function percentile(values, ratio) {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio))];
+}
+function providerCircuitStatus(state, provider, config2 = {}, now = Date.now()) {
+  const policy = providerHealthPolicy(config2);
+  const current = state?.providers?.[provider];
+  if (!current) return { circuit: "closed", consecutiveFailures: 0, openUntil: null, p50LatencyMs: null, p95LatencyMs: null, lastErrorKind: null };
+  let circuit = current.circuit ?? "closed";
+  const openUntilMs = current.openUntil ? Date.parse(current.openUntil) : null;
+  if (circuit === "open" && openUntilMs !== null && openUntilMs <= now) circuit = "half-open";
+  const latencies = (current.outcomes ?? []).map((entry) => Number(entry.latencyMs)).filter((value) => Number.isFinite(value) && value >= 0);
+  return {
+    circuit,
+    consecutiveFailures: current.consecutiveFailures ?? 0,
+    openUntil: current.openUntil ?? null,
+    retryAt: circuit === "half-open" ? new Date(now).toISOString() : current.openUntil ?? null,
+    p50LatencyMs: percentile(latencies, 0.5),
+    p95LatencyMs: percentile(latencies, 0.95),
+    latencyWarning: latencies.length > 0 && percentile(latencies, 0.95) > policy.latencyWarningMs,
+    lastErrorKind: current.lastErrorKind ?? null,
+    updatedAt: current.updatedAt ?? null
+  };
+}
+function shouldProbeProvider(state, provider, config2 = {}, now = Date.now()) {
+  const status = providerCircuitStatus(state, provider, config2, now);
+  return status.circuit === "half-open";
+}
+async function defaultProbe(provider, config2) {
+  const credentials = resolveQuotaCredentials();
+  if (provider === "kimi") return fetchKimiQuota(credentials);
+  if (provider === "zai") return fetchZaiQuota(credentials, { zaiRegion: config2.quota?.zaiRegion });
+  if (provider === "deepseek") return fetchDeepSeekQuota(credentials);
+  throw new Error(`Unknown provider: ${provider}`);
+}
+async function probeProvider(provider, { config: config2 = {}, deps = {} } = {}) {
+  const startedAt = Date.now();
+  try {
+    const result = await (deps.probe ?? defaultProbe)(provider, config2);
+    const ok = result?.status === "ok";
+    const outcome = await recordProviderOutcome({
+      provider,
+      ok,
+      latencyMs: Date.now() - startedAt,
+      error: ok ? null : result?.error ?? result?.status ?? "probe failed"
+    }, deps.statePath, config2);
+    return { provider, ok, status: result?.status ?? "unknown", latencyMs: Date.now() - startedAt, outcome };
+  } catch (error62) {
+    const outcome = await recordProviderOutcome({
+      provider,
+      ok: false,
+      latencyMs: Date.now() - startedAt,
+      error: error62.message
+    }, deps.statePath, config2);
+    return { provider, ok: false, status: "unavailable", latencyMs: Date.now() - startedAt, error: error62.message, outcome };
+  }
+}
+async function recoverProviders({ config: config2 = {}, providers = ["kimi", "zai", "deepseek"], force = false, deps = {} } = {}) {
+  const state = await readProviderState(deps.statePath);
+  const results = [];
+  for (const provider of providers) {
+    if (!force && !shouldProbeProvider(state, provider, config2)) continue;
+    results.push(await probeProvider(provider, { config: config2, deps }));
+  }
+  return { probed: results.length, results };
+}
+var STATE_VERSION, DEFAULT_STATE, MIGRATIONS;
+var init_provider_state = __esm({
+  "src/lib/provider-state.mjs"() {
+    init_json_store();
+    init_quota();
+    STATE_VERSION = 2;
+    DEFAULT_STATE = { version: STATE_VERSION, providers: {} };
+    MIGRATIONS = {
+      1: (state) => ({ ...state, providers: state.providers ?? {} })
+    };
+  }
+});
+
+// src/lib/failure-memory.mjs
+import { createHash as createHash2 } from "node:crypto";
+import { existsSync as existsSync7 } from "node:fs";
+import { appendFile as appendFile2, chmod as chmod5, mkdir as mkdir5, readFile as readFile5 } from "node:fs/promises";
+import { homedir as homedir7 } from "node:os";
+import { dirname as dirname6, resolve as resolve7 } from "node:path";
+function expandHome6(value) {
+  if (value === "~") return homedir7();
+  if (typeof value === "string" && value.startsWith("~/")) return resolve7(homedir7(), value.slice(2));
+  return resolve7(value);
+}
+function failureMemoryPath() {
+  return expandHome6(process.env.CODEX_MOA_FAILURE_MEMORY || "~/.codex-moa/failures.jsonl");
+}
+function failureMemoryPolicy(config2 = {}) {
+  const source = config2.failureMemory ?? {};
+  return {
+    transientWindowMs: Number(source.transientWindowHours ?? 6) * 36e5,
+    transientThreshold: Number(source.transientThreshold ?? 2),
+    transientGuardMs: Number(source.transientGuardHours ?? 1) * 36e5,
+    deterministicGuardMs: Number(source.deterministicGuardHours ?? 24) * 36e5,
+    protocolGuardMs: Number(source.protocolGuardHours ?? 2) * 36e5
+  };
+}
+function failureText(result = {}) {
+  return redactText(result.stderr || result.error || result.stopReason || result.summary || result.status || "unknown failure").slice(0, 1e3);
+}
+function classifySeatFailure(result = {}) {
+  const text = failureText(result);
+  if (result.timedOut === true || /timeout|timed out|abort/i.test(text)) return "timeout";
+  if (/unsupported|not supported|unknown model|model not found|invalid model|capabilit/i.test(text)) return "capability";
+  if (/context.{0,20}(length|limit|window)|too many tokens/i.test(text)) return "context_limit";
+  if (/invalid (json|response)|parse error|protocol|malformed/i.test(text)) return "protocol";
+  const providerKind = classifyProviderError(text);
+  return providerKind === "unknown" ? "execution" : providerKind;
+}
+function normalizedFingerprintText(text) {
+  return text.toLowerCase().replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, "<uuid>").replace(/\b\d{4,}\b/g, "<n>").replace(/\/[\w./-]+/g, "<path>").replace(/\s+/g, " ").trim();
+}
+async function recordSeatFailure({ taskId, level, seat, result }, path = failureMemoryPath()) {
+  const message = failureText(result);
+  const kind = classifySeatFailure(result);
+  const signature = createHash2("sha256").update(`${seat.model}
+${seat.harness}
+${kind}
+${normalizedFingerprintText(message)}`).digest("hex").slice(0, 20);
+  const entry = {
+    type: "failure",
+    time: (/* @__PURE__ */ new Date()).toISOString(),
+    taskId,
+    level,
+    seat: seat.seat,
+    role: seat.role,
+    model: seat.model,
+    harness: seat.harness,
+    runtime: seat.runtime ?? "cli",
+    auditMode: seat.auditMode ?? null,
+    status: result.status ?? "failed",
+    timedOut: result.timedOut === true,
+    stopReason: result.stopReason ?? null,
+    kind,
+    signature,
+    message
+  };
+  await mkdir5(dirname6(path), { recursive: true });
+  await appendFile2(path, `${JSON.stringify(entry)}
+`, { encoding: "utf8", mode: 384 });
+  await chmod5(path, 384).catch(() => {
+  });
+  return entry;
+}
+async function recordSeatRecovery({ taskId, level, seat, result }, path = failureMemoryPath()) {
+  const entry = {
+    type: "recovery",
+    time: (/* @__PURE__ */ new Date()).toISOString(),
+    taskId,
+    level,
+    seat: seat.seat,
+    role: seat.role,
+    model: seat.model,
+    harness: seat.harness,
+    runtime: seat.runtime ?? "cli",
+    auditMode: seat.auditMode ?? null,
+    status: result.status ?? "done",
+    durationMs: Number.isFinite(Number(result.durationMs)) ? Number(result.durationMs) : null
+  };
+  await mkdir5(dirname6(path), { recursive: true });
+  await appendFile2(path, `${JSON.stringify(entry)}
+`, { encoding: "utf8", mode: 384 });
+  await chmod5(path, 384).catch(() => {
+  });
+  return entry;
+}
+async function readFailureMemory(path = failureMemoryPath(), limit = 1e4) {
+  if (!existsSync7(path)) return [];
+  try {
+    return (await readFile5(path, "utf8")).split(/\r?\n/).filter(Boolean).slice(-limit).map(JSON.parse);
+  } catch {
+    return [];
+  }
+}
+function summarizeFailureMemory(entries = [], { config: config2 = {}, now = Date.now() } = {}) {
+  const policy = failureMemoryPolicy(config2);
+  const routes = {};
+  const recentSignatureCounts = /* @__PURE__ */ new Map();
+  const latestRecovery = /* @__PURE__ */ new Map();
+  for (const entry of entries) {
+    const at = Date.parse(entry.time);
+    if (!Number.isFinite(at)) continue;
+    const route = `${entry.model}@${entry.harness}`;
+    if (entry.type === "recovery") {
+      if (!latestRecovery.has(route) || at > latestRecovery.get(route)) latestRecovery.set(route, at);
+      continue;
+    }
+    if (now - at > policy.transientWindowMs) continue;
+    const key = `${entry.model}@${entry.harness}:${entry.signature}`;
+    recentSignatureCounts.set(key, (recentSignatureCounts.get(key) ?? 0) + 1);
+  }
+  for (const entry of entries) {
+    const at = Date.parse(entry.time);
+    if (!Number.isFinite(at)) continue;
+    const route = `${entry.model}@${entry.harness}`;
+    const state = routes[route] ??= { model: entry.model, harness: entry.harness, failures: 0, recoveries: 0, byKind: {}, signatures: {}, activeGuard: null, lastFailureAt: null, lastRecoveryAt: null };
+    if (entry.type === "recovery") {
+      state.recoveries += 1;
+      if (!state.lastRecoveryAt || at > Date.parse(state.lastRecoveryAt)) state.lastRecoveryAt = entry.time;
+      continue;
+    }
+    state.failures += 1;
+    state.byKind[entry.kind] = (state.byKind[entry.kind] ?? 0) + 1;
+    state.signatures[entry.signature] = (state.signatures[entry.signature] ?? 0) + 1;
+    if (!state.lastFailureAt || at > Date.parse(state.lastFailureAt)) state.lastFailureAt = entry.time;
+    const age = now - at;
+    const deterministic = ["auth", "capability"].includes(entry.kind);
+    const protocol = entry.kind === "protocol";
+    const sameSignatureRecent = recentSignatureCounts.get(`${entry.model}@${entry.harness}:${entry.signature}`) ?? 0;
+    const guardMs = deterministic ? policy.deterministicGuardMs : protocol ? policy.protocolGuardMs : sameSignatureRecent >= policy.transientThreshold ? policy.transientGuardMs : 0;
+    if (guardMs > 0 && age < guardMs && (latestRecovery.get(route) ?? -Infinity) < at) {
+      const guardUntil = new Date(at + guardMs).toISOString();
+      if (!state.activeGuard || Date.parse(guardUntil) > Date.parse(state.activeGuard.guardUntil)) {
+        state.activeGuard = { kind: entry.kind, signature: entry.signature, count: sameSignatureRecent, guardUntil, reason: deterministic || protocol ? "deterministic failure" : "repeated transient failure" };
+      }
+    }
+  }
+  return { entries: entries.length, routes, policy };
+}
+function guarded(summary, model, harness) {
+  return summary?.routes?.[`${model}@${harness}`]?.activeGuard ?? null;
+}
+function failureGuardFor(summary, model, harness) {
+  return guarded(summary, model, harness);
+}
+function providerForFamily(family) {
+  if (family === "moonshot") return "kimi";
+  if (family === "zhipu") return "zai";
+  if (family === "deepseek") return "deepseek";
+  return "unknown";
+}
+function applyModel(seat, model, harness) {
+  seat.originalModel ??= seat.model;
+  seat.originalHarness ??= seat.harness;
+  seat.model = model.id;
+  seat.providerModel = model.providerModel;
+  seat.dsh = model.dsh;
+  seat.pi = model.pi;
+  seat.claude = model.claude;
+  seat.codex = model.codex;
+  seat.family = model.family;
+  seat.harness = harness;
+  seat.modelTier = model.tier;
+  seat.failureAdjusted = true;
+}
+function applyFailureAvoidance(seats2, { summary, modelsConfig, captain = null, health = null } = {}) {
+  const adjustments = [];
+  const blocked = [];
+  const models = listModels(modelsConfig);
+  for (const seat of seats2) {
+    const active = guarded(summary, seat.model, seat.harness);
+    if (!active) continue;
+    const current = resolveModel(seat.model, modelsConfig);
+    if (seat.auditMode === "shadow") {
+      const alternateHarness = (current.supportedHarnesses ?? [current.harness]).find((harness) => harness !== seat.harness && !guarded(summary, current.id, harness));
+      if (alternateHarness) {
+        const from2 = `${seat.model}@${seat.harness}`;
+        seat.harness = alternateHarness;
+        seat.failureAdjusted = true;
+        adjustments.push({ seat: seat.seat, action: "changed_harness", from: from2, to: `${seat.model}@${seat.harness}`, guard: active });
+      } else {
+        seat.skipDispatch = true;
+        seat.skipReason = `active failure guard for ${seat.model}@${seat.harness}`;
+        adjustments.push({ seat: seat.seat, action: "skipped_shadow", from: `${seat.model}@${seat.harness}`, guard: active });
+      }
+      continue;
+    }
+    const pairedExecutor = seats2.find((item) => item.seat === seat.pairedExecutor) ?? seats2.find((item) => item.role === "executor");
+    const pairedFamily = pairedExecutor ? resolveModel(pairedExecutor.model, modelsConfig).family : null;
+    const candidates = models.filter((model) => model.id !== current.id).filter((model) => model.tier === current.tier).filter((model) => !(seat.role === "auditor" && pairedFamily && model.family === pairedFamily)).filter((model) => !(seat.role === "auditor" && captain?.family && captain.family !== "unknown" && model.family === captain.family)).filter((model) => !["critical", "inactive"].includes(health?.providers?.[providerForFamily(model.family)]?.status)).map((model) => ({ model, harness: (model.supportedHarnesses ?? [model.harness]).includes("pi") ? "pi" : model.harness })).filter(({ model, harness }) => !guarded(summary, model.id, harness)).sort((left, right) => {
+      const leftSubscription = ["moonshot", "zhipu"].includes(left.model.family) ? 0 : 1;
+      const rightSubscription = ["moonshot", "zhipu"].includes(right.model.family) ? 0 : 1;
+      return leftSubscription - rightSubscription;
+    });
+    const replacement = candidates[0];
+    if (!replacement) {
+      blocked.push({ seat: seat.seat, route: `${seat.model}@${seat.harness}`, guard: active });
+      continue;
+    }
+    const from = `${seat.model}@${seat.harness}`;
+    applyModel(seat, replacement.model, replacement.harness);
+    adjustments.push({ seat: seat.seat, action: "rerouted_failure_guard", from, to: `${seat.model}@${seat.harness}`, guard: active });
+  }
+  return { adjustments, blocked };
+}
+var init_failure_memory = __esm({
+  "src/lib/failure-memory.mjs"() {
+    init_provider_state();
+    init_models();
+    init_redact();
+  }
+});
+
+// src/lib/evolution.mjs
+import { appendFile as appendFile3, chmod as chmod6, copyFile, mkdir as mkdir6, readFile as readFile6, rename as rename4, writeFile as writeFile4 } from "node:fs/promises";
+import { createHash as createHash3, randomUUID as randomUUID4 } from "node:crypto";
+import { homedir as homedir8 } from "node:os";
+import { dirname as dirname7, join as join5, resolve as resolve8 } from "node:path";
+function expandHome7(value) {
+  if (typeof value !== "string") return value;
+  if (value === "~") return homedir8();
+  if (value.startsWith("~/")) return resolve8(homedir8(), value.slice(2));
+  return resolve8(value);
+}
 function evolutionPaths() {
-  const root = expandHome4(process.env.CODEX_MOA_EVOLUTION_HOME || "~/.codex-moa/evolution");
+  const root = expandHome7(process.env.CODEX_MOA_EVOLUTION_HOME || "~/.codex-moa/evolution");
   return {
     root,
     events: join5(root, "events.jsonl"),
@@ -29311,13 +30296,13 @@ function evolutionPaths() {
   };
 }
 function policyPath() {
-  return expandHome4(process.env.CODEX_MOA_POLICY_PATH || "~/.codex-moa/evolution-policy.json");
+  return expandHome7(process.env.CODEX_MOA_POLICY_PATH || "~/.codex-moa/evolution-policy.json");
 }
 async function ensureEvolutionStore(paths = evolutionPaths()) {
-  for (const path of [paths.root, paths.proposals, paths.backups]) await mkdir3(path, { recursive: true });
+  for (const path of [paths.root, paths.proposals, paths.backups]) await mkdir6(path, { recursive: true });
 }
 function id(prefix = "evo") {
-  return `${prefix}-${(/* @__PURE__ */ new Date()).toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${randomUUID3().slice(0, 8)}`;
+  return `${prefix}-${(/* @__PURE__ */ new Date()).toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${randomUUID4().slice(0, 8)}`;
 }
 function validateProposalId(proposalId) {
   const value = String(proposalId ?? "");
@@ -29325,7 +30310,7 @@ function validateProposalId(proposalId) {
   return value;
 }
 function hash2(value) {
-  return createHash("sha256").update(String(value)).digest("hex");
+  return createHash3("sha256").update(String(value)).digest("hex");
 }
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
@@ -29340,6 +30325,7 @@ function summarizeReliability(states, minimumSamples = 3) {
     successRate: state.runs ? state.done / state.runs : null,
     failureRate: state.runs ? state.failed / state.runs : null,
     timeoutRate: state.runs ? state.timedOut / state.runs : null,
+    outputTps: Number(state.durationMs) > 0 ? Number(state.outputTokens ?? 0) / (Number(state.durationMs) / 1e3) : null,
     sampleSufficient: state.runs >= minimumSamples
   }]));
 }
@@ -29352,6 +30338,51 @@ function validatePolicyPatch(patch, topLevel = true) {
   }
   return patch;
 }
+function effortEntries(reasoning = {}) {
+  const entries = [];
+  for (const [field, values] of Object.entries({
+    defaultByLevel: reasoning.defaultByLevel,
+    auditByStakes: reasoning.auditByStakes,
+    architectByLevel: reasoning.architectByLevel
+  })) {
+    for (const [key, value] of Object.entries(values ?? {})) entries.push({ path: `reasoning.${field}.${key}`, value });
+  }
+  if (reasoning.vision !== void 0) entries.push({ path: "reasoning.vision", value: reasoning.vision });
+  for (const [model, profile] of Object.entries(reasoning.byModel ?? {})) {
+    for (const [level, value] of Object.entries(profile?.byLevel ?? {})) {
+      entries.push({ path: `reasoning.byModel.${model}.byLevel.${level}`, value, model });
+    }
+  }
+  return entries;
+}
+function validateReasoningPolicyPatch(patch, modelsConfig = loadEffectiveModels()) {
+  const reasoning = patch?.reasoning;
+  if (!reasoning) return { ok: true, checks: [], modelCapabilities: {} };
+  if (reasoning.mode !== void 0 && !["task-aware", "provider-default"].includes(reasoning.mode)) {
+    throw new Error(`Unsupported reasoning.mode: ${reasoning.mode}`);
+  }
+  const checks = [];
+  for (const entry of effortEntries(reasoning)) {
+    const normalized = normalizeEffort(entry.value);
+    if (!normalized) throw new Error(`Unsupported reasoning effort at ${entry.path}: ${entry.value}`);
+    if (entry.model) {
+      const model = resolveModel(entry.model, modelsConfig);
+      const effective = resolveReasoningEffort(model.id, normalized, modelsConfig);
+      if (effective !== normalized) {
+        throw new Error(`${entry.path}=${normalized} is not an effective effort for ${model.id}; current capability maps it to ${effective}`);
+      }
+      checks.push({ path: entry.path, requested: normalized, effective, model: model.id });
+    } else {
+      checks.push({ path: entry.path, requested: normalized, effective: null, model: null });
+    }
+  }
+  const modelCapabilities = Object.fromEntries(Object.entries(modelsConfig.models ?? {}).map(([id2, model]) => [id2, {
+    supported: model.reasoning?.supported ?? [],
+    default: model.reasoning?.default ?? null,
+    source: modelsConfig.reasoningSources?.[id2] ?? "local"
+  }]));
+  return { ok: true, checks, modelCapabilities };
+}
 function deepMerge(base, patch) {
   if (patch === null || typeof patch !== "object" || Array.isArray(patch)) return patch;
   const output2 = base && typeof base === "object" && !Array.isArray(base) ? { ...base } : {};
@@ -29360,17 +30391,17 @@ function deepMerge(base, patch) {
 }
 async function recordEvolutionEvent(event, paths = evolutionPaths()) {
   await ensureEvolutionStore(paths);
-  await appendFile(paths.events, `${JSON.stringify({ time: (/* @__PURE__ */ new Date()).toISOString(), ...event })}
+  await appendFile3(paths.events, `${JSON.stringify({ time: (/* @__PURE__ */ new Date()).toISOString(), ...event })}
 `, "utf8");
 }
 async function recordOutcome(outcome, paths = evolutionPaths()) {
   await ensureEvolutionStore(paths);
-  await appendFile(paths.outcomes, `${JSON.stringify({ time: (/* @__PURE__ */ new Date()).toISOString(), ...outcome })}
+  await appendFile3(paths.outcomes, `${JSON.stringify({ time: (/* @__PURE__ */ new Date()).toISOString(), ...outcome, stage: outcome.stage ?? "final" })}
 `, "utf8");
 }
 async function readJsonl(path) {
   try {
-    return (await readFile3(path, "utf8")).split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+    return (await readFile6(path, "utf8")).split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
   } catch {
     return [];
   }
@@ -29380,11 +30411,17 @@ async function analyzeEvolution(paths = evolutionPaths(), limit = 200) {
   const outcomes = (await readJsonl(paths.outcomes)).slice(-limit);
   const seatStates = {};
   const models = {};
+  const reasoningRoutes = {};
+  const executionRoutes = {};
   let auditWarnings = 0;
   let timeouts = 0;
+  const finalOutcomes = outcomes.filter((outcome) => !outcome.stage || outcome.stage === "final");
+  const finalOutcomeByTask = new Map(finalOutcomes.map((outcome) => [outcome.taskId, outcome]));
+  let automaticStageReviews = 0;
   for (const event of events) {
     if (event.type === "task_completed") {
       auditWarnings += event.auditWarnings?.length ?? 0;
+      automaticStageReviews += event.stageReviews?.length ?? 0;
       for (const result of event.results ?? []) {
         const seat = result.seat ?? "unknown";
         seatStates[seat] ??= { runs: 0, done: 0, failed: 0, timedOut: 0 };
@@ -29401,34 +30438,146 @@ async function analyzeEvolution(paths = evolutionPaths(), limit = 200) {
         if (result.status === "done") models[model].done += 1;
         else models[model].failed += 1;
         if (result.timedOut) models[model].timedOut += 1;
+        const effort = result.reasoningEffort ?? "provider-default";
+        const harness = result.harness ?? "unknown";
+        const route = `${model}@${harness}@${effort}`;
+        reasoningRoutes[route] ??= { model, harness, effort, source: result.reasoningSource ?? "unknown", runs: 0, done: 0, failed: 0, timedOut: 0, durationMs: 0, totalTokens: 0, outputTokens: 0 };
+        reasoningRoutes[route].runs += 1;
+        reasoningRoutes[route].done += result.status === "done" ? 1 : 0;
+        reasoningRoutes[route].failed += result.status === "done" ? 0 : 1;
+        reasoningRoutes[route].timedOut += result.timedOut ? 1 : 0;
+        reasoningRoutes[route].durationMs += Number(result.durationMs) || 0;
+        reasoningRoutes[route].totalTokens += Number(result.usage?.totalTokens) || 0;
+        reasoningRoutes[route].outputTokens += Number(result.usage?.outputTokens) || 0;
+        if (result.role === "executor") {
+          const executionKey = `${event.level ?? "unknown"}:${model}@${harness}`;
+          executionRoutes[executionKey] ??= {
+            level: event.level ?? "unknown",
+            model,
+            harness,
+            runs: 0,
+            done: 0,
+            failed: 0,
+            timedOut: 0,
+            adjudicated: 0,
+            accepted: 0,
+            rejected: 0,
+            testsPassed: 0,
+            testsFailed: 0,
+            rated: 0,
+            qualityTotal: 0,
+            durationMs: 0,
+            outputTokens: 0,
+            estimatedUsd: 0,
+            pricedRuns: 0
+          };
+          const state = executionRoutes[executionKey];
+          const outcome = finalOutcomeByTask.get(event.taskId);
+          state.runs += 1;
+          state.done += result.status === "done" ? 1 : 0;
+          state.failed += result.status === "done" ? 0 : 1;
+          state.timedOut += result.timedOut ? 1 : 0;
+          state.durationMs += Number(result.durationMs) || 0;
+          state.outputTokens += Number(result.usage?.outputTokens) || 0;
+          if (Number.isFinite(Number(result.estimatedUsd))) {
+            state.estimatedUsd += Number(result.estimatedUsd);
+            state.pricedRuns += 1;
+          }
+          if (outcome) {
+            state.adjudicated += 1;
+            state.accepted += outcome.accepted === true ? 1 : 0;
+            state.rejected += outcome.accepted === false ? 1 : 0;
+            state.testsPassed += outcome.testsPassed === true ? 1 : 0;
+            state.testsFailed += outcome.testsPassed === false ? 1 : 0;
+            if (Number.isFinite(Number(outcome.quality))) {
+              state.rated += 1;
+              state.qualityTotal += Number(outcome.quality);
+            }
+          }
+        }
       }
     }
   }
-  const accepted = outcomes.filter((outcome) => outcome.accepted === true).length;
-  const rated = outcomes.filter((outcome) => Number.isFinite(Number(outcome.quality))).length;
-  const averageQuality = rated ? outcomes.reduce((sum, outcome) => sum + Number(outcome.quality), 0) / rated : null;
+  for (const state of Object.values(executionRoutes)) {
+    state.completionRate = state.runs ? state.done / state.runs : null;
+    state.acceptanceRate = state.adjudicated ? state.accepted / state.adjudicated : null;
+    state.testsPassRate = state.testsPassed + state.testsFailed > 0 ? state.testsPassed / (state.testsPassed + state.testsFailed) : null;
+    state.averageQuality = state.rated ? state.qualityTotal / state.rated : null;
+    state.outputTps = state.durationMs > 0 ? state.outputTokens / (state.durationMs / 1e3) : null;
+    state.costPerAcceptedTask = state.accepted > 0 && state.pricedRuns > 0 ? state.estimatedUsd / state.accepted : null;
+    state.sampleSufficient = state.runs >= 3 && state.adjudicated >= 3;
+    state.qualityGatePassed = state.sampleSufficient && state.completionRate >= 0.75 && state.acceptanceRate >= 0.75 && (state.averageQuality === null || state.averageQuality >= 7);
+  }
+  const bestQualifiedRouteByLevel = {};
+  for (const level of new Set(Object.values(executionRoutes).map((state) => state.level))) {
+    const candidates = Object.entries(executionRoutes).filter(([, state]) => state.level === level && state.qualityGatePassed);
+    candidates.sort(([, left], [, right]) => {
+      for (const field of ["acceptanceRate", "averageQuality", "testsPassRate", "completionRate"]) {
+        const difference = (Number(right[field]) || 0) - (Number(left[field]) || 0);
+        if (difference !== 0) return difference;
+      }
+      if (left.costPerAcceptedTask !== null && right.costPerAcceptedTask !== null) {
+        const costDifference = left.costPerAcceptedTask - right.costPerAcceptedTask;
+        if (costDifference !== 0) return costDifference;
+      }
+      return left.durationMs / left.runs - right.durationMs / right.runs;
+    });
+    if (candidates[0]) {
+      const [route, state] = candidates[0];
+      bestQualifiedRouteByLevel[level] = {
+        route,
+        qualityGatePassed: true,
+        acceptanceRate: state.acceptanceRate,
+        averageQuality: state.averageQuality,
+        testsPassRate: state.testsPassRate,
+        completionRate: state.completionRate,
+        costPerAcceptedTask: state.costPerAcceptedTask,
+        averageDurationMs: state.durationMs / state.runs,
+        note: "Observed leader only; routing changes require a separate proposal and user approval."
+      };
+    }
+  }
+  const accepted = finalOutcomes.filter((outcome) => outcome.accepted === true).length;
+  const ratedOutcomes = finalOutcomes.filter((outcome) => Number.isFinite(Number(outcome.quality)));
+  const rated = ratedOutcomes.length;
+  const averageQuality = rated ? ratedOutcomes.reduce((sum, outcome) => sum + Number(outcome.quality), 0) / rated : null;
+  const auditMetrics = summarizeAuditMetrics(await readAuditMetrics());
+  const failureMemory = summarizeFailureMemory(await readFailureMemory());
   return {
     sample: { events: events.length, outcomes: outcomes.length },
     auditWarnings,
     timeouts,
     accepted,
-    acceptanceRate: outcomes.length ? accepted / outcomes.length : null,
+    acceptanceRate: finalOutcomes.length ? accepted / finalOutcomes.length : null,
     averageQuality,
     seats: summarizeReliability(seatStates),
     models: summarizeReliability(models),
+    reasoningRoutes: summarizeReliability(reasoningRoutes),
+    executionRoutes,
+    bestQualifiedRouteByLevel,
+    stageReviews: {
+      automatic: automaticStageReviews,
+      captainRecorded: outcomes.filter((outcome) => outcome.stage && outcome.stage !== "final").length,
+      byStage: Object.fromEntries(["plan", "execution", "audit", "final"].map((stage) => [stage, outcomes.filter((outcome) => (outcome.stage ?? "final") === stage).length]))
+    },
+    auditMetrics,
+    failureMemory,
     evidencePolicy: {
       minimumSamples: 3,
-      note: "Rates below the minimum sample size are descriptive only and must not change routing automatically."
+      qualityGate: "Task completion and accepted outcomes take precedence over throughput.",
+      throughputWeight: 0.2,
+      routeQualityGate: { completionRate: 0.75, acceptanceRate: 0.75, averageQuality: 7 },
+      note: "Compare routes within the same task level. Completion, captain acceptance, tests, and quality gate first; known cost, latency, and TPS are tie-breakers. Sparse evidence is descriptive and policy changes remain proposal-first."
     }
   };
 }
 async function writeJson2(path, value) {
-  await mkdir3(dirname4(path), { recursive: true });
-  const temporary = `${path}.${randomUUID3()}.tmp`;
-  await writeFile3(temporary, `${JSON.stringify(value, null, 2)}
+  await mkdir6(dirname7(path), { recursive: true });
+  const temporary = `${path}.${randomUUID4()}.tmp`;
+  await writeFile4(temporary, `${JSON.stringify(value, null, 2)}
 `, { mode: 384 });
-  await rename3(temporary, path);
-  await chmod3(path, 384);
+  await rename4(temporary, path);
+  await chmod6(path, 384);
 }
 async function normalizeProposalExpiry(proposal, file2) {
   const createdAt = Date.parse(proposal.createdAt);
@@ -29443,6 +30592,7 @@ async function normalizeProposalExpiry(proposal, file2) {
 }
 async function createProposal(input2, paths = evolutionPaths()) {
   validatePolicyPatch(input2.policyPatch ?? {});
+  const reasoningCompatibility = validateReasoningPolicyPatch(input2.policyPatch ?? {});
   await ensureEvolutionStore(paths);
   const fingerprint = hash2(stableJson(input2.policyPatch ?? {}));
   const existing = (await listProposals(paths)).find(
@@ -29460,6 +30610,7 @@ async function createProposal(input2, paths = evolutionPaths()) {
     problem: input2.problem,
     evidence: input2.evidence ?? [],
     policyPatch: input2.policyPatch,
+    reasoningCompatibility,
     fingerprint,
     expectedBenefit: input2.expectedBenefit ?? null,
     risks: input2.risks ?? [],
@@ -29488,7 +30639,7 @@ async function listProposals(paths = evolutionPaths()) {
   const proposals = [];
   for (const file2 of files) {
     try {
-      proposals.push(await normalizeProposalExpiry(JSON.parse(await readFile3(file2, "utf8")), file2));
+      proposals.push(await normalizeProposalExpiry(JSON.parse(await readFile6(file2, "utf8")), file2));
     } catch {
     }
   }
@@ -29497,7 +30648,7 @@ async function listProposals(paths = evolutionPaths()) {
 async function getProposal(proposalId, paths = evolutionPaths()) {
   const safeId = validateProposalId(proposalId);
   const file2 = join5(paths.proposals, `${safeId}.json`);
-  return normalizeProposalExpiry(JSON.parse(await readFile3(file2, "utf8")), file2);
+  return normalizeProposalExpiry(JSON.parse(await readFile6(file2, "utf8")), file2);
 }
 async function saveProposal(proposal, paths = evolutionPaths()) {
   await writeJson2(join5(paths.proposals, `${proposal.id}.json`), proposal);
@@ -29515,7 +30666,7 @@ async function updateProposalStatus(proposalId, status, confirmation, expectedCo
 }
 async function proposeFromEvidence(paths = evolutionPaths(), policyFile = null) {
   const analysis = await analyzeEvolution(paths);
-  const policy = policyFile ? JSON.parse(await readFile3(policyFile, "utf8")) : loadEvolutionPolicy();
+  const policy = policyFile ? JSON.parse(await readFile6(policyFile, "utf8")) : loadEvolutionPolicy();
   const proposals = [];
   if (analysis.auditWarnings > 0 && policy.audit?.avoidCaptainFamily !== true) {
     proposals.push(await createProposal({
@@ -29554,20 +30705,21 @@ async function applyProposal(proposalId, confirmation, paths = evolutionPaths(),
   let current = {};
   let hadTarget = true;
   try {
-    current = JSON.parse(await readFile3(target, "utf8"));
+    current = JSON.parse(await readFile6(target, "utf8"));
   } catch {
     hadTarget = false;
   }
   validatePolicyPatch(proposal.policyPatch ?? {});
+  proposal.reasoningCompatibility = validateReasoningPolicyPatch(proposal.policyPatch ?? {});
   const next = deepMerge(current, proposal.policyPatch ?? {});
   const backupDir = join5(paths.backups, proposalId);
-  await mkdir3(backupDir, { recursive: true });
+  await mkdir6(backupDir, { recursive: true });
   const backupFile = join5(backupDir, "evolution-policy.json");
   if (hadTarget) {
     await copyFile(target, backupFile);
-    await chmod3(backupFile, 384);
+    await chmod6(backupFile, 384);
   } else {
-    await writeFile3(backupFile, "{}\n", { mode: 384 });
+    await writeFile4(backupFile, "{}\n", { mode: 384 });
   }
   await writeJson2(target, next);
   proposal.status = "applied";
@@ -29601,130 +30753,44 @@ var DANGEROUS_KEYS, ALLOWED_POLICY_KEYS, PROPOSAL_TTL_DAYS;
 var init_evolution = __esm({
   "src/lib/evolution.mjs"() {
     init_config();
+    init_effective_models();
+    init_reasoning();
+    init_models();
+    init_audit_metrics();
+    init_failure_memory();
     DANGEROUS_KEYS = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
     ALLOWED_POLICY_KEYS = /* @__PURE__ */ new Set(["version", "audit", "routing", "timeouts", "reasoning"]);
     PROPOSAL_TTL_DAYS = 30;
   }
 });
 
-// src/lib/json-store.mjs
-import { existsSync as existsSync5 } from "node:fs";
-import { chmod as chmod4, mkdir as mkdir4, open as open2, readFile as readFile4, rename as rename4, stat, unlink, writeFile as writeFile4 } from "node:fs/promises";
-import { randomUUID as randomUUID4 } from "node:crypto";
-import { dirname as dirname5 } from "node:path";
-async function withFileLock(filePath, fn, { timeoutMs = 1e4, staleMs = 3e4, pollMs = 20 } = {}) {
-  const lockPath = `${filePath}.lock`;
-  await mkdir4(dirname5(filePath), { recursive: true });
-  const started = Date.now();
-  let handle;
-  while (!handle) {
-    try {
-      handle = await open2(lockPath, "wx", 384);
-    } catch (error62) {
-      if (error62?.code !== "EEXIST") throw error62;
-      try {
-        const info = await stat(lockPath);
-        if (Date.now() - info.mtimeMs > staleMs) {
-          await unlink(lockPath).catch(() => {
-          });
-          continue;
-        }
-      } catch {
-      }
-      if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for lock: ${filePath}`);
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, pollMs));
-    }
-  }
-  try {
-    await handle.writeFile(`${process.pid}
-`);
-    return await fn();
-  } finally {
-    await handle.close().catch(() => {
-    });
-    await unlink(lockPath).catch(() => {
-    });
-  }
-}
-async function writeJsonAtomic(path, value, { mode = 384 } = {}) {
-  await mkdir4(dirname5(path), { recursive: true });
-  const temporary = `${path}.${randomUUID4()}.tmp`;
-  await writeFile4(temporary, `${JSON.stringify(value, null, 2)}
-`, { mode });
-  await rename4(temporary, path);
-  await chmod4(path, mode).catch(() => {
-  });
-  return path;
-}
-function migrateJsonStore(value, { version: version2, defaultValue, migrations = {} }) {
-  let current = value && typeof value === "object" ? { ...value } : structuredClone(defaultValue);
-  if (current.__invalid__) return structuredClone(defaultValue);
-  let currentVersion = Number(current.version ?? 1);
-  while (currentVersion < version2) {
-    const nextVersion = currentVersion + 1;
-    const migrate = migrations[currentVersion] ?? migrations[`${currentVersion}->${nextVersion}`];
-    current = migrate ? migrate(current) : current;
-    current.version = nextVersion;
-    currentVersion = nextVersion;
-  }
-  return { ...structuredClone(defaultValue), ...current, version: version2 };
-}
-async function readJsonStore(path, { version: version2 = 1, defaultValue = {}, migrations = {} } = {}) {
-  if (!existsSync5(path)) return migrateJsonStore(structuredClone(defaultValue), { version: version2, defaultValue, migrations });
-  try {
-    const parsed = JSON.parse(await readFile4(path, "utf8"));
-    return migrateJsonStore(parsed, { version: version2, defaultValue, migrations });
-  } catch {
-    return migrateJsonStore({ __invalid__: true }, { version: version2, defaultValue, migrations });
-  }
-}
-async function updateJsonStore(path, updater, options = {}) {
-  const {
-    version: version2 = 1,
-    defaultValue = {},
-    migrations = {},
-    mode = 384,
-    lock = {}
-  } = options;
-  return withFileLock(path, async () => {
-    const current = await readJsonStore(path, { version: version2, defaultValue, migrations });
-    const next = await updater(current);
-    await writeJsonAtomic(path, next, { mode });
-    return next;
-  }, lock);
-}
-var init_json_store = __esm({
-  "src/lib/json-store.mjs"() {
-  }
-});
-
 // src/lib/continuity.mjs
-import { createHash as createHash2 } from "node:crypto";
-import { homedir as homedir6 } from "node:os";
-import { resolve as resolve6 } from "node:path";
-function expandHome5(value) {
+import { createHash as createHash4 } from "node:crypto";
+import { homedir as homedir9 } from "node:os";
+import { resolve as resolve9 } from "node:path";
+function expandHome8(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir6();
-  if (value.startsWith("~/")) return resolve6(homedir6(), value.slice(2));
-  return resolve6(value);
+  if (value === "~") return homedir9();
+  if (value.startsWith("~/")) return resolve9(homedir9(), value.slice(2));
+  return resolve9(value);
 }
 function continuityStorePath() {
-  return expandHome5(process.env.CODEX_MOA_CONTINUITY_PATH || "~/.codex-moa/continuity.json");
+  return expandHome8(process.env.CODEX_MOA_CONTINUITY_PATH || "~/.codex-moa/continuity.json");
 }
 function makeContinuityKey({ group, seat, harness, model, cwd }) {
   if (!group) return null;
-  const raw = JSON.stringify({ group, seat, harness, model, cwd: resolve6(cwd || process.cwd()) });
-  return createHash2("sha256").update(raw).digest("hex").slice(0, 24);
+  const raw = JSON.stringify({ group, seat, harness, model, cwd: resolve9(cwd || process.cwd()) });
+  return createHash4("sha256").update(raw).digest("hex").slice(0, 24);
 }
 async function readContinuityStore(path = continuityStorePath()) {
-  return readJsonStore(path, { version: CONTINUITY_VERSION, defaultValue: DEFAULT_STORE, migrations: MIGRATIONS });
+  return readJsonStore(path, { version: CONTINUITY_VERSION, defaultValue: DEFAULT_STORE, migrations: MIGRATIONS2 });
 }
 async function mergeContinuityStore(store, path = continuityStorePath()) {
   return updateJsonStore(path, (latest) => {
     latest.entries ??= {};
     for (const [key, value] of Object.entries(store.entries ?? {})) latest.entries[key] = value;
     return latest;
-  }, { version: CONTINUITY_VERSION, defaultValue: DEFAULT_STORE, migrations: MIGRATIONS });
+  }, { version: CONTINUITY_VERSION, defaultValue: DEFAULT_STORE, migrations: MIGRATIONS2 });
 }
 function continuityEntry(store, key) {
   return key ? store.entries?.[key] ?? null : null;
@@ -29737,59 +30803,59 @@ function setContinuityEntry(store, key, value) {
 function clearContinuityEntry(store, key) {
   if (key && store.entries) delete store.entries[key];
 }
-var CONTINUITY_VERSION, DEFAULT_STORE, MIGRATIONS;
+var CONTINUITY_VERSION, DEFAULT_STORE, MIGRATIONS2;
 var init_continuity = __esm({
   "src/lib/continuity.mjs"() {
     init_json_store();
     CONTINUITY_VERSION = 2;
     DEFAULT_STORE = { version: CONTINUITY_VERSION, entries: {} };
-    MIGRATIONS = {
+    MIGRATIONS2 = {
       1: (store) => ({ ...store, entries: store.entries ?? {} })
     };
   }
 });
 
 // src/lib/memory.mjs
-import { existsSync as existsSync6, readFileSync as readFileSync5 } from "node:fs";
-import { chmod as chmod5, mkdir as mkdir5, readdir, rename as rename5, writeFile as writeFile5 } from "node:fs/promises";
-import { createHash as createHash3, randomUUID as randomUUID5 } from "node:crypto";
-import { homedir as homedir7 } from "node:os";
-import { dirname as dirname6, join as join6, resolve as resolve7 } from "node:path";
-function expandHome6(value) {
+import { existsSync as existsSync8, readFileSync as readFileSync5 } from "node:fs";
+import { chmod as chmod7, mkdir as mkdir7, readdir, rename as rename5, writeFile as writeFile5 } from "node:fs/promises";
+import { createHash as createHash5, randomUUID as randomUUID5 } from "node:crypto";
+import { homedir as homedir10 } from "node:os";
+import { dirname as dirname8, join as join6, resolve as resolve10 } from "node:path";
+function expandHome9(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir7();
-  if (value.startsWith("~/")) return resolve7(homedir7(), value.slice(2));
-  return resolve7(value);
+  if (value === "~") return homedir10();
+  if (value.startsWith("~/")) return resolve10(homedir10(), value.slice(2));
+  return resolve10(value);
 }
 function memoryRoot() {
-  return expandHome6(process.env.CODEX_MOA_MEMORY_HOME || "~/.codex-moa/memory");
+  return expandHome9(process.env.CODEX_MOA_MEMORY_HOME || "~/.codex-moa/memory");
 }
 function memoryKey({ key, cwd }) {
   const source = `${key || "default"}
-${resolve7(cwd || process.cwd())}`;
-  return createHash3("sha256").update(source).digest("hex").slice(0, 24);
+${resolve10(cwd || process.cwd())}`;
+  return createHash5("sha256").update(source).digest("hex").slice(0, 24);
 }
 function memoryPath(key) {
   return join6(memoryRoot(), `${key}.json`);
 }
 async function saveMemory(memory) {
-  await mkdir5(dirname6(memory.path), { recursive: true });
+  await mkdir7(dirname8(memory.path), { recursive: true });
   const temporary = `${memory.path}.${randomUUID5()}.tmp`;
   await writeFile5(temporary, `${JSON.stringify(memory, null, 2)}
 `, { mode: 384 });
   await rename5(temporary, memory.path);
-  await chmod5(memory.path, 384);
+  await chmod7(memory.path, 384);
   return memory;
 }
 async function loadMemory({ key, cwd, title = null }) {
   const resolvedKey = memoryKey({ key, cwd });
   const path = memoryPath(resolvedKey);
-  if (!existsSync6(path)) {
+  if (!existsSync8(path)) {
     return {
       version: 1,
       key: resolvedKey,
       sourceKey: key,
-      cwd: resolve7(cwd || process.cwd()),
+      cwd: resolve10(cwd || process.cwd()),
       title,
       goal: null,
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -29888,7 +30954,7 @@ function buildMemoryPack(memory, maxChars = 8e3) {
 }
 async function listMemories() {
   const root = memoryRoot();
-  if (!existsSync6(root)) return [];
+  if (!existsSync8(root)) return [];
   const result = [];
   for (const file2 of await readdir(root)) {
     if (!file2.endsWith(".json")) continue;
@@ -29907,31 +30973,31 @@ var init_memory = __esm({
 });
 
 // src/lib/seat-registry.mjs
-import { existsSync as existsSync7, readFileSync as readFileSync6 } from "node:fs";
-import { homedir as homedir8 } from "node:os";
-import { resolve as resolve8 } from "node:path";
-function expandHome7(value) {
+import { existsSync as existsSync9, readFileSync as readFileSync6 } from "node:fs";
+import { homedir as homedir11 } from "node:os";
+import { resolve as resolve11 } from "node:path";
+function expandHome10(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir8();
-  if (value.startsWith("~/")) return resolve8(homedir8(), value.slice(2));
-  return resolve8(value);
+  if (value === "~") return homedir11();
+  if (value.startsWith("~/")) return resolve11(homedir11(), value.slice(2));
+  return resolve11(value);
 }
 function seatRegistryPath() {
-  return expandHome7(process.env.CODEX_MOA_SEAT_REGISTRY || "~/.codex-moa/seats.json");
+  return expandHome10(process.env.CODEX_MOA_SEAT_REGISTRY || "~/.codex-moa/seats.json");
 }
 function readSeatRegistry(path = seatRegistryPath()) {
-  if (!existsSync7(path)) return migrateJsonStore(structuredClone(DEFAULT_REGISTRY), { version: SEAT_REGISTRY_VERSION, defaultValue: DEFAULT_REGISTRY, migrations: MIGRATIONS2 });
+  if (!existsSync9(path)) return migrateJsonStore(structuredClone(DEFAULT_REGISTRY), { version: SEAT_REGISTRY_VERSION, defaultValue: DEFAULT_REGISTRY, migrations: MIGRATIONS3 });
   try {
-    return migrateJsonStore(JSON.parse(readFileSync6(path, "utf8")), { version: SEAT_REGISTRY_VERSION, defaultValue: DEFAULT_REGISTRY, migrations: MIGRATIONS2 });
+    return migrateJsonStore(JSON.parse(readFileSync6(path, "utf8")), { version: SEAT_REGISTRY_VERSION, defaultValue: DEFAULT_REGISTRY, migrations: MIGRATIONS3 });
   } catch {
-    return migrateJsonStore({ __invalid__: true }, { version: SEAT_REGISTRY_VERSION, defaultValue: DEFAULT_REGISTRY, migrations: MIGRATIONS2 });
+    return migrateJsonStore({ __invalid__: true }, { version: SEAT_REGISTRY_VERSION, defaultValue: DEFAULT_REGISTRY, migrations: MIGRATIONS3 });
   }
 }
 async function updateSeatRegistry(updater, path = seatRegistryPath()) {
   return updateJsonStore(path, async (registry2) => updater(registry2), {
     version: SEAT_REGISTRY_VERSION,
     defaultValue: DEFAULT_REGISTRY,
-    migrations: MIGRATIONS2
+    migrations: MIGRATIONS3
   });
 }
 async function upsertSeatAtomic(path, seatKey2, value) {
@@ -29948,29 +31014,29 @@ function upsertSeat(registry2, seatKey2, value) {
 function listSeats(registry2) {
   return Object.entries(registry2.seats ?? {}).map(([key, value]) => ({ key, ...value }));
 }
-var SEAT_REGISTRY_VERSION, DEFAULT_REGISTRY, MIGRATIONS2;
+var SEAT_REGISTRY_VERSION, DEFAULT_REGISTRY, MIGRATIONS3;
 var init_seat_registry = __esm({
   "src/lib/seat-registry.mjs"() {
     init_json_store();
     SEAT_REGISTRY_VERSION = 2;
     DEFAULT_REGISTRY = { version: SEAT_REGISTRY_VERSION, seats: {} };
-    MIGRATIONS2 = {
+    MIGRATIONS3 = {
       1: (registry2) => ({ ...registry2, seats: registry2.seats ?? {} })
     };
   }
 });
 
 // src/lib/worktree.mjs
-import { existsSync as existsSync8 } from "node:fs";
-import { chmod as chmod6, mkdir as mkdir6, writeFile as writeFile6 } from "node:fs/promises";
-import { createHash as createHash4 } from "node:crypto";
-import { homedir as homedir9 } from "node:os";
-import { join as join7, resolve as resolve9, sep } from "node:path";
-function expandHome8(value) {
+import { existsSync as existsSync10 } from "node:fs";
+import { chmod as chmod8, mkdir as mkdir8, mkdtemp, rm, writeFile as writeFile6 } from "node:fs/promises";
+import { createHash as createHash6 } from "node:crypto";
+import { homedir as homedir12, tmpdir } from "node:os";
+import { join as join7, resolve as resolve12, sep } from "node:path";
+function expandHome11(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir9();
-  if (value.startsWith("~/")) return resolve9(homedir9(), value.slice(2));
-  return resolve9(value);
+  if (value === "~") return homedir12();
+  if (value.startsWith("~/")) return resolve12(homedir12(), value.slice(2));
+  return resolve12(value);
 }
 async function gitRoot(cwd) {
   const result = await runCommand({ command: "git", args: ["rev-parse", "--show-toplevel"], cwd, timeoutMs: 1e4 });
@@ -29981,23 +31047,58 @@ async function currentHead(cwd) {
   return result.ok ? result.stdout.trim() : null;
 }
 function worktreeRoot(repo) {
-  const hash3 = createHash4("sha256").update(resolve9(repo)).digest("hex").slice(0, 12);
-  return join7(expandHome8("~/.codex-moa/worktrees"), hash3);
+  const hash3 = createHash6("sha256").update(resolve12(repo)).digest("hex").slice(0, 12);
+  return join7(expandHome11("~/.codex-moa/worktrees"), hash3);
 }
 async function createWorktree({ cwd, taskId, seat }) {
   const repo = await gitRoot(cwd);
   if (!repo) return { supported: false, repo: null, path: null };
   const path = join7(worktreeRoot(repo), taskId, seat);
-  await mkdir6(join7(worktreeRoot(repo), taskId), { recursive: true });
-  if (existsSync8(path)) return { supported: true, repo, path, baseCommit: await currentHead(repo), existing: true };
+  await mkdir8(join7(worktreeRoot(repo), taskId), { recursive: true });
+  if (existsSync10(path)) return { supported: true, repo, path, baseCommit: await currentHead(repo), existing: true };
+  const sourceHead = await currentHead(repo);
+  const status = await runCommand({ command: "git", args: ["status", "--porcelain=v1", "--untracked-files=all"], cwd: repo, timeoutMs: 3e4 });
+  let snapshotCommit = sourceHead;
+  let includesWorkingTree = false;
+  if (status.ok && status.stdout.trim()) {
+    const temporary = await mkdtemp(join7(tmpdir(), "codex-moa-index-"));
+    const indexPath = join7(temporary, "index");
+    const env = {
+      GIT_INDEX_FILE: indexPath,
+      GIT_AUTHOR_NAME: "Codex MOA",
+      GIT_AUTHOR_EMAIL: "codex-moa@localhost",
+      GIT_COMMITTER_NAME: "Codex MOA",
+      GIT_COMMITTER_EMAIL: "codex-moa@localhost"
+    };
+    try {
+      const readTree = await runCommand({ command: "git", args: ["read-tree", "HEAD"], cwd: repo, env, timeoutMs: 3e4 });
+      if (!readTree.ok) throw new Error(readTree.stderr || "git read-tree failed");
+      const add = await runCommand({ command: "git", args: ["add", "-A", "--", "."], cwd: repo, env, timeoutMs: 12e4 });
+      if (!add.ok) throw new Error(add.stderr || "git add into temporary index failed");
+      const tree = await runCommand({ command: "git", args: ["write-tree"], cwd: repo, env, timeoutMs: 3e4 });
+      if (!tree.ok || !tree.stdout.trim()) throw new Error(tree.stderr || "git write-tree failed");
+      const commit = await runCommand({
+        command: "git",
+        args: ["commit-tree", tree.stdout.trim(), "-p", sourceHead, "-m", `codex-moa workspace snapshot ${taskId}/${seat}`],
+        cwd: repo,
+        env,
+        timeoutMs: 3e4
+      });
+      if (!commit.ok || !commit.stdout.trim()) throw new Error(commit.stderr || "git commit-tree failed");
+      snapshotCommit = commit.stdout.trim();
+      includesWorkingTree = true;
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  }
   const result = await runCommand({
     command: "git",
-    args: ["worktree", "add", "--detach", path, "HEAD"],
+    args: ["worktree", "add", "--detach", path, snapshotCommit],
     cwd: repo,
     timeoutMs: 12e4
   });
-  if (!result.ok && !existsSync8(path)) throw new Error(result.stderr || `git worktree add failed with exit ${result.code}`);
-  return { supported: true, repo, path, baseCommit: await currentHead(repo) };
+  if (!result.ok && !existsSync10(path)) throw new Error(result.stderr || `git worktree add failed with exit ${result.code}`);
+  return { supported: true, repo, path, baseCommit: snapshotCommit, sourceHead, includesWorkingTree };
 }
 function parseStatus(output2) {
   const lines = String(output2 ?? "").split(/\r?\n/).filter(Boolean);
@@ -30015,7 +31116,7 @@ function parseStatus(output2) {
   return { changedFiles, untrackedFiles, deletedFiles };
 }
 async function captureWorktreeDiff(path) {
-  if (!path || !existsSync8(path)) return "";
+  if (!path || !existsSync10(path)) return "";
   const status = await runCommand({ command: "git", args: ["status", "--porcelain=v1", "--untracked-files=all"], cwd: path, timeoutMs: 3e4 });
   const parsed = parseStatus(status.stdout);
   if (parsed.untrackedFiles.length > 0) {
@@ -30028,7 +31129,7 @@ async function captureWorktreeDiff(path) {
   return result.stdout || "";
 }
 async function inspectWorktree(path, { baseCommit = null, resultStatus = "done", diff = null } = {}) {
-  if (!path || !existsSync8(path)) {
+  if (!path || !existsSync10(path)) {
     return { exists: false, clean: false, changedFiles: [], untrackedFiles: [], deletedFiles: [], diffBytes: 0, partialWrite: false, hasConflicts: false };
   }
   const status = await runCommand({ command: "git", args: ["status", "--porcelain=v1", "--untracked-files=all"], cwd: path, timeoutMs: 3e4 });
@@ -30052,31 +31153,31 @@ async function inspectWorktree(path, { baseCommit = null, resultStatus = "done",
 async function writeDiffArtifact(root, seat, diff) {
   if (!diff) return null;
   const path = join7(root, "artifacts", `${seat}.patch`);
-  await mkdir6(join7(root, "artifacts"), { recursive: true });
+  await mkdir8(join7(root, "artifacts"), { recursive: true });
   await writeFile6(path, diff, { encoding: "utf8", mode: 384 });
-  await chmod6(path, 384).catch(() => {
+  await chmod8(path, 384).catch(() => {
   });
   return path;
 }
 async function checkPatch({ cwd, patchPath }) {
   const repo = await gitRoot(cwd);
   if (!repo) return { ok: false, error: "Not a Git repository" };
-  const result = await runCommand({ command: "git", args: ["apply", "--check", "--binary", resolve9(patchPath)], cwd: repo, timeoutMs: 6e4 });
+  const result = await runCommand({ command: "git", args: ["apply", "--check", "--binary", resolve12(patchPath)], cwd: repo, timeoutMs: 6e4 });
   return { ok: result.ok, repo, stdout: result.stdout, error: result.ok ? null : result.stderr };
 }
 async function applyPatch({ cwd, patchPath, threeWay = false }) {
   const repo = await gitRoot(cwd);
   if (!repo) return { ok: false, error: "Not a Git repository" };
-  const args = ["apply", "--binary", ...threeWay ? ["--3way"] : [], resolve9(patchPath)];
+  const args = ["apply", "--binary", ...threeWay ? ["--3way"] : [], resolve12(patchPath)];
   const result = await runCommand({ command: "git", args, cwd: repo, timeoutMs: 12e4 });
   return { ok: result.ok, repo, stdout: result.stdout, error: result.ok ? null : result.stderr };
 }
 async function revertPatch({ cwd, patchPath }) {
   const repo = await gitRoot(cwd);
   if (!repo) return { ok: false, error: "Not a Git repository" };
-  const check2 = await runCommand({ command: "git", args: ["apply", "-R", "--check", "--binary", resolve9(patchPath)], cwd: repo, timeoutMs: 6e4 });
+  const check2 = await runCommand({ command: "git", args: ["apply", "-R", "--check", "--binary", resolve12(patchPath)], cwd: repo, timeoutMs: 6e4 });
   if (!check2.ok) return { ok: false, repo, error: check2.stderr };
-  const result = await runCommand({ command: "git", args: ["apply", "-R", "--binary", resolve9(patchPath)], cwd: repo, timeoutMs: 12e4 });
+  const result = await runCommand({ command: "git", args: ["apply", "-R", "--binary", resolve12(patchPath)], cwd: repo, timeoutMs: 12e4 });
   return { ok: result.ok, repo, stdout: result.stdout, error: result.ok ? null : result.stderr };
 }
 async function listWorktrees(cwd) {
@@ -30098,17 +31199,17 @@ async function listWorktrees(cwd) {
   });
 }
 async function removeWorktree(path, { repo = null, force = false } = {}) {
-  if (!path || !existsSync8(path)) return { removed: false, error: "Worktree does not exist" };
+  if (!path || !existsSync10(path)) return { removed: false, error: "Worktree does not exist" };
   if (!repo) return { removed: false, error: "Repository root is required for managed worktree removal" };
   const repository = await gitRoot(repo);
   if (!repository) return { removed: false, error: "Not a Git repository" };
-  const target = resolve9(path);
-  const managedRoot = resolve9(worktreeRoot(repository));
+  const target = resolve12(path);
+  const managedRoot = resolve12(worktreeRoot(repository));
   if (!target.startsWith(`${managedRoot}${sep}`)) {
     return { removed: false, path: target, error: `Refusing to remove a worktree outside the managed root: ${managedRoot}` };
   }
   const registered = await listWorktrees(repository);
-  if (!registered.some((entry) => resolve9(entry.path) === target)) {
+  if (!registered.some((entry) => resolve12(entry.path) === target)) {
     return { removed: false, path: target, error: "Refusing to remove a path not registered as a git worktree" };
   }
   const args = ["worktree", "remove", ...force ? ["--force"] : [], path];
@@ -30129,8 +31230,8 @@ var init_worktree = __esm({
 });
 
 // src/lib/context-pack.mjs
-import { createHash as createHash5 } from "node:crypto";
-import { readFile as readFile5 } from "node:fs/promises";
+import { createHash as createHash7 } from "node:crypto";
+import { readFile as readFile7 } from "node:fs/promises";
 import { join as join8 } from "node:path";
 function keywords(task) {
   return [...new Set(String(task).toLowerCase().match(/[a-zA-Z0-9_./-]{3,}|[\u4e00-\u9fff]{2,}/g) ?? [])].filter((word) => !STOP_WORDS.has(word)).slice(0, 40);
@@ -30153,11 +31254,11 @@ async function buildContextPack({ cwd, task, maxFiles = 20, maxTotalTokens = 32e
     if (score <= 0) continue;
     let content = "";
     try {
-      content = await readFile5(join8(cwd, rel), "utf8");
+      content = await readFile7(join8(cwd, rel), "utf8");
     } catch {
     }
     for (const term of terms) if (content.toLowerCase().includes(term)) score += 2;
-    candidates.push({ path: rel, score, size: content.length, hash: createHash5("sha256").update(content).digest("hex").slice(0, 16), excerpt: content.slice(0, 1200) });
+    candidates.push({ path: rel, score, size: content.length, hash: createHash7("sha256").update(content).digest("hex").slice(0, 16), excerpt: content.slice(0, 1200) });
   }
   candidates.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
   const files = [];
@@ -30187,16 +31288,17 @@ var init_context_pack = __esm({
 });
 
 // src/lib/navigator.mjs
-function navigatorReview({ plan, results, auditWarnings = [], quota = [] }) {
+function navigatorReview({ plan, results, auditWarnings = [], quota = [], allowWrite = false }) {
   const findings = [];
-  const failed = (results ?? []).filter((result) => result.status !== "done");
-  const timedOut = (results ?? []).filter((result) => result.timedOut);
+  const shadows = (results ?? []).filter((result) => result.auditMode === "shadow");
+  const failed = (results ?? []).filter((result) => result.auditMode !== "shadow" && result.status !== "done");
+  const timedOut = (results ?? []).filter((result) => result.auditMode !== "shadow" && result.timedOut);
   const executors = (results ?? []).filter((result) => ["executor", "architect"].includes(result.role));
-  const missingDiff = executors.filter((result) => !result.diffPath);
+  const missingDiff = allowWrite ? executors.filter((result) => !result.diffPath) : [];
   const partialWrites = (results ?? []).filter((result) => result.partialWrite === true);
   const conflictWrites = (results ?? []).filter((result) => result.worktreeState?.hasConflicts === true);
-  const auditBlocks = (results ?? []).filter((result) => result.structured?.kind === "audit" && result.structured.verdict === "block");
-  const auditParseErrors = (results ?? []).filter((result) => result.structured?.parseError);
+  const auditBlocks = (results ?? []).filter((result) => result.auditMode !== "shadow" && result.structured?.kind === "audit" && result.structured.verdict === "block");
+  const auditParseErrors = (results ?? []).filter((result) => result.auditMode !== "shadow" && result.structured?.parseError);
   const lowQuota = (quota ?? []).filter((item) => item.quota?.window?.remainingPercent !== null && item.quota?.window?.remainingPercent !== void 0 && item.quota.window.remainingPercent < 5);
   for (const result of failed) findings.push({ severity: "P1", type: "seat-failed", seat: result.seat, message: result.error || "seat failed" });
   for (const result of timedOut) findings.push({ severity: "P1", type: "seat-timeout", seat: result.seat, message: `timed out after ${result.durationMs}ms` });
@@ -30206,7 +31308,10 @@ function navigatorReview({ plan, results, auditWarnings = [], quota = [] }) {
   for (const result of conflictWrites) findings.push({ severity: "P0", type: "worktree-conflict-markers", seat: result.seat, message: "seat left conflict markers in its worktree" });
   for (const result of auditBlocks) findings.push({ severity: "P0", type: "audit-block", seat: result.seat, message: "auditor returned block" });
   for (const result of auditParseErrors) findings.push({ severity: "P2", type: "audit-parse-error", seat: result.seat, message: result.structured.parseError });
+  for (const result of shadows.filter((item) => item.status !== "done")) findings.push({ severity: "P2", type: "shadow-audit-failed", seat: result.seat, message: result.error || "shadow audit failed; gating result is unaffected" });
+  for (const result of shadows.filter((item) => item.structured?.verdict === "block")) findings.push({ severity: "P2", type: "shadow-audit-block", seat: result.seat, message: "shadow auditor returned block; captain adjudication is required" });
   for (const result of results ?? []) {
+    if (result.auditMode === "shadow") continue;
     for (const finding of result.structured?.findings ?? []) {
       if (!["P0", "P1"].includes(finding.severity)) continue;
       findings.push({
@@ -30235,6 +31340,8 @@ function navigatorReview({ plan, results, auditWarnings = [], quota = [] }) {
       auditBlocks: auditBlocks.length,
       auditParseErrors: auditParseErrors.length,
       auditWarnings: auditWarnings.length,
+      shadowAudits: shadows.length,
+      shadowFailures: shadows.filter((result) => result.status !== "done").length,
       lowQuotaModels: lowQuota.length
     }
   };
@@ -30362,11 +31469,12 @@ function normalizeSeatResult(result, seat) {
   return seat.role === "auditor" ? parseAuditResult(result.summary) : parseExecutionResult(result.summary, result);
 }
 function hasBlockingAudit(results) {
-  return results.some((result) => result.structured?.kind === "audit" && result.structured.verdict === "block");
+  return results.some((result) => result.auditMode !== "shadow" && result.structured?.kind === "audit" && result.structured.verdict === "block");
 }
 function buildRepairContext(results) {
   const lines = [];
   for (const result of results) {
+    if (result.auditMode === "shadow") continue;
     if (result.structured?.kind !== "audit") continue;
     if (result.structured.verdict === "block") {
       lines.push(`Auditor ${result.seat} returned block.`);
@@ -30389,18 +31497,18 @@ var init_seat_result = __esm({
 });
 
 // src/lib/cost-ledger.mjs
-import { existsSync as existsSync9, readFileSync as readFileSync7 } from "node:fs";
-import { appendFile as appendFile2, chmod as chmod7, mkdir as mkdir7, readFile as readFile6 } from "node:fs/promises";
-import { homedir as homedir10 } from "node:os";
-import { dirname as dirname7, resolve as resolve10 } from "node:path";
-function expandHome9(value) {
+import { existsSync as existsSync11, readFileSync as readFileSync7 } from "node:fs";
+import { appendFile as appendFile4, chmod as chmod9, mkdir as mkdir9, readFile as readFile8 } from "node:fs/promises";
+import { homedir as homedir13 } from "node:os";
+import { dirname as dirname9, resolve as resolve13 } from "node:path";
+function expandHome12(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir10();
-  if (value.startsWith("~/")) return resolve10(homedir10(), value.slice(2));
-  return resolve10(value);
+  if (value === "~") return homedir13();
+  if (value.startsWith("~/")) return resolve13(homedir13(), value.slice(2));
+  return resolve13(value);
 }
 function costLedgerPath() {
-  return expandHome9(process.env.CODEX_MOA_COST_LEDGER || "~/.codex-moa/cost-ledger.jsonl");
+  return expandHome12(process.env.CODEX_MOA_COST_LEDGER || "~/.codex-moa/cost-ledger.jsonl");
 }
 function number4(value) {
   const parsed = Number(value);
@@ -30456,16 +31564,22 @@ function estimateUsageCost(model, usage, pricing = loadPricing(), at = /* @__PUR
 function makeCostEntry({ taskId, seat, result, quota = null, pricing = loadPricing() }) {
   const usage = normalizeUsage(result?.usage);
   const estimate = estimateUsageCost(seat.model, usage, pricing);
+  const durationMs = Number.isFinite(Number(result?.durationMs)) ? Number(result.durationMs) : null;
+  const outputTps2 = durationMs > 0 && usage.outputTokens !== null ? usage.outputTokens / (durationMs / 1e3) : null;
+  const totalTps = durationMs > 0 && usage.totalTokens !== null ? usage.totalTokens / (durationMs / 1e3) : null;
   return {
     time: (/* @__PURE__ */ new Date()).toISOString(),
     taskId,
     seat: seat.seat,
     role: seat.role,
+    auditMode: seat.auditMode ?? null,
+    blocking: seat.blocking !== false,
     harness: seat.harness,
     runtime: seat.runtime ?? "cli",
     model: seat.model,
     status: result?.status ?? "unknown",
-    durationMs: Number.isFinite(Number(result?.durationMs)) ? Number(result.durationMs) : null,
+    durationMs,
+    throughput: { outputTps: outputTps2, totalTps },
     timedOut: result?.timedOut === true,
     stopReason: result?.stopReason ?? null,
     usage,
@@ -30474,17 +31588,17 @@ function makeCostEntry({ taskId, seat, result, quota = null, pricing = loadPrici
   };
 }
 async function recordCostEntry(entry, path = costLedgerPath()) {
-  await mkdir7(dirname7(path), { recursive: true });
-  await appendFile2(path, `${JSON.stringify(entry)}
+  await mkdir9(dirname9(path), { recursive: true });
+  await appendFile4(path, `${JSON.stringify(entry)}
 `, { encoding: "utf8", mode: 384 });
-  await chmod7(path, 384).catch(() => {
+  await chmod9(path, 384).catch(() => {
   });
   return entry;
 }
 async function readCostLedger(path = costLedgerPath(), limit = 1e4) {
-  if (!existsSync9(path)) return [];
+  if (!existsSync11(path)) return [];
   try {
-    const lines = (await readFile6(path, "utf8")).split(/\r?\n/).filter(Boolean).slice(-limit);
+    const lines = (await readFile8(path, "utf8")).split(/\r?\n/).filter(Boolean).slice(-limit);
     return lines.map((line) => JSON.parse(line));
   } catch {
     return [];
@@ -30495,6 +31609,7 @@ function summarizeCostLedger(entries = [], { since = null } = {}) {
   const filtered = entries.filter((entry) => !cutoff || Date.parse(entry.time) >= cutoff);
   const models = {};
   const providers = {};
+  const routes = {};
   let totalTokens = 0;
   let totalDurationMs = 0;
   let peakContextUsed = 0;
@@ -30504,8 +31619,10 @@ function summarizeCostLedger(entries = [], { since = null } = {}) {
   for (const entry of filtered) {
     const model = entry.model ?? "unknown";
     const provider = entry.quota?.provider ?? providerForModelName(model);
+    const route = `${model}@${entry.harness ?? "unknown"}`;
     models[model] ??= { runs: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, durationMs: 0, peakContextUsed: 0, estimatedUsd: 0, failures: 0 };
-    providers[provider] ??= { runs: 0, tokens: 0, peakContextUsed: 0, estimatedUsd: 0, failures: 0 };
+    providers[provider] ??= { runs: 0, successes: 0, tokens: 0, outputTokens: 0, durationMs: 0, peakContextUsed: 0, estimatedUsd: 0, failures: 0 };
+    routes[route] ??= { model, harness: entry.harness ?? "unknown", runs: 0, successes: 0, failures: 0, durationMs: 0, tokens: 0, outputTokens: 0 };
     const usage = entry.usage ?? {};
     const tokens = Number(usage.totalTokens) || (Number(usage.inputTokens) || 0) + (Number(usage.outputTokens) || 0);
     const duration3 = Number(entry.durationMs) || 0;
@@ -30519,9 +31636,18 @@ function summarizeCostLedger(entries = [], { since = null } = {}) {
     models[model].peakContextUsed = Math.max(models[model].peakContextUsed, contextUsed);
     models[model].failures += failed ? 1 : 0;
     providers[provider].runs += 1;
+    providers[provider].successes += failed ? 0 : 1;
     providers[provider].tokens += tokens;
+    providers[provider].outputTokens += Number(usage.outputTokens) || 0;
+    providers[provider].durationMs += duration3;
     providers[provider].peakContextUsed = Math.max(providers[provider].peakContextUsed, contextUsed);
     providers[provider].failures += failed ? 1 : 0;
+    routes[route].runs += 1;
+    routes[route].successes += failed ? 0 : 1;
+    routes[route].failures += failed ? 1 : 0;
+    routes[route].durationMs += duration3;
+    routes[route].tokens += tokens;
+    routes[route].outputTokens += Number(usage.outputTokens) || 0;
     totalTokens += tokens;
     totalDurationMs += duration3;
     peakContextUsed = Math.max(peakContextUsed, contextUsed);
@@ -30535,6 +31661,12 @@ function summarizeCostLedger(entries = [], { since = null } = {}) {
       unknownCostModels.add(model);
     }
   }
+  for (const group of [...Object.values(providers), ...Object.values(routes)]) {
+    group.successRate = group.runs ? group.successes / group.runs : null;
+    group.outputTps = group.durationMs > 0 ? group.outputTokens / (group.durationMs / 1e3) : null;
+    group.totalTps = group.durationMs > 0 ? group.tokens / (group.durationMs / 1e3) : null;
+    group.sampleSufficient = group.runs >= 3;
+  }
   return {
     entries: filtered.length,
     totalTokens,
@@ -30545,7 +31677,8 @@ function summarizeCostLedger(entries = [], { since = null } = {}) {
     unpricedEntries: filtered.length - pricedEntries,
     unknownCostModels: [...unknownCostModels],
     models,
-    providers
+    providers,
+    routes
   };
 }
 function providerForModelName(model) {
@@ -30559,160 +31692,6 @@ var init_cost_ledger = __esm({
     init_config();
     init_config();
     init_scheduler();
-  }
-});
-
-// src/lib/provider-state.mjs
-import { homedir as homedir11 } from "node:os";
-import { resolve as resolve11 } from "node:path";
-function expandHome10(value) {
-  if (typeof value !== "string") return value;
-  if (value === "~") return homedir11();
-  if (value.startsWith("~/")) return resolve11(homedir11(), value.slice(2));
-  return resolve11(value);
-}
-function providerStatePath() {
-  return expandHome10(process.env.CODEX_MOA_PROVIDER_STATE || "~/.codex-moa/provider-state.json");
-}
-function providerHealthPolicy(config2 = {}) {
-  const source = config2.providerHealth ?? {};
-  return {
-    failureThreshold: Number(source.failureThreshold ?? 3),
-    baseOpenMs: Number(source.baseOpenMs ?? 6e4),
-    maxOpenMs: Number(source.maxOpenMs ?? 36e5),
-    latencyWarningMs: Number(source.latencyWarningMs ?? 1e4),
-    windowSize: Number(source.windowSize ?? 100)
-  };
-}
-function classifyProviderError(error62, statusCode = null) {
-  const code = Number(statusCode);
-  if (code === 429 || /rate.?limit|too many requests/i.test(String(error62))) return "rate_limit";
-  if (code === 401 || code === 403 || /auth|unauthori[sz]ed|login required/i.test(String(error62))) return "auth";
-  if (code >= 500 || /server error|bad gateway|unavailable/i.test(String(error62))) return "server";
-  if (/timeout|timed out|abort/i.test(String(error62))) return "timeout";
-  if (/captcha|business|model request|provider/i.test(String(error62))) return "provider_business";
-  return "unknown";
-}
-async function readProviderState(path = providerStatePath()) {
-  return readJsonStore(path, { version: STATE_VERSION, defaultValue: DEFAULT_STATE, migrations: MIGRATIONS3 });
-}
-async function recordProviderOutcome({ provider, model = null, ok, latencyMs = null, statusCode = null, error: error62 = null }, path = providerStatePath(), config2 = {}) {
-  const policy = providerHealthPolicy(config2);
-  let snapshot;
-  await updateJsonStore(path, (state) => {
-    const current = state.providers[provider] ??= {
-      circuit: "closed",
-      consecutiveFailures: 0,
-      openUntil: null,
-      outcomes: []
-    };
-    const now = Date.now();
-    current.outcomes = [...current.outcomes ?? [], {
-      time: new Date(now).toISOString(),
-      model,
-      ok: ok === true,
-      latencyMs: Number.isFinite(Number(latencyMs)) ? Number(latencyMs) : null,
-      statusCode,
-      errorKind: ok ? null : classifyProviderError(error62, statusCode),
-      error: error62 ? String(error62).slice(0, 1e3) : null
-    }].slice(-policy.windowSize);
-    if (ok) {
-      current.circuit = "closed";
-      current.consecutiveFailures = 0;
-      current.openUntil = null;
-      current.lastErrorKind = null;
-    } else {
-      current.consecutiveFailures += 1;
-      current.lastErrorKind = classifyProviderError(error62, statusCode);
-      if (current.consecutiveFailures >= policy.failureThreshold) {
-        current.circuit = "open";
-        const exponent = Math.max(0, current.consecutiveFailures - policy.failureThreshold);
-        current.openUntil = new Date(now + Math.min(policy.baseOpenMs * 2 ** exponent, policy.maxOpenMs)).toISOString();
-      }
-    }
-    current.updatedAt = new Date(now).toISOString();
-    snapshot = current;
-    return state;
-  }, { version: STATE_VERSION, defaultValue: DEFAULT_STATE, migrations: MIGRATIONS3 });
-  return snapshot;
-}
-function percentile(values, ratio) {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio))];
-}
-function providerCircuitStatus(state, provider, config2 = {}, now = Date.now()) {
-  const policy = providerHealthPolicy(config2);
-  const current = state?.providers?.[provider];
-  if (!current) return { circuit: "closed", consecutiveFailures: 0, openUntil: null, p50LatencyMs: null, p95LatencyMs: null, lastErrorKind: null };
-  let circuit = current.circuit ?? "closed";
-  const openUntilMs = current.openUntil ? Date.parse(current.openUntil) : null;
-  if (circuit === "open" && openUntilMs !== null && openUntilMs <= now) circuit = "half-open";
-  const latencies = (current.outcomes ?? []).map((entry) => Number(entry.latencyMs)).filter((value) => Number.isFinite(value) && value >= 0);
-  return {
-    circuit,
-    consecutiveFailures: current.consecutiveFailures ?? 0,
-    openUntil: current.openUntil ?? null,
-    retryAt: circuit === "half-open" ? new Date(now).toISOString() : current.openUntil ?? null,
-    p50LatencyMs: percentile(latencies, 0.5),
-    p95LatencyMs: percentile(latencies, 0.95),
-    latencyWarning: latencies.length > 0 && percentile(latencies, 0.95) > policy.latencyWarningMs,
-    lastErrorKind: current.lastErrorKind ?? null,
-    updatedAt: current.updatedAt ?? null
-  };
-}
-function shouldProbeProvider(state, provider, config2 = {}, now = Date.now()) {
-  const status = providerCircuitStatus(state, provider, config2, now);
-  return status.circuit === "half-open";
-}
-async function defaultProbe(provider, config2) {
-  const credentials = resolveQuotaCredentials();
-  if (provider === "kimi") return fetchKimiQuota(credentials);
-  if (provider === "zai") return fetchZaiQuota(credentials, { zaiRegion: config2.quota?.zaiRegion });
-  if (provider === "deepseek") return fetchDeepSeekQuota(credentials);
-  throw new Error(`Unknown provider: ${provider}`);
-}
-async function probeProvider(provider, { config: config2 = {}, deps = {} } = {}) {
-  const startedAt = Date.now();
-  try {
-    const result = await (deps.probe ?? defaultProbe)(provider, config2);
-    const ok = result?.status === "ok";
-    const outcome = await recordProviderOutcome({
-      provider,
-      ok,
-      latencyMs: Date.now() - startedAt,
-      error: ok ? null : result?.error ?? result?.status ?? "probe failed"
-    }, deps.statePath, config2);
-    return { provider, ok, status: result?.status ?? "unknown", latencyMs: Date.now() - startedAt, outcome };
-  } catch (error62) {
-    const outcome = await recordProviderOutcome({
-      provider,
-      ok: false,
-      latencyMs: Date.now() - startedAt,
-      error: error62.message
-    }, deps.statePath, config2);
-    return { provider, ok: false, status: "unavailable", latencyMs: Date.now() - startedAt, error: error62.message, outcome };
-  }
-}
-async function recoverProviders({ config: config2 = {}, providers = ["kimi", "zai", "deepseek"], force = false, deps = {} } = {}) {
-  const state = await readProviderState(deps.statePath);
-  const results = [];
-  for (const provider of providers) {
-    if (!force && !shouldProbeProvider(state, provider, config2)) continue;
-    results.push(await probeProvider(provider, { config: config2, deps }));
-  }
-  return { probed: results.length, results };
-}
-var STATE_VERSION, DEFAULT_STATE, MIGRATIONS3;
-var init_provider_state = __esm({
-  "src/lib/provider-state.mjs"() {
-    init_json_store();
-    init_quota();
-    STATE_VERSION = 2;
-    DEFAULT_STATE = { version: STATE_VERSION, providers: {} };
-    MIGRATIONS3 = {
-      1: (state) => ({ ...state, providers: state.providers ?? {} })
-    };
   }
 });
 
@@ -30735,10 +31714,11 @@ function summarizeProviderHealth({ snapshot, ledger = [], lowThreshold = 10, rec
   const cutoff = Date.now() - recentHours * 36e5;
   const recentLedger = ledger.filter((entry) => !entry.time || Date.parse(entry.time) >= cutoff);
   const cost = summarizeCostLedger(recentLedger);
+  const operationalCost = summarizeCostLedger(recentLedger.filter((entry) => entry.auditMode !== "shadow"));
   const providers = {};
   for (const id2 of ["kimi", "zai", "deepseek"]) {
     const quota = snapshot?.providers?.[id2] ?? { provider: id2, status: "not_configured", windows: [] };
-    const recent = cost.providers?.[id2] ?? { runs: 0, failures: 0, tokens: 0 };
+    const recent = operationalCost.providers?.[id2] ?? { runs: 0, failures: 0, tokens: 0 };
     const circuit = providerCircuitStatus(circuitState, id2, config2);
     let status = providerState({ ...quota, lowThreshold }, recent);
     if (circuit.circuit === "open") status = "critical";
@@ -30766,10 +31746,16 @@ function summarizeProviderHealth({ snapshot, ledger = [], lowThreshold = 10, rec
   return {
     overall: worstStatus(Object.values(providers).map((provider) => provider.status)),
     providers,
+    routes: Object.fromEntries(Object.entries(cost.routes ?? {}).map(([key, route]) => [key, {
+      ...route,
+      status: route.runs >= 2 && route.failures / route.runs >= 0.5 ? "warning" : "healthy",
+      successRate: route.runs > 0 ? route.successes / route.runs : null,
+      averageDurationMs: route.runs > 0 ? route.durationMs / route.runs : null
+    }])),
     cost
   };
 }
-function providerForFamily(family) {
+function providerForFamily2(family) {
   if (family === "moonshot") return "kimi";
   if (family === "zhipu") return "zai";
   if (family === "deepseek") return "deepseek";
@@ -30781,14 +31767,20 @@ function applyProviderHealthRouting(seats2, { health, modelsConfig, captain = nu
   const adjustments = [];
   const blocked = [];
   for (const seat of seats2) {
-    const currentProvider = providerForFamily(seat.family ?? modelsConfig.models?.[seat.model]?.family);
+    const currentProvider = providerForFamily2(seat.family ?? modelsConfig.models?.[seat.model]?.family);
     const currentStatus = health.providers[currentProvider]?.status ?? "healthy";
     if (!["critical", "inactive"].includes(currentStatus)) continue;
+    if (seat.auditMode === "shadow") {
+      seat.skipDispatch = true;
+      seat.skipReason = `shadow provider ${currentProvider} is ${currentStatus}`;
+      adjustments.push({ seat: seat.seat, action: "skipped_shadow", from: seat.model, provider: currentProvider, status: currentStatus });
+      continue;
+    }
     if (allowUnhealthy) {
       adjustments.push({ seat: seat.seat, action: "allowed_unhealthy", from: seat.model, provider: currentProvider, status: currentStatus });
       continue;
     }
-    const replacement = candidates.filter((model) => model.id !== seat.model).filter((model) => model.tier === (seat.modelTier ?? modelsConfig.models?.[seat.model]?.tier)).filter((model) => model.capabilities?.includes("text") !== false).filter((model) => !(seat.role === "auditor" && captain?.family && model.family === captain.family)).filter((model) => health.providers[providerForFamily(model.family)]?.status !== "critical").filter((model) => health.providers[providerForFamily(model.family)]?.status !== "inactive").sort((left, right) => {
+    const replacement = candidates.filter((model) => model.id !== seat.model).filter((model) => model.tier === (seat.modelTier ?? modelsConfig.models?.[seat.model]?.tier)).filter((model) => model.capabilities?.includes("text") !== false).filter((model) => !(seat.role === "auditor" && captain?.family && model.family === captain.family)).filter((model) => health.providers[providerForFamily2(model.family)]?.status !== "critical").filter((model) => health.providers[providerForFamily2(model.family)]?.status !== "inactive").sort((left, right) => {
       const leftSameHarness = left.harness === seat.harness ? 0 : 1;
       const rightSameHarness = right.harness === seat.harness ? 0 : 1;
       return leftSameHarness - rightSameHarness;
@@ -30804,18 +31796,55 @@ function applyProviderHealthRouting(seats2, { health, modelsConfig, captain = nu
       fromProvider: currentProvider,
       fromStatus: currentStatus,
       to: replacement.id,
-      toProvider: providerForFamily(replacement.family),
+      toProvider: providerForFamily2(replacement.family),
       toHarness: replacement.harness
     });
     seat.originalModel = seat.model;
     seat.model = replacement.id;
     seat.providerModel = replacement.providerModel;
     seat.dsh = replacement.dsh;
+    seat.pi = replacement.pi;
+    seat.claude = replacement.claude;
+    seat.codex = replacement.codex;
     seat.harness = replacement.harness;
+    seat.family = replacement.family;
     seat.modelTier = replacement.tier;
     seat.healthAdjusted = true;
   }
   return { adjustments, blocked };
+}
+function reconcileAuditPairing(seats2, { health, modelsConfig, captain = null, routeAllowed = () => true } = {}) {
+  const adjustments = [];
+  const candidates = listModels(modelsConfig);
+  for (const gate of seats2.filter((seat) => seat.role === "auditor" && seat.auditMode !== "shadow")) {
+    const executor = seats2.find((seat) => seat.seat === gate.pairedExecutor) ?? seats2.find((seat) => seat.role === "executor");
+    if (!executor) continue;
+    const executorFamily = modelsConfig.models?.[executor.model]?.family;
+    const gateFamily = modelsConfig.models?.[gate.model]?.family;
+    if (executorFamily && gateFamily !== executorFamily && (!captain?.family || captain.family === "unknown" || gateFamily !== captain.family)) continue;
+    const replacement = candidates.filter((model) => model.family !== executorFamily).filter((model) => !captain?.family || captain.family === "unknown" || model.family !== captain.family).filter((model) => health?.providers?.[providerForFamily2(model.family)]?.status !== "critical").filter((model) => health?.providers?.[providerForFamily2(model.family)]?.status !== "inactive").filter((model) => {
+      const harness = (model.supportedHarnesses ?? [model.harness]).includes("pi") ? "pi" : model.harness;
+      return routeAllowed(model.id, harness);
+    }).sort((left, right) => {
+      const leftSubscription = ["moonshot", "zhipu"].includes(left.family) ? 0 : 1;
+      const rightSubscription = ["moonshot", "zhipu"].includes(right.family) ? 0 : 1;
+      return leftSubscription - rightSubscription;
+    })[0];
+    if (!replacement) continue;
+    const from = { model: gate.model, harness: gate.harness };
+    gate.model = replacement.id;
+    gate.providerModel = replacement.providerModel;
+    gate.dsh = replacement.dsh;
+    gate.pi = replacement.pi;
+    gate.claude = replacement.claude;
+    gate.codex = replacement.codex;
+    gate.harness = (replacement.supportedHarnesses ?? [replacement.harness]).includes("pi") ? "pi" : replacement.harness;
+    gate.family = replacement.family;
+    gate.modelTier = replacement.tier;
+    gate.healthAdjusted = true;
+    adjustments.push({ seat: gate.seat, action: "reconciled_cross_family_gate", from, to: { model: gate.model, harness: gate.harness }, executor: executor.model });
+  }
+  return adjustments;
 }
 var SEVERITY;
 var init_provider_health = __esm({
@@ -30906,11 +31935,11 @@ var init_budget = __esm({
 });
 
 // src/adapters/base.mjs
-import { existsSync as existsSync10, statSync } from "node:fs";
-import { resolve as resolve12 } from "node:path";
+import { existsSync as existsSync12, statSync } from "node:fs";
+import { resolve as resolve14 } from "node:path";
 function resolveCwd(cwd, fallback) {
-  const value = resolve12(cwd || fallback || process.cwd());
-  if (!existsSync10(value) || !statSync(value).isDirectory()) throw new Error(`Working directory does not exist: ${value}`);
+  const value = resolve14(cwd || fallback || process.cwd());
+  if (!existsSync12(value) || !statSync(value).isDirectory()) throw new Error(`Working directory does not exist: ${value}`);
   return value;
 }
 function commandParts(commandConfig) {
@@ -30959,8 +31988,8 @@ async function runKimiSeat({ seat, prompt, config: config2, timeoutMs, allowWrit
   ];
   const planOnly = seat.mode === "plan" || !allowWrite || !seat.autoApprove;
   if (seat.continuitySessionId) args.push("--session", seat.continuitySessionId);
-  if (planOnly) args.push("--plan");
-  else args.push("--yolo");
+  if (!planOnly) args.push("--yolo");
+  for (const skillPath of seat.skillPaths ?? []) args.push("--skills-dir", skillPath);
   const run = await runCommand({
     command,
     args,
@@ -30984,7 +32013,7 @@ async function runKimiSeat({ seat, prompt, config: config2, timeoutMs, allowWrit
     run,
     text,
     artifactPath: null,
-    extra: { modelSelection: "cli-flag", selectedModel: seat.providerModel ?? seat.model, reasoningEffort: seat.reasoningEffort, reasoningSelection: "env:KIMI_MODEL_THINKING_EFFORT", sessionId, usage, continuitySupport: "cli-session-resume" }
+    extra: { modelSelection: "cli-flag", selectedModel: seat.providerModel ?? seat.model, reasoningEffort: seat.reasoningEffort, reasoningSelection: "env:KIMI_MODEL_THINKING_EFFORT", sessionId, usage, loadedSkills: seat.skillPaths ?? [], continuitySupport: "cli-session-resume" }
   });
 }
 var init_kimi = __esm({
@@ -30996,19 +32025,19 @@ var init_kimi = __esm({
 });
 
 // src/lib/zcode-model.mjs
-import { chmod as chmod8, copyFile as copyFile2, mkdir as mkdir8, readFile as readFile7, rename as rename6, stat as stat2, writeFile as writeFile7 } from "node:fs/promises";
-import { dirname as dirname8, join as join9, resolve as resolve13 } from "node:path";
-import { homedir as homedir12 } from "node:os";
+import { chmod as chmod10, copyFile as copyFile2, mkdir as mkdir10, readFile as readFile9, rename as rename6, stat as stat2, writeFile as writeFile7 } from "node:fs/promises";
+import { dirname as dirname10, join as join9, resolve as resolve15 } from "node:path";
+import { homedir as homedir14 } from "node:os";
 import { randomUUID as randomUUID6 } from "node:crypto";
-function expandHome11(value) {
+function expandHome13(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir12();
-  if (value.startsWith("~/")) return resolve13(homedir12(), value.slice(2));
-  return resolve13(value);
+  if (value === "~") return homedir14();
+  if (value.startsWith("~/")) return resolve15(homedir14(), value.slice(2));
+  return resolve15(value);
 }
 async function readJson2(path, missingOk = false) {
   try {
-    return JSON.parse(await readFile7(path, "utf8"));
+    return JSON.parse(await readFile9(path, "utf8"));
   } catch (error62) {
     if (missingOk && error62?.code === "ENOENT") return {};
     throw new Error(`Unable to read JSON ${path}: ${error62.message}`);
@@ -31072,18 +32101,18 @@ function cliProviderCopy(provider) {
   return copied;
 }
 async function atomicWritePrivate(path, value) {
-  await mkdir8(dirname8(path), { recursive: true });
-  const temporary = join9(dirname8(path), `.${path.split("/").pop()}.${randomUUID6()}.tmp`);
+  await mkdir10(dirname10(path), { recursive: true });
+  const temporary = join9(dirname10(path), `.${path.split("/").pop()}.${randomUUID6()}.tmp`);
   await writeFile7(temporary, `${JSON.stringify(value, null, 2)}
 `, { encoding: "utf8", mode: 384 });
   await rename6(temporary, path);
-  await chmod8(path, 384);
+  await chmod10(path, 384);
 }
 async function resolveZCodeSelection({ model, config: config2 }) {
   const zcodeConfig = config2.zcode ?? {};
-  const desktopPath = expandHome11(zcodeConfig.desktopConfig ?? DEFAULT_DESKTOP_CONFIG);
-  const cliPath = expandHome11(zcodeConfig.cliConfig ?? DEFAULT_CLI_CONFIG);
-  const settingsPath = expandHome11(zcodeConfig.settingsPath ?? DEFAULT_SETTINGS);
+  const desktopPath = expandHome13(zcodeConfig.desktopConfig ?? DEFAULT_DESKTOP_CONFIG);
+  const cliPath = expandHome13(zcodeConfig.cliConfig ?? DEFAULT_CLI_CONFIG);
+  const settingsPath = expandHome13(zcodeConfig.settingsPath ?? DEFAULT_SETTINGS);
   const desktop = await readJson2(desktopPath);
   const providers = isObject3(desktop.provider) ? desktop.provider : {};
   const settings = await readJson2(settingsPath, true).catch(() => ({}));
@@ -31146,7 +32175,7 @@ async function syncZCodeSelection({ model, reasoningEffort, contextBudget, outpu
     } catch {
       await copyFile2(selection.cliPath, backup).catch(() => {
       });
-      await chmod8(backup, 384).catch(() => {
+      await chmod10(backup, 384).catch(() => {
       });
     }
     void info;
@@ -31179,18 +32208,18 @@ var init_zcode_model = __esm({
 });
 
 // src/lib/zcode-home.mjs
-import { existsSync as existsSync11 } from "node:fs";
-import { chmod as chmod9, copyFile as copyFile3, mkdir as mkdir9, symlink } from "node:fs/promises";
-import { homedir as homedir13 } from "node:os";
-import { dirname as dirname9, join as join10, resolve as resolve14 } from "node:path";
-function expandHome12(value) {
+import { existsSync as existsSync13 } from "node:fs";
+import { chmod as chmod11, copyFile as copyFile3, mkdir as mkdir11, symlink } from "node:fs/promises";
+import { homedir as homedir15 } from "node:os";
+import { dirname as dirname11, join as join10, resolve as resolve16 } from "node:path";
+function expandHome14(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir13();
-  if (value.startsWith("~/")) return resolve14(homedir13(), value.slice(2));
-  return resolve14(value);
+  if (value === "~") return homedir15();
+  if (value.startsWith("~/")) return resolve16(homedir15(), value.slice(2));
+  return resolve16(value);
 }
 async function linkOrCopy(source, destination) {
-  if (!existsSync11(source) || existsSync11(destination)) return;
+  if (!existsSync13(source) || existsSync13(destination)) return;
   try {
     await symlink(source, destination);
   } catch {
@@ -31199,14 +32228,14 @@ async function linkOrCopy(source, destination) {
   }
 }
 async function prepareZCodeHome(config2 = {}) {
-  const home = expandHome12(config2.zcode?.headlessHome ?? "~/.codex-moa/zcode-home");
+  const home = expandHome14(config2.zcode?.headlessHome ?? "~/.codex-moa/zcode-home");
   const cliDir = join10(home, ".zcode", "cli");
   const v2Dir = join10(home, ".zcode", "v2");
-  await mkdir9(cliDir, { recursive: true });
-  await mkdir9(v2Dir, { recursive: true });
-  await chmod9(home, 448).catch(() => {
+  await mkdir11(cliDir, { recursive: true });
+  await mkdir11(v2Dir, { recursive: true });
+  await chmod11(home, 448).catch(() => {
   });
-  const realV2 = dirname9(expandHome12(config2.zcode?.desktopConfig ?? "~/.zcode/v2/config.json"));
+  const realV2 = dirname11(expandHome14(config2.zcode?.desktopConfig ?? "~/.zcode/v2/config.json"));
   for (const file2 of ["credentials.json", "setting.json", "config.json"]) {
     await linkOrCopy(join10(realV2, file2), join10(v2Dir, file2));
   }
@@ -31294,15 +32323,15 @@ var init_zcode = __esm({
 });
 
 // src/lib/dsh-home.mjs
-import { existsSync as existsSync12, lstatSync, mkdirSync as mkdirSync2, readFileSync as readFileSync8, readlinkSync, symlinkSync } from "node:fs";
-import { mkdir as mkdir10, writeFile as writeFile8 } from "node:fs/promises";
-import { homedir as homedir14 } from "node:os";
-import { join as join11, resolve as resolve15 } from "node:path";
-function expandHome13(value) {
+import { existsSync as existsSync14, lstatSync, mkdirSync as mkdirSync2, readFileSync as readFileSync8, readlinkSync, symlinkSync } from "node:fs";
+import { mkdir as mkdir12, writeFile as writeFile8 } from "node:fs/promises";
+import { homedir as homedir16 } from "node:os";
+import { join as join11, resolve as resolve17 } from "node:path";
+function expandHome15(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir14();
-  if (value.startsWith("~/")) return resolve15(homedir14(), value.slice(2));
-  return resolve15(value);
+  if (value === "~") return homedir16();
+  if (value.startsWith("~/")) return resolve17(homedir16(), value.slice(2));
+  return resolve17(value);
 }
 function setTopLevelValue(text, blockName, key, value) {
   const lines = text.split(/\r?\n/);
@@ -31336,7 +32365,7 @@ function setModelMaxTokens(text, providerName, modelId, value) {
   return text;
 }
 function ensureSymlink(target, source) {
-  if (!existsSync12(source)) return;
+  if (!existsSync14(source)) return;
   try {
     const stat6 = lstatSync(target);
     if (stat6.isSymbolicLink() && readlinkSync(target) === source) return;
@@ -31346,8 +32375,8 @@ function ensureSymlink(target, source) {
   symlinkSync(source, target);
 }
 async function prepareDshHome(reasoningEffort = null, options = {}) {
-  const sourceHome = expandHome13(options.sourceHome || process.env.DSH_HOME || "~/.dsh");
-  const root = expandHome13(options.targetRoot || "~/.codex-moa/dsh-homes");
+  const sourceHome = expandHome15(options.sourceHome || process.env.DSH_HOME || "~/.dsh");
+  const root = expandHome15(options.targetRoot || "~/.codex-moa/dsh-homes");
   const effort = ["off", "low", "high", "max"].includes(reasoningEffort) ? reasoningEffort : null;
   const outputBudget = Number(options.outputBudget ?? 0);
   const provider = options.provider ?? null;
@@ -31355,9 +32384,9 @@ async function prepareDshHome(reasoningEffort = null, options = {}) {
   const routeLabel = [provider, model].filter(Boolean).join("-").replace(/[^A-Za-z0-9._-]+/g, "-");
   const label = routeLabel ? `${routeLabel}-${effort ?? "default"}` : effort ?? "default";
   const target = join11(root, outputBudget > 0 ? `${label}-out-${outputBudget}` : label);
-  await mkdir10(target, { recursive: true });
+  await mkdir12(target, { recursive: true });
   const sourceSettings = join11(sourceHome, "settings.yaml");
-  let settings = existsSync12(sourceSettings) ? readFileSync8(sourceSettings, "utf8") : "";
+  let settings = existsSync14(sourceSettings) ? readFileSync8(sourceSettings, "utf8") : "";
   if (provider) settings = setTopLevelValue(settings, "agent-default-model", "provider", provider);
   if (model) settings = setTopLevelValue(settings, "agent-default-model", "model", model);
   if (effort) {
@@ -31423,11 +32452,441 @@ var init_dsh = __esm({
   }
 });
 
+// src/lib/pi-home.mjs
+import { chmod as chmod12, mkdir as mkdir13, readFile as readFile10, rename as rename7, writeFile as writeFile9 } from "node:fs/promises";
+import { randomUUID as randomUUID7 } from "node:crypto";
+import { homedir as homedir17 } from "node:os";
+import { dirname as dirname12, join as join12, resolve as resolve18 } from "node:path";
+function expandHome16(value) {
+  if (value === "~") return homedir17();
+  if (typeof value === "string" && value.startsWith("~/")) return resolve18(homedir17(), value.slice(2));
+  return resolve18(value);
+}
+async function readJson3(path) {
+  try {
+    return JSON.parse(await readFile10(path, "utf8"));
+  } catch (error62) {
+    if (error62?.code === "ENOENT") return {};
+    throw error62;
+  }
+}
+async function atomicWritePrivate2(path, value) {
+  await mkdir13(dirname12(path), { recursive: true, mode: 448 });
+  const temporary = join12(dirname12(path), `.${path.split("/").pop()}.${randomUUID7()}.tmp`);
+  await writeFile9(temporary, `${JSON.stringify(value, null, 2)}
+`, { encoding: "utf8", mode: 384 });
+  await rename7(temporary, path);
+  await chmod12(path, 384);
+}
+async function preparePiHome(config2 = {}) {
+  const home = expandHome16(config2.pi?.headlessHome ?? "~/.codex-moa/pi-home");
+  await mkdir13(home, { recursive: true, mode: 448 });
+  await chmod12(home, 448).catch(() => {
+  });
+  const modelsPath = join12(home, "models.json");
+  const existing = await readJson3(modelsPath);
+  const snapshot = await readCcSwitchPiProviderConfigs();
+  if (!snapshot.available) throw new Error(`CC Switch Pi provider sync unavailable: ${snapshot.reason}`);
+  const allowlist = config2.pi?.providerAllowlist ?? [];
+  const allProviders = snapshot.providers ?? {};
+  const providers = allowlist.length > 0 ? Object.fromEntries(allowlist.filter((id2) => allProviders[id2]).map((id2) => [id2, allProviders[id2]])) : allProviders;
+  const missing = allowlist.filter((id2) => !allProviders[id2]);
+  if (missing.length > 0) throw new Error(`CC Switch Pi provider(s) not configured: ${missing.join(", ")}`);
+  await atomicWritePrivate2(modelsPath, { ...existing, providers });
+  return {
+    home,
+    modelsPath,
+    providerIds: Object.keys(providers),
+    errors: snapshot.errors ?? []
+  };
+}
+var init_pi_home = __esm({
+  "src/lib/pi-home.mjs"() {
+    init_ccswitch();
+  }
+});
+
+// src/adapters/pi.mjs
+async function runPiSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false }) {
+  const cwd = resolveCwd(seat.cwd, config2.defaultCwd);
+  const { command, args: baseArgs } = commandParts(config2.commands.pi);
+  const provider = seat.pi?.provider;
+  const model = seat.pi?.model ?? seat.providerModel ?? seat.model;
+  if (!provider) throw new Error(`Pi provider is not configured for model ${seat.model}`);
+  const piHome = config2.pi?.syncCcSwitchProviders === false ? null : await preparePiHome(config2);
+  if (piHome && !piHome.providerIds.includes(provider)) {
+    throw new Error(`CC Switch Pi provider is not configured: ${provider}`);
+  }
+  const writeEnabled = allowWrite && seat.autoApprove && seat.mode !== "plan";
+  const args = [
+    ...baseArgs,
+    "--provider",
+    provider,
+    "--model",
+    model,
+    "--mode",
+    "json",
+    "--print",
+    "--tools",
+    writeEnabled ? WRITE_TOOLS : READ_ONLY_TOOLS,
+    "--approve"
+  ];
+  if (seat.reasoningEffort) args.push("--thinking", seat.reasoningEffort);
+  if (seat.continuitySessionId) args.push("--session-id", seat.continuitySessionId);
+  else args.push("--no-session");
+  for (const skillPath of seat.skillPaths ?? []) args.push("--skill", skillPath);
+  args.push("--");
+  for (const attachment of seat.attachments ?? []) args.push(`@${attachment}`);
+  args.push(prompt);
+  const run = await runCommand({
+    command,
+    args,
+    cwd,
+    timeoutMs,
+    env: piHome ? { PI_CODING_AGENT_DIR: piHome.home } : {},
+    stripSecretEnv: config2.safety?.stripSecretEnv !== false
+  });
+  const text = extractPiOutput(run.stdout);
+  const piError = extractPiError(run.stdout);
+  const sessionId = extractSessionId(run.stdout) ?? seat.continuitySessionId ?? null;
+  const usage = extractPiUsage(run.stdout);
+  return createResult({
+    seat,
+    run: piError ? { ...run, ok: false, stderr: [run.stderr, piError].filter(Boolean).join("\n") } : run,
+    text,
+    artifactPath: null,
+    extra: {
+      modelSelection: "pi-provider-model",
+      selectedProvider: provider,
+      selectedModel: model,
+      reasoningEffort: seat.reasoningEffort ?? null,
+      reasoningSelection: seat.reasoningEffort ? "pi-cli-flag" : "provider-default",
+      loadedSkills: seat.skillPaths ?? [],
+      providerConfigSource: piHome ? "cc-switch-isolated-projection" : "pi-default-home",
+      sessionId,
+      usage,
+      continuitySupport: "pi-session-id"
+    }
+  });
+}
+var READ_ONLY_TOOLS, WRITE_TOOLS;
+var init_pi = __esm({
+  "src/adapters/pi.mjs"() {
+    init_base();
+    init_process();
+    init_parser();
+    init_pi_home();
+    READ_ONLY_TOOLS = "read,grep,find,ls";
+    WRITE_TOOLS = "read,bash,edit,write,grep,find,ls";
+  }
+});
+
+// src/lib/cli-homes.mjs
+import { chmod as chmod13, mkdir as mkdir14, readFile as readFile11, rename as rename8, rm as rm2, symlink as symlink2, writeFile as writeFile10 } from "node:fs/promises";
+import { randomUUID as randomUUID8 } from "node:crypto";
+import { homedir as homedir18 } from "node:os";
+import { basename as basename2, dirname as dirname13, join as join13, resolve as resolve19 } from "node:path";
+function expandHome17(value) {
+  if (value === "~") return homedir18();
+  if (typeof value === "string" && value.startsWith("~/")) return resolve19(homedir18(), value.slice(2));
+  return resolve19(value);
+}
+async function atomicWritePrivate3(path, value, json2 = false) {
+  await mkdir14(dirname13(path), { recursive: true, mode: 448 });
+  const temporary = join13(dirname13(path), `.${basename2(path)}.${randomUUID8()}.tmp`);
+  const body = json2 ? `${JSON.stringify(value, null, 2)}
+` : String(value ?? "");
+  await writeFile10(temporary, body, { encoding: "utf8", mode: 384 });
+  await rename8(temporary, path);
+  await chmod13(path, 384);
+}
+async function projectSkills(home, skillPaths = []) {
+  const skillsHome = join13(home, "skills");
+  await mkdir14(skillsHome, { recursive: true, mode: 448 });
+  const projected = [];
+  for (const [index, source] of skillPaths.entries()) {
+    const target = join13(skillsHome, `${String(index + 1).padStart(2, "0")}-${basename2(source)}`);
+    await rm2(target, { recursive: true, force: true });
+    await symlink2(source, target);
+    projected.push(target);
+  }
+  return projected;
+}
+function codexReasoningDescription(effort) {
+  if (effort === "low" || effort === "none") return "Fast responses with lighter reasoning";
+  if (effort === "max") return "Maximum reasoning depth for the hardest problems";
+  return "Greater reasoning depth for complex problems";
+}
+function normalizeCodexModelCatalog(catalog) {
+  const models = (catalog?.models ?? []).map((model, index) => {
+    if (model?.slug) return model;
+    const slug = model?.model ?? model?.id;
+    if (!slug) throw new Error(`CC Switch Codex model catalog entry ${index} has no model id`);
+    const contextWindow = Number(model.contextWindow ?? model.context_window ?? 262144);
+    const levels = model.reasoningLevels ?? model.supported_reasoning_levels ?? [];
+    const supportedReasoningLevels = levels.map((level) => typeof level === "string" ? { effort: level === "none" ? "none" : level, description: codexReasoningDescription(level) } : level);
+    return {
+      additional_speed_tiers: [],
+      availability_nux: null,
+      base_instructions: "You are Codex, a coding agent. You and the user share the same workspace and collaborate to achieve the user's goals.",
+      context_window: contextWindow,
+      default_reasoning_level: model.defaultReasoningLevel ?? model.default_reasoning_level ?? supportedReasoningLevels.at(-1)?.effort ?? "high",
+      default_reasoning_summary: "none",
+      description: model.displayName ?? model.display_name ?? slug,
+      display_name: model.displayName ?? model.display_name ?? slug,
+      effective_context_window_percent: 95,
+      experimental_supported_tools: [],
+      input_modalities: model.input ?? model.input_modalities ?? ["text"],
+      max_context_window: contextWindow,
+      priority: 1e3 + index,
+      service_tiers: [],
+      shell_type: "shell_command",
+      slug,
+      support_verbosity: false,
+      supported_in_api: true,
+      supported_reasoning_levels: supportedReasoningLevels,
+      supports_image_detail_original: false,
+      supports_parallel_tool_calls: true,
+      supports_reasoning_summaries: true,
+      supports_search_tool: false,
+      truncation_policy: { limit: 1e4, mode: "bytes" },
+      upgrade: null,
+      visibility: "list"
+    };
+  });
+  return { models };
+}
+function isolateCodexConfig(configText, envKey = "CODEX_MOA_PROVIDER_API_KEY") {
+  const lines = String(configText ?? "").split(/\r?\n/);
+  const kept = [];
+  let dropSection = false;
+  for (const line of lines) {
+    const section = line.match(/^\s*\[([^\]]+)\]\s*$/)?.[1] ?? null;
+    if (section) dropSection = /^(desktop|marketplaces\.|plugins\.|projects\.)/.test(section);
+    if (!dropSection) kept.push(line);
+  }
+  let text = kept.join("\n");
+  const provider = text.match(/^\s*model_provider\s*=\s*["']([^"']+)["']/m)?.[1];
+  if (!provider) throw new Error("CC Switch Codex config has no model_provider");
+  const escaped = provider.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const sectionRe = new RegExp(`(^\\s*\\[model_providers\\.${escaped}\\]\\s*$)([\\s\\S]*?)(?=^\\s*\\[|$)`, "m");
+  if (!sectionRe.test(text)) throw new Error(`CC Switch Codex config has no model_providers.${provider} section`);
+  text = text.replace(sectionRe, (_all, header, body) => {
+    const withoutExisting = body.replace(/^\s*env_key\s*=.*(?:\r?\n|$)/gm, "");
+    return `${header}
+env_key = "${envKey}"${withoutExisting}`;
+  });
+  return `${text.trim()}
+`;
+}
+async function prepareClaudeHome(config2 = {}, providerId, skillPaths = []) {
+  if (config2.claude?.syncCcSwitchProviders === false) {
+    const home2 = expandHome17(config2.claude?.headlessHome ?? "~/.codex-moa/claude-homes/test");
+    await mkdir14(home2, { recursive: true, mode: 448 });
+    return { home: home2, settingsPath: join13(home2, "settings.json"), providerId, providerName: "test", projectedSkills: [] };
+  }
+  const snapshot = await readCcSwitchCliProviderConfig("claude", providerId);
+  if (!snapshot.available) throw new Error(snapshot.reason);
+  const root = expandHome17(config2.claude?.headlessHome ?? "~/.codex-moa/claude-homes");
+  const home = join13(root, providerId);
+  await mkdir14(home, { recursive: true, mode: 448 });
+  await chmod13(home, 448).catch(() => {
+  });
+  const settingsPath = join13(home, "settings.json");
+  await atomicWritePrivate3(settingsPath, snapshot.settings, true);
+  const projectedSkills = await projectSkills(home, skillPaths);
+  return { home, settingsPath, providerId, providerName: snapshot.name, projectedSkills };
+}
+async function prepareCodexHome(config2 = {}, providerId, skillPaths = []) {
+  if (config2.codex?.syncCcSwitchProviders === false) {
+    const home2 = expandHome17(config2.codex?.headlessHome ?? "~/.codex-moa/codex-homes/test");
+    await mkdir14(home2, { recursive: true, mode: 448 });
+    return { home: home2, configPath: join13(home2, "config.toml"), authPath: join13(home2, "auth.json"), providerId, providerName: "test", projectedSkills: [] };
+  }
+  const snapshot = await readCcSwitchCliProviderConfig("codex", providerId);
+  if (!snapshot.available) throw new Error(snapshot.reason);
+  const root = expandHome17(config2.codex?.headlessHome ?? "~/.codex-moa/codex-homes");
+  const home = join13(root, providerId);
+  await mkdir14(home, { recursive: true, mode: 448 });
+  await chmod13(home, 448).catch(() => {
+  });
+  if (typeof snapshot.settings.config !== "string" || !snapshot.settings.config.trim()) {
+    throw new Error(`CC Switch Codex provider ${providerId} has no config.toml content`);
+  }
+  const configPath = join13(home, "config.toml");
+  const authPath = join13(home, "auth.json");
+  const modelCatalogPath = join13(home, "cc-switch-model-catalog.json");
+  const providerApiKey = snapshot.settings.auth?.OPENAI_API_KEY ?? snapshot.settings.auth?.api_key ?? null;
+  if (typeof providerApiKey !== "string" || !providerApiKey.trim()) {
+    throw new Error(`CC Switch Codex provider ${providerId} has no API key in auth settings`);
+  }
+  await atomicWritePrivate3(configPath, isolateCodexConfig(snapshot.settings.config));
+  if (snapshot.settings.auth && typeof snapshot.settings.auth === "object") {
+    await atomicWritePrivate3(authPath, snapshot.settings.auth, true);
+  }
+  if (snapshot.settings.modelCatalog && typeof snapshot.settings.modelCatalog === "object") {
+    await atomicWritePrivate3(modelCatalogPath, normalizeCodexModelCatalog(snapshot.settings.modelCatalog), true);
+  }
+  const projectedSkills = await projectSkills(home, skillPaths);
+  return { home, configPath, authPath, modelCatalogPath, providerId, providerName: snapshot.name, projectedSkills, providerApiKey };
+}
+var init_cli_homes = __esm({
+  "src/lib/cli-homes.mjs"() {
+    init_ccswitch();
+  }
+});
+
+// src/adapters/claude.mjs
+async function runClaudeSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false }) {
+  const cwd = resolveCwd(seat.cwd, config2.defaultCwd);
+  const { command, args: baseArgs } = commandParts(config2.commands.claude);
+  const provider = seat.claude?.provider;
+  const model = seat.claude?.model ?? seat.providerModel ?? seat.model;
+  if (!provider) throw new Error(`Claude Code provider is not configured for model ${seat.model}`);
+  const runtime = await prepareClaudeHome(config2, provider, seat.skillPaths ?? []);
+  const writeEnabled = allowWrite && seat.autoApprove && seat.mode !== "plan";
+  const args = [
+    ...baseArgs,
+    "--bare",
+    "--settings",
+    runtime.settingsPath,
+    "--strict-mcp-config",
+    "--model",
+    model,
+    "--effort",
+    seat.reasoningEffort ?? "high",
+    "--print",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--permission-prompts",
+    "none",
+    "--permission-mode",
+    writeEnabled ? "acceptEdits" : "plan",
+    "--add-dir",
+    cwd
+  ];
+  if (!writeEnabled) args.push("--restricted", "--tools", "Read,Grep,Glob");
+  if (seat.maxTurns) args.push("--max-turns", String(seat.maxTurns));
+  if (!seat.continuitySessionId) args.push("--no-session-persistence");
+  else args.push("--resume", seat.continuitySessionId);
+  for (const skillPath of runtime.projectedSkills) args.push("--add-dir", skillPath);
+  args.push(prompt);
+  const run = await runCommand({
+    command,
+    args,
+    cwd,
+    timeoutMs,
+    env: { CLAUDE_CONFIG_DIR: runtime.home },
+    stripSecretEnv: config2.safety?.stripSecretEnv !== false
+  });
+  const text = extractClaudeOutput(run.stdout);
+  const sessionId = extractSessionId(run.stdout) ?? seat.continuitySessionId ?? null;
+  return createResult({
+    seat,
+    run,
+    text,
+    artifactPath: null,
+    extra: {
+      modelSelection: "claude-cli-flag",
+      selectedProvider: provider,
+      selectedModel: model,
+      reasoningEffort: seat.reasoningEffort ?? "high",
+      reasoningSelection: "claude-cli-flag",
+      providerConfigSource: "cc-switch-isolated-projection",
+      loadedSkills: seat.skillPaths ?? [],
+      sessionId,
+      usage: extractUsage(run.stdout),
+      continuitySupport: "claude-resume"
+    }
+  });
+}
+var init_claude = __esm({
+  "src/adapters/claude.mjs"() {
+    init_base();
+    init_process();
+    init_parser();
+    init_cli_homes();
+  }
+});
+
+// src/adapters/codex.mjs
+async function runCodexSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false }) {
+  const cwd = resolveCwd(seat.cwd, config2.defaultCwd);
+  const { command, args: baseArgs } = commandParts(config2.commands.codex);
+  const provider = seat.codex?.provider;
+  const model = seat.codex?.model ?? seat.providerModel ?? seat.model;
+  if (!provider) throw new Error(`Codex CLI provider is not configured for model ${seat.model}`);
+  const runtime = await prepareCodexHome(config2, provider, seat.skillPaths ?? []);
+  const writeEnabled = allowWrite && seat.autoApprove && seat.mode !== "plan";
+  const args = [
+    ...baseArgs,
+    "--ask-for-approval",
+    "never",
+    "exec",
+    "--json",
+    "--ephemeral",
+    "--strict-config",
+    "--model",
+    model,
+    "--sandbox",
+    writeEnabled ? "workspace-write" : "read-only",
+    "--cd",
+    cwd,
+    "--config",
+    `model_reasoning_effort="${seat.reasoningEffort ?? "high"}"`,
+    "-"
+  ];
+  const skillNotice = runtime.projectedSkills.length > 0 ? `
+
+Only these explicitly selected Skills are available under CODEX_HOME/skills: ${runtime.projectedSkills.map((path) => path.split("/").pop()).join(", ")}.` : "";
+  const run = await runCommand({
+    command,
+    args,
+    cwd,
+    input: `${prompt}${skillNotice}`,
+    timeoutMs,
+    env: { CODEX_HOME: runtime.home, CODEX_MOA_PROVIDER_API_KEY: runtime.providerApiKey },
+    stripSecretEnv: config2.safety?.stripSecretEnv !== false,
+    allowSecretExtraEnv: true
+  });
+  const text = extractCodexOutput(run.stdout);
+  return createResult({
+    seat,
+    run,
+    text,
+    artifactPath: null,
+    extra: {
+      modelSelection: "codex-cli-flag",
+      selectedProvider: provider,
+      selectedModel: model,
+      reasoningEffort: seat.reasoningEffort ?? "high",
+      reasoningSelection: "codex-config-override",
+      providerConfigSource: "cc-switch-isolated-projection",
+      loadedSkills: seat.skillPaths ?? [],
+      sessionId: extractSessionId(run.stdout),
+      usage: extractUsage(run.stdout),
+      continuitySupport: "ephemeral"
+    }
+  });
+}
+var init_codex = __esm({
+  "src/adapters/codex.mjs"() {
+    init_base();
+    init_process();
+    init_parser();
+    init_cli_homes();
+  }
+});
+
 // src/adapters/index.mjs
 function getAdapter(harness) {
   if (harness === "kimi") return runKimiSeat;
   if (harness === "zcode") return runZCodeSeat;
   if (harness === "dsh") return runDshSeat;
+  if (harness === "pi") return runPiSeat;
+  if (harness === "claude") return runClaudeSeat;
+  if (harness === "codex") return runCodexSeat;
   throw new Error(`Unknown harness: ${harness}`);
 }
 var init_adapters = __esm({
@@ -31435,6 +32894,9 @@ var init_adapters = __esm({
     init_kimi();
     init_zcode();
     init_dsh();
+    init_pi();
+    init_claude();
+    init_codex();
   }
 });
 
@@ -33625,11 +35087,11 @@ var init_jsonrpc = __esm({
         const id2 = this.nextRequestId++;
         let cancel = () => {
         };
-        const response = new Promise((resolve24, reject) => {
+        const response = new Promise((resolve30, reject) => {
           const pendingResponse = {
             resolve: (value) => {
               try {
-                resolve24(mapResponse ? mapResponse(value) : value);
+                resolve30(mapResponse ? mapResponse(value) : value);
               } catch (error62) {
                 reject(error62);
               }
@@ -33686,8 +35148,8 @@ var init_jsonrpc = __esm({
         this.stream = stream;
         this.staticHandlers = handlers;
         this.allowBatches = options?.allowBatches ?? true;
-        this.closedPromise = new Promise((resolve24) => {
-          this.abortController.signal.addEventListener("abort", () => resolve24());
+        this.closedPromise = new Promise((resolve30) => {
+          this.abortController.signal.addEventListener("abort", () => resolve30());
         });
         void this.receive();
       }
@@ -34697,8 +36159,8 @@ var init_acp = __esm({
         if (this.failed) {
           return Promise.reject(this.failure);
         }
-        return new Promise((resolve24, reject) => {
-          this.waiters.push({ resolve: resolve24, reject });
+        return new Promise((resolve30, reject) => {
+          this.waiters.push({ resolve: resolve30, reject });
         });
       }
     };
@@ -35212,17 +36674,17 @@ var init_acp = __esm({
 });
 
 // src/lib/control-store.mjs
-import { randomUUID as randomUUID7 } from "node:crypto";
-import { homedir as homedir15 } from "node:os";
-import { resolve as resolve16 } from "node:path";
-function expandHome14(value) {
+import { randomUUID as randomUUID9 } from "node:crypto";
+import { homedir as homedir19 } from "node:os";
+import { resolve as resolve20 } from "node:path";
+function expandHome18(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir15();
-  if (value.startsWith("~/")) return resolve16(homedir15(), value.slice(2));
-  return resolve16(value);
+  if (value === "~") return homedir19();
+  if (value.startsWith("~/")) return resolve20(homedir19(), value.slice(2));
+  return resolve20(value);
 }
 function controlStorePath() {
-  return expandHome14(process.env.CODEX_MOA_CONTROL_PATH || "~/.codex-moa/control.json");
+  return expandHome18(process.env.CODEX_MOA_CONTROL_PATH || "~/.codex-moa/control.json");
 }
 async function readStore(path) {
   return readJsonStore(path, { version: CONTROL_VERSION, defaultValue: DEFAULT_STORE2, migrations: MIGRATIONS4 });
@@ -35249,7 +36711,7 @@ async function requestCancellation({ taskId = null, seat = null, key = null, rea
   await updateStore(controlStorePath(), (store) => {
     const now = Date.now();
     request = {
-      id: `ctl-${now.toString(36)}-${randomUUID7().slice(0, 8)}`,
+      id: `ctl-${now.toString(36)}-${randomUUID9().slice(0, 8)}`,
       action: "cancel",
       taskId,
       seat,
@@ -35677,7 +37139,7 @@ var init_acp_seat = __esm({
       }
       async request(method, params, timeoutMs = 3e4) {
         const id2 = this.nextRequestId++;
-        const promise2 = new Promise((resolve24, reject) => {
+        const promise2 = new Promise((resolve30, reject) => {
           const timer = setTimeout(() => {
             this.pending.delete(String(id2));
             reject(new Error(`ZCode Protocol request timed out: ${method}`));
@@ -35690,7 +37152,7 @@ var init_acp_seat = __esm({
               error62.data = message.error.data;
               reject(error62);
             } else {
-              resolve24(message.result);
+              resolve30(message.result);
             }
           });
         });
@@ -35825,7 +37287,7 @@ var init_acp_seat = __esm({
           if ((projection.turnCount ?? 0) > initialTurnCount && projection.status !== "running") {
             return { status: projection.status ?? "idle", snapshot };
           }
-          await new Promise((resolve24) => setTimeout(resolve24, 250));
+          await new Promise((resolve30) => setTimeout(resolve30, 250));
         }
       }
       extractMessages(raw) {
@@ -35953,12 +37415,12 @@ var init_acp2 = __esm({
 });
 
 // src/lib/task-checkpoint.mjs
-import { existsSync as existsSync13 } from "node:fs";
-import { chmod as chmod10, mkdir as mkdir11, readFile as readFile8, rename as rename7, writeFile as writeFile9 } from "node:fs/promises";
-import { randomUUID as randomUUID8 } from "node:crypto";
-import { join as join12 } from "node:path";
+import { existsSync as existsSync15 } from "node:fs";
+import { chmod as chmod14, mkdir as mkdir15, readFile as readFile12, rename as rename9, writeFile as writeFile11 } from "node:fs/promises";
+import { randomUUID as randomUUID10 } from "node:crypto";
+import { join as join14 } from "node:path";
 function checkpointPath(root) {
-  return join12(root, "checkpoint.json");
+  return join14(root, "checkpoint.json");
 }
 function createCheckpoint({ taskId, input: input2, plan }) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -35996,6 +37458,7 @@ function createCheckpoint({ taskId, input: input2, plan }) {
       rationale: plan.rationale,
       routingExperiment: plan.routingExperiment ?? null
     },
+    stageReviews: [],
     nodes: {}
   };
 }
@@ -36037,9 +37500,9 @@ function mergeCheckpointIntoSeats(seats2, checkpoint) {
 }
 async function readCheckpoint(root) {
   const path = checkpointPath(root);
-  if (!existsSync13(path)) return null;
+  if (!existsSync15(path)) return null;
   try {
-    const checkpoint = JSON.parse(await readFile8(path, "utf8"));
+    const checkpoint = JSON.parse(await readFile12(path, "utf8"));
     if (checkpoint?.version !== CHECKPOINT_VERSION || !checkpoint.nodes) return null;
     return checkpoint;
   } catch {
@@ -36049,12 +37512,12 @@ async function readCheckpoint(root) {
 async function writeCheckpoint(root, checkpoint) {
   checkpoint.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
   const path = checkpointPath(root);
-  const temporary = `${path}.${randomUUID8()}.tmp`;
-  await mkdir11(root, { recursive: true });
-  await writeFile9(temporary, `${JSON.stringify(checkpoint, null, 2)}
+  const temporary = `${path}.${randomUUID10()}.tmp`;
+  await mkdir15(root, { recursive: true });
+  await writeFile11(temporary, `${JSON.stringify(checkpoint, null, 2)}
 `, { mode: 384 });
-  await rename7(temporary, path);
-  await chmod10(path, 384);
+  await rename9(temporary, path);
+  await chmod14(path, 384);
   return path;
 }
 function summarizeCheckpoint(checkpoint) {
@@ -36068,7 +37531,8 @@ function summarizeCheckpoint(checkpoint) {
     status: checkpoint.status,
     updatedAt: checkpoint.updatedAt,
     counts,
-    resumedCount: checkpoint.resumedCount ?? 0
+    resumedCount: checkpoint.resumedCount ?? 0,
+    stageReviews: checkpoint.stageReviews ?? []
   };
 }
 var CHECKPOINT_VERSION;
@@ -36078,18 +37542,97 @@ var init_task_checkpoint = __esm({
   }
 });
 
+// src/lib/captain-usage.mjs
+import { existsSync as existsSync16 } from "node:fs";
+import { chmod as chmod15, mkdir as mkdir16, readFile as readFile13, rename as rename10, writeFile as writeFile12 } from "node:fs/promises";
+import { randomUUID as randomUUID11 } from "node:crypto";
+import { homedir as homedir20 } from "node:os";
+import { dirname as dirname14, resolve as resolve21 } from "node:path";
+function expandHome19(value) {
+  if (value === "~") return homedir20();
+  if (typeof value === "string" && value.startsWith("~/")) return resolve21(homedir20(), value.slice(2));
+  return resolve21(value);
+}
+function captainUsagePath() {
+  return expandHome19(process.env.CODEX_MOA_CAPTAIN_USAGE || "~/.codex-moa/captain-usage.json");
+}
+function normalizeLimit(limit) {
+  const usedPercent = Number(limit?.usedPercent);
+  return {
+    limitId: String(limit?.limitId ?? "codex"),
+    windowDurationMins: Number.isFinite(Number(limit?.windowDurationMins)) ? Number(limit.windowDurationMins) : null,
+    usedPercent: Number.isFinite(usedPercent) ? Math.max(0, Math.min(100, usedPercent)) : null,
+    remainingPercent: Number.isFinite(usedPercent) ? Math.max(0, Math.min(100, 100 - usedPercent)) : null,
+    resetsAt: Number.isFinite(Number(limit?.resetsAt)) ? Number(limit.resetsAt) : null
+  };
+}
+function normalizeCaptainUsage(input2 = {}) {
+  const limits = (input2.limits ?? []).map(normalizeLimit);
+  return {
+    source: input2.source ?? "codex-app-usage-limits",
+    observedAt: input2.observedAt ?? (/* @__PURE__ */ new Date()).toISOString(),
+    planType: input2.planType ?? null,
+    ordinaryUsageAllowed: input2.ordinaryUsageAllowed !== false,
+    limits
+  };
+}
+async function writeCaptainUsage(input2, path = captainUsagePath()) {
+  const value = normalizeCaptainUsage(input2);
+  await mkdir16(dirname14(path), { recursive: true, mode: 448 });
+  const temporary = `${path}.${randomUUID11()}.tmp`;
+  await writeFile12(temporary, `${JSON.stringify(value, null, 2)}
+`, { mode: 384 });
+  await rename10(temporary, path);
+  await chmod15(path, 384);
+  return value;
+}
+async function readCaptainUsage(path = captainUsagePath()) {
+  if (!existsSync16(path)) return null;
+  try {
+    return normalizeCaptainUsage(JSON.parse(await readFile13(path, "utf8")));
+  } catch {
+    return null;
+  }
+}
+function isOpenAiCaptain(captain) {
+  return captain?.family === "openai" || /openai/i.test(captain?.provider?.name ?? "");
+}
+function captainAllocation(captain, usage) {
+  if (!isOpenAiCaptain(captain)) return { active: false, reason: "captain is not confirmed as OpenAI/GPT" };
+  const primary = usage?.limits?.find((limit) => limit.limitId === "codex") ?? usage?.limits?.[0] ?? null;
+  const remaining = Number(primary?.remainingPercent);
+  if (!Number.isFinite(remaining)) return { active: false, reason: "GPT quota is unavailable" };
+  const tier = remaining <= 10 ? "critical" : remaining <= 30 ? "protect" : remaining <= 60 ? "conserve" : "balanced";
+  const externalTargetPercent = { balanced: 55, conserve: 70, protect: 85, critical: 92 }[tier];
+  return {
+    active: true,
+    provider: "openai",
+    tier,
+    remainingPercent: remaining,
+    externalTargetPercent,
+    captainTargetPercent: 100 - externalTargetPercent,
+    observedAt: usage.observedAt,
+    resetsAt: primary.resetsAt,
+    guidance: tier === "balanced" ? "Keep GPT on planning, adjudication, integration, and the final answer; delegate substantial execution." : "Reserve GPT for global planning, evidence adjudication, conflict resolution, integration, and the final answer; delegate execution and first-pass review aggressively."
+  };
+}
+var init_captain_usage = __esm({
+  "src/lib/captain-usage.mjs"() {
+  }
+});
+
 // src/lib/routing-experiment.mjs
-import { createHash as createHash6 } from "node:crypto";
-import { homedir as homedir16 } from "node:os";
-import { resolve as resolve17 } from "node:path";
-function expandHome15(value) {
+import { createHash as createHash8 } from "node:crypto";
+import { homedir as homedir21 } from "node:os";
+import { resolve as resolve22 } from "node:path";
+function expandHome20(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir16();
-  if (value.startsWith("~/")) return resolve17(homedir16(), value.slice(2));
-  return resolve17(value);
+  if (value === "~") return homedir21();
+  if (value.startsWith("~/")) return resolve22(homedir21(), value.slice(2));
+  return resolve22(value);
 }
 function routingExperimentStatePath() {
-  return expandHome15(process.env.CODEX_MOA_ROUTING_EXPERIMENT_PATH || "~/.codex-moa/routing-experiments.json");
+  return expandHome20(process.env.CODEX_MOA_ROUTING_EXPERIMENT_PATH || "~/.codex-moa/routing-experiments.json");
 }
 function isObject4(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -36130,7 +37673,7 @@ function selectRoutingVariant({ policy, task, cwd, state = null, forceVariant = 
     variant = "control";
     rationale = `experiment ${experiment.id} is ${experimentState.status}; routing pinned to control`;
   } else {
-    const digest = createHash6("sha256").update(`${resolve17(cwd || process.cwd())}
+    const digest = createHash8("sha256").update(`${resolve22(cwd || process.cwd())}
 ${task}`).digest();
     bucket = digest[0] % 100;
     const controlWeight = Number(experiment.control.weight ?? 50);
@@ -36179,7 +37722,7 @@ async function recordRoutingOutcome(route, { taskId, results, path = routingExpe
   });
   return summary;
 }
-function rate(variant) {
+function rate2(variant) {
   if (!variant?.runs) return null;
   return variant.successes / variant.runs;
 }
@@ -36196,8 +37739,8 @@ async function evaluateRoutingRollback(route, definition, { path = routingExperi
     }
     const control = experiment.variants?.control;
     const challenger = experiment.variants?.challenger;
-    const controlRate = rate(control);
-    const challengerRate = rate(challenger);
+    const controlRate = rate2(control);
+    const challengerRate = rate2(challenger);
     const enoughSamples = (control?.runs ?? 0) >= minSamples && (challenger?.runs ?? 0) >= minSamples;
     const compare = {
       minSamples,
@@ -36234,10 +37777,10 @@ var init_routing_experiment = __esm({
 });
 
 // src/lib/moa-mode.mjs
-import { homedir as homedir17 } from "node:os";
-import { resolve as resolve18 } from "node:path";
+import { homedir as homedir22 } from "node:os";
+import { resolve as resolve23 } from "node:path";
 function modePath() {
-  return process.env.CODEX_MOA_MODE_PATH ? resolve18(process.env.CODEX_MOA_MODE_PATH) : resolve18(homedir17(), ".codex-moa", "mode.json");
+  return process.env.CODEX_MOA_MODE_PATH ? resolve23(process.env.CODEX_MOA_MODE_PATH) : resolve23(homedir22(), ".codex-moa", "mode.json");
 }
 function normalizeMode(mode) {
   const normalized = String(mode ?? "auto").trim().toLowerCase();
@@ -36275,8 +37818,54 @@ var init_moa_mode = __esm({
   }
 });
 
+// src/lib/skill-broker.mjs
+import { existsSync as existsSync17, realpathSync, statSync as statSync2 } from "node:fs";
+import { homedir as homedir23 } from "node:os";
+import { isAbsolute, join as join15, relative, resolve as resolve24 } from "node:path";
+function expandHome21(value) {
+  if (value === "~") return homedir23();
+  if (String(value).startsWith("~/")) return resolve24(homedir23(), String(value).slice(2));
+  return resolve24(String(value));
+}
+function within(path, root) {
+  const rel = relative(root, path);
+  return rel === "" || !rel.startsWith("..") && !isAbsolute(rel);
+}
+function resolveSkillPaths(skillRefs = [], config2 = {}) {
+  if (!Array.isArray(skillRefs)) throw new Error("skills must be an array");
+  const roots = (config2.skills?.allowedRoots ?? [
+    "~/.cc-switch/skills",
+    "~/.codex/skills",
+    "~/.agents/skills",
+    "~/.pi/agent/skills",
+    "~/.codex/plugins"
+  ]).map(expandHome21).filter(existsSync17).map((path) => realpathSync(path));
+  const searchRoots = (config2.skills?.searchRoots ?? ["~/.cc-switch/skills", "~/.pi/agent/skills"]).map(expandHome21);
+  const output2 = [];
+  for (const raw of skillRefs) {
+    const ref = String(raw ?? "").trim();
+    if (!ref) continue;
+    const candidates = ref.includes("/") || isAbsolute(ref) ? [expandHome21(ref)] : searchRoots.map((root) => join15(root, ref));
+    const found = candidates.find(existsSync17);
+    if (!found) throw new Error(`Skill not found: ${ref}`);
+    const resolved = realpathSync(found);
+    if (!roots.some((root) => within(resolved, root))) {
+      throw new Error(`Skill path is outside configured allowed roots: ${resolved}`);
+    }
+    if (!statSync2(resolved).isDirectory() && !resolved.endsWith("SKILL.md")) {
+      throw new Error(`Skill reference must be a directory or SKILL.md: ${resolved}`);
+    }
+    if (!output2.includes(resolved)) output2.push(resolved);
+  }
+  return output2;
+}
+var init_skill_broker = __esm({
+  "src/lib/skill-broker.mjs"() {
+  }
+});
+
 // src/orchestrator.mjs
-import { join as join13 } from "node:path";
+import { join as join16 } from "node:path";
 function auditorPrompt({ task, diff, files, context }) {
   return [
     "You are the independent DeepSeekHarness audit seat in a Codex-orchestrated MoA run.",
@@ -36350,7 +37939,11 @@ function compactResult(result, maxOutputChars) {
     stopReason: result.stopReason ?? null,
     continuitySupport: result.continuitySupport ?? null,
     selectedProvider: result.selectedProvider ?? null,
+    loadedSkills: result.loadedSkills ?? [],
     role: result.role,
+    auditMode: result.auditMode ?? null,
+    blocking: result.blocking !== false,
+    pairedExecutor: result.pairedExecutor ?? null,
     mode: result.mode,
     status: result.status,
     exitCode: result.exitCode,
@@ -36388,6 +37981,9 @@ function resultFailure(seat, error62) {
     harness: seat.harness,
     requestedModel: seat.model,
     role: seat.role,
+    auditMode: seat.auditMode ?? null,
+    blocking: seat.blocking !== false,
+    pairedExecutor: seat.pairedExecutor ?? null,
     mode: seat.mode,
     status: "error",
     timedOut: false,
@@ -36417,7 +38013,17 @@ function graphNodeMap(plan) {
   return new Map((plan.graph?.nodes ?? []).map((node2) => [node2.id, node2]));
 }
 function allNodesDone(plan, checkpoint) {
-  return (plan.graph?.nodes ?? []).every((node2) => checkpoint.nodes?.[node2.id]?.status === "done");
+  return (plan.graph?.nodes ?? []).every((node2) => {
+    const status = checkpoint.nodes?.[node2.id]?.status;
+    return status === "done" || node2.auditMode === "shadow" && ["failed", "error", "cancelled", "blocked"].includes(status);
+  });
+}
+function stagePhase(seats2 = []) {
+  const roles = new Set(seats2.map((seat) => seat.role));
+  if ([...roles].every((role) => ["architect", "researcher", "vision"].includes(role))) return "planning";
+  if (roles.has("executor")) return "execution";
+  if ([...roles].every((role) => ["auditor", "reviewer"].includes(role))) return "verification";
+  return "mixed";
 }
 function assertIsolatedExternalWrites({ allowWrite, worktree, seats: seats2 }) {
   if (!allowWrite) return;
@@ -36440,8 +38046,8 @@ async function runMoA(input2, deps = {}) {
   const captain = await resolveCaptain({ captainModel: input2.captainModel });
   const orchestration = await resolveMoAMode(input2.orchestrationMode);
   const workspace = createWorkspace(config2.blackboardDir, input2.taskId);
-  const manifestPath = join13(workspace.dirs.root, "manifest.json");
-  const eventsPath = join13(workspace.dirs.root, "events.jsonl");
+  const manifestPath = join16(workspace.dirs.root, "manifest.json");
+  const eventsPath = join16(workspace.dirs.root, "events.jsonl");
   const checkpointFile = checkpointPath(workspace.dirs.root);
   let checkpoint = input2.resume ? await readCheckpoint(workspace.dirs.root) : null;
   if (input2.resume && !checkpoint) throw new Error(`No resumable checkpoint found for task ${workspace.taskId}`);
@@ -36450,6 +38056,15 @@ async function runMoA(input2, deps = {}) {
   }
   const hadCheckpoint = Boolean(checkpoint);
   const policy = deps.policy ?? loadEvolutionPolicy();
+  const ledger = await readCostLedger();
+  const captainUsage = input2.captainUsage ?? await readCaptainUsage();
+  const allocation = captainAllocation(captain, captainUsage);
+  let quotaSnapshot = input2.quotaSnapshot ?? (input2.respectQuota !== false ? await readQuotaSnapshot(config2) : null);
+  const quotaMaxAgeMs = Number(config2.quota?.maxAgeMs ?? 3e5);
+  const quotaStale = !quotaSnapshot?.updatedAt || Date.now() - Date.parse(quotaSnapshot.updatedAt) > quotaMaxAgeMs;
+  if (input2.respectQuota !== false && config2.quota?.refreshOnRun !== false && quotaStale) {
+    quotaSnapshot = await refreshQuota(config2);
+  }
   const experimentEligible = input2.routingExperiment !== false && !input2.assignments?.length && !input2.seats?.length && input2.mode === "review" && input2.stakes !== "high";
   const experimentState = experimentEligible ? await readRoutingExperimentState() : { experiments: {} };
   const route = experimentEligible ? selectRoutingVariant({
@@ -36459,15 +38074,22 @@ async function runMoA(input2, deps = {}) {
     state: experimentState,
     forceVariant: checkpoint?.plan?.routingExperiment?.variant ?? null
   }) : { enabled: false, id: null, variant: "control", policy, rationale: "routing experiment not eligible" };
-  const plan = planMoA({ ...input2, captain, orchestrationMode: orchestration.mode, routingExperiment: route }, { models, schedule, policy: route.policy ?? policy });
+  const plan = planMoA({ ...input2, captain, orchestrationMode: orchestration.mode, routingExperiment: route }, {
+    models,
+    schedule,
+    policy: route.policy ?? policy,
+    quotaSnapshot,
+    captainAllocation: allocation,
+    routePerformance: summarizeCostLedger(ledger).routes
+  });
   let healthRouting = null;
   let providerHealth = null;
   if (input2.respectHealth !== false && !input2.assignments?.length && !input2.seats?.length) {
-    const healthSnapshot = input2.quotaSnapshot ?? await readQuotaSnapshot(config2);
+    const healthSnapshot = quotaSnapshot;
     if (healthSnapshot) {
       providerHealth = summarizeProviderHealth({
         snapshot: healthSnapshot,
-        ledger: await readCostLedger(),
+        ledger,
         lowThreshold: policy.routing?.quotaLowThreshold ?? 10,
         circuitState: await readProviderState(),
         config: config2
@@ -36481,6 +38103,7 @@ async function runMoA(input2, deps = {}) {
       if (healthRouting.blocked.length > 0) {
         throw new Error(`Refusing to dispatch unhealthy provider(s): ${healthRouting.blocked.map((item) => `${item.model}(${item.provider}:${item.status})`).join(", ")}. Configure a healthy provider or set allowUnhealthy=true.`);
       }
+      healthRouting.adjustments.push(...reconcileAuditPairing(plan.seats, { health: providerHealth, modelsConfig: models, captain }));
       for (const node2 of plan.graph?.nodes ?? []) {
         const seat = plan.seats.find((item) => item.seat === node2.id);
         if (seat) {
@@ -36490,6 +38113,28 @@ async function runMoA(input2, deps = {}) {
       }
       plan.healthRouting = healthRouting;
     }
+  }
+  const failureSummary = summarizeFailureMemory(await readFailureMemory(), { config: config2 });
+  let failureRouting = { adjustments: [], blocked: [] };
+  if (!input2.assignments?.length && !input2.seats?.length) {
+    failureRouting = applyFailureAvoidance(plan.seats, { summary: failureSummary, modelsConfig: models, captain, health: providerHealth });
+    if (failureRouting.blocked.length > 0) {
+      throw new Error(`Refusing to repeat guarded failed route(s): ${failureRouting.blocked.map((item) => item.route).join(", ")}. Wait for the guard to expire, repair the provider/Harness, or use an explicit assignment after review.`);
+    }
+    failureRouting.adjustments.push(...reconcileAuditPairing(plan.seats, {
+      health: providerHealth,
+      modelsConfig: models,
+      captain,
+      routeAllowed: (model, harness) => !failureGuardFor(failureSummary, model, harness)
+    }));
+    for (const node2 of plan.graph?.nodes ?? []) {
+      const seat = plan.seats.find((item) => item.seat === node2.id);
+      if (seat) {
+        node2.model = seat.model;
+        node2.harness = seat.harness;
+      }
+    }
+    plan.failureRouting = failureRouting;
   }
   if (checkpoint) {
     const knownSeats = new Set(Object.keys(checkpoint.nodes ?? {}));
@@ -36506,7 +38151,9 @@ async function runMoA(input2, deps = {}) {
     input: sanitizeInput(input2),
     plan: {
       level: plan.level,
-      seats: plan.seats.map((seat) => ({ seat: seat.seat, model: seat.model, harness: seat.harness, role: seat.role, runtime: seat.runtime ?? "cli" })),
+      seats: plan.seats.map((seat) => ({ seat: seat.seat, model: seat.model, harness: seat.harness, role: seat.role, runtime: seat.runtime ?? "cli", auditMode: seat.auditMode ?? null, pairedExecutor: seat.pairedExecutor ?? null })),
+      auditStrategy: plan.auditStrategy ?? null,
+      failureRouting: plan.failureRouting ?? null,
       routingExperiment: plan.routingExperiment ?? null
     },
     checkpoint: checkpointFile,
@@ -36516,14 +38163,16 @@ async function runMoA(input2, deps = {}) {
   let seatInputs = plan.seats.map((seat) => ({
     ...seat,
     taskId: workspace.taskId,
-    cwd: seat.cwd ?? input2.cwd ?? config2.defaultCwd
+    cwd: seat.cwd ?? input2.cwd ?? config2.defaultCwd,
+    skillPaths: resolveSkillPaths([...input2.skills ?? [], ...seat.skills ?? []], config2)
   }));
   seatInputs = mergeCheckpointIntoSeats(seatInputs, checkpoint);
   const bySeat = new Map(seatInputs.map((seat) => [seat.seat, seat]));
   const graphNodes = graphNodeMap(plan);
   const completed = completedSeatIds(checkpoint);
   const resultMap = checkpointResultMap(checkpoint);
-  if (input2.worktree !== false) {
+  const allowWrite = input2.allowWrite === true;
+  if (allowWrite && input2.worktree !== false) {
     for (const seat of seatInputs) {
       if (seat.role !== "executor" || completed.has(seat.seat)) continue;
       const worktree = await createWorktreeFn({ cwd: seat.originalCwd ?? seat.cwd, taskId: workspace.taskId, seat: seat.seat });
@@ -36572,25 +38221,24 @@ async function runMoA(input2, deps = {}) {
   if (auditWarnings.length > 0 && input2.strictHeterogeneousAudit === true) {
     throw new Error(auditWarnings.map((warning) => warning.message).join(" "));
   }
-  let quotaSnapshot = input2.quotaSnapshot ?? (input2.respectQuota !== false ? await readQuotaSnapshot(config2) : null);
-  const maxAgeMs = Number(config2.quota?.maxAgeMs ?? 3e5);
-  const stale = !quotaSnapshot?.updatedAt || Date.now() - Date.parse(quotaSnapshot.updatedAt) > maxAgeMs;
-  if (input2.respectQuota !== false && config2.quota?.refreshOnRun !== false && stale) {
-    quotaSnapshot = await refreshQuota(config2);
-  }
   const quota = quotaSnapshot ? quotaForSeats(seatInputs, quotaSnapshot, models) : [];
   const quotaBySeat = new Map(quota.map((item) => [item.seat, item]));
   if (input2.respectQuota !== false && quotaSnapshot) {
-    const depleted = depletedModels(seatInputs, quotaSnapshot, models);
+    const depletedAll = depletedModels(seatInputs, quotaSnapshot, models);
+    for (const item of depletedAll.filter(({ assignment }) => assignment.auditMode === "shadow")) {
+      item.assignment.skipDispatch = true;
+      item.assignment.skipReason = `shadow provider quota depleted for ${item.assignment.model}`;
+    }
+    const depleted = depletedAll.filter(({ assignment }) => assignment.auditMode !== "shadow");
     if (depleted.length > 0 && !input2.allowDepleted) {
       throw new Error(`Refusing to dispatch depleted model(s): ${depleted.map((item) => item.assignment.model).join(", ")}`);
     }
   }
-  const allowWrite = input2.allowWrite === true;
   assertIsolatedExternalWrites({ allowWrite, worktree: input2.worktree, seats: seatInputs });
   const runStartedAt = Date.now();
   const budgetPolicy = normalizeBudgetPolicy({ config: config2, input: input2 });
   const budgetTotals = newBudgetTotals();
+  const taskCostEntries = [];
   let budgetViolations = [];
   const checkBudget = () => {
     budgetViolations = evaluateBudget(budgetTotals, budgetPolicy, runStartedAt);
@@ -36655,6 +38303,9 @@ ${memoryPack}` : null
       result = resultFailure(seat, error62);
     }
     result.round = options?.round ?? 1;
+    result.auditMode = seat.auditMode ?? null;
+    result.blocking = seat.blocking !== false;
+    result.pairedExecutor = seat.pairedExecutor ?? null;
     result.structured = normalizeSeatResult(result, seat);
     if (seat.worktree?.path) {
       result.worktree = seat.worktree;
@@ -36681,8 +38332,8 @@ ${memoryPack}` : null
       worktree: result.worktreeCleanup?.removed ? null : seat.worktree?.path ?? seat.worktree ?? null,
       finishedAt: (/* @__PURE__ */ new Date()).toISOString()
     });
-    const resultPath = join13(workspace.dirs.results, `${seat.seat}.json`);
-    const textPath = join13(workspace.dirs.artifacts, `${seat.seat}.md`);
+    const resultPath = join16(workspace.dirs.results, `${seat.seat}.json`);
+    const textPath = join16(workspace.dirs.artifacts, `${seat.seat}.md`);
     result.artifactPath = resultPath;
     writeJson(resultPath, result);
     writeText(textPath, result.summary ?? result.error ?? "");
@@ -36740,10 +38391,22 @@ ${memoryPack}` : null
         pricing
       });
       await recordCostEntry(costEntry);
+      taskCostEntries.push(costEntry);
       accumulateBudget(budgetTotals, costEntry);
     } catch {
     }
-    if (result.status !== "cancelled") {
+    if (result.status !== "done") {
+      try {
+        await recordSeatFailure({ taskId: workspace.taskId, level: plan.level, seat, result });
+      } catch {
+      }
+    } else {
+      try {
+        await recordSeatRecovery({ taskId: workspace.taskId, level: plan.level, seat, result });
+      } catch {
+      }
+    }
+    if (result.status !== "cancelled" && seat.auditMode !== "shadow") {
       try {
         await recordProviderOutcome({
           provider: providerForModel(seat.model, models),
@@ -36780,6 +38443,22 @@ ${memoryPack}` : null
       });
     }
   };
+  const dependencyContext = (seat) => {
+    if (seat.role !== "auditor" && seat.role !== "reviewer") return null;
+    const node2 = graphNodes.get(seat.seat);
+    const dependencies = (node2?.dependsOn ?? []).map((id2) => resultMap.get(id2)).filter(Boolean);
+    if (dependencies.length === 0) return null;
+    return [
+      "## Upstream execution evidence",
+      ...dependencies.flatMap((result) => [
+        `### ${result.seat} (${result.requestedModel}@${result.harness})`,
+        `Status: ${result.status}`,
+        result.diffPath ? `Captured diff artifact: ${result.diffPath}` : "Captured diff artifact: none",
+        result.summary ? `Execution summary:
+${result.summary}` : "Execution summary: none"
+      ])
+    ].join("\n");
+  };
   const layers = plan.graph?.layers ?? [];
   for (let layerIndex = 0; layerIndex < layers.length; layerIndex += 1) {
     await consumeSteering();
@@ -36800,6 +38479,11 @@ ${memoryPack}` : null
       if (!seat) continue;
       const node2 = checkpoint.nodes?.[seatId];
       if (node2?.status === "done") continue;
+      if (seat.skipDispatch) {
+        updateCheckpointNode(checkpoint, seatId, { status: "cancelled", cancelReason: seat.skipReason ?? "shadow dispatch skipped" });
+        appendEvent(eventsPath, { type: "shadow_skipped", seat: seatId, reason: seat.skipReason ?? null });
+        continue;
+      }
       if (await deps.isCancelled?.()) {
         updateCheckpointNode(checkpoint, seatId, { status: "cancelled", cancelReason: "job cancellation requested" });
         continue;
@@ -36814,7 +38498,8 @@ ${memoryPack}` : null
       runnable.push(seat);
     }
     if (runnable.length === 0) continue;
-    const settled = await Promise.allSettled(runnable.map((seat) => runSeat(seat, layerIndex)));
+    const stageStartedAt = /* @__PURE__ */ new Date();
+    const settled = await Promise.allSettled(runnable.map((seat) => runSeat(seat, layerIndex, { extraContext: dependencyContext(seat) })));
     settled.forEach((entry, index) => {
       const seat = runnable[index];
       if (entry.status === "fulfilled") {
@@ -36824,6 +38509,35 @@ ${memoryPack}` : null
         resultMap.set(seat.seat, failure2);
         updateCheckpointNode(checkpoint, seat.seat, { status: failure2.status, result: failure2 });
       }
+    });
+    const stageFinishedAt = /* @__PURE__ */ new Date();
+    const stageSeats = layer.map((seatId) => {
+      const seat = bySeat.get(seatId);
+      const node2 = checkpoint.nodes?.[seatId];
+      return {
+        seat: seatId,
+        role: seat?.role ?? null,
+        model: seat?.model ?? null,
+        harness: seat?.harness ?? null,
+        auditMode: seat?.auditMode ?? null,
+        blocking: seat?.blocking !== false,
+        status: node2?.status ?? "pending",
+        durationMs: node2?.durationMs ?? null,
+        tests: node2?.result?.structured?.tests ?? []
+      };
+    });
+    const blockingSeats = stageSeats.filter((seat) => seat.blocking !== false);
+    checkpoint.stageReviews ??= [];
+    checkpoint.stageReviews.push({
+      layer: layerIndex,
+      attempt: checkpoint.stageReviews.filter((stage) => stage.layer === layerIndex).length + 1,
+      phase: stagePhase(layer.map((seatId) => bySeat.get(seatId)).filter(Boolean)),
+      startedAt: stageStartedAt.toISOString(),
+      finishedAt: stageFinishedAt.toISOString(),
+      durationMs: stageFinishedAt.getTime() - stageStartedAt.getTime(),
+      seats: stageSeats,
+      blockingPassed: blockingSeats.every((seat) => seat.status === "done"),
+      evidenceReadyForCaptain: true
     });
     await writeCheckpoint(workspace.dirs.root, checkpoint);
     await reportProgress({ type: "layer_finished", layer: layerIndex, activeSeat: null });
@@ -36841,6 +38555,9 @@ ${memoryPack}` : null
       harness: seat.harness,
       requestedModel: seat.model,
       role: seat.role,
+      auditMode: seat.auditMode ?? null,
+      blocking: seat.blocking !== false,
+      pairedExecutor: seat.pairedExecutor ?? null,
       mode: seat.mode,
       status: node2?.status ?? "pending",
       summary: "",
@@ -36872,14 +38589,13 @@ ${repairContext}` });
         break;
       }
       const repairSummary = repaired.map((result) => `${result.seat}: ${result.summary}`).join("\n");
-      for (const seat of seatInputs.filter((item) => ["auditor", "reviewer"].includes(item.role))) {
-        const result = await runSeat(seat, void 0, { round, extraContext: `## Required repair from previous audit
+      const reauditSeats = seatInputs.filter((item) => ["auditor", "reviewer"].includes(item.role));
+      const reauditResults = await Promise.all(reauditSeats.map((seat) => runSeat(seat, void 0, { round, extraContext: `## Required repair from previous audit
 ${repairContext}
 
 ## Repair results
-${repairSummary}` });
-        resultMap.set(seat.seat, result);
-      }
+${repairSummary}` })));
+      for (let index = 0; index < reauditSeats.length; index += 1) resultMap.set(reauditSeats[index].seat, reauditResults[index]);
       results = seatInputs.map((seat) => resultMap.get(seat.seat) ?? results.find((item) => item.seat === seat.seat));
       checkpoint.repairRounds = round - 1;
       await writeCheckpoint(workspace.dirs.root, checkpoint);
@@ -36887,6 +38603,44 @@ ${repairSummary}` });
     }
   }
   if (cancellationRequested) cancelRemaining("job cancellation requested");
+  const executorBySeat = new Map(seatInputs.filter((seat) => seat.role === "executor").map((seat) => [seat.seat, seat]));
+  const auditDurations = results.filter((result) => result.role === "auditor").map((result) => Number(result.durationMs) || 0);
+  const auditLayerMs = Math.max(0, ...auditDurations);
+  const auditParallelSavedMs = Math.max(0, auditDurations.reduce((sum, value) => sum + value, 0) - auditLayerMs);
+  for (const result of results.filter((item) => item.role === "auditor")) {
+    const seat = bySeat.get(result.seat);
+    const executor = executorBySeat.get(result.pairedExecutor) ?? seatInputs.find((item) => item.role === "executor");
+    if (!seat || !executor) continue;
+    const estimate = makeCostEntry({ taskId: workspace.taskId, seat, result, quota: quotaBySeat.get(seat.seat) ?? null, pricing });
+    try {
+      await recordAuditRun({
+        taskId: workspace.taskId,
+        level: plan.level,
+        executorSeat: executor.seat,
+        executorModel: executor.model,
+        executorHarness: executor.harness,
+        auditorSeat: seat.seat,
+        auditorModel: seat.model,
+        auditorHarness: seat.harness,
+        auditMode: seat.auditMode ?? "gate",
+        blocking: seat.blocking !== false,
+        harnessExperiment: seat.harnessExperiment ?? null,
+        status: result.status,
+        timedOut: result.timedOut === true,
+        verdict: result.structured?.verdict ?? null,
+        findings: result.structured?.findings?.length ?? 0,
+        durationMs: result.durationMs ?? null,
+        outputTokens: result.usage?.outputTokens ?? null,
+        outputTps: outputTps(result),
+        auditLayerMs,
+        auditParallelSavedMs,
+        criticalPathContributor: (Number(result.durationMs) || 0) === auditLayerMs,
+        estimatedUsd: estimate.estimatedUsd,
+        pricingPeriod: estimate.pricingPeriod ?? null
+      });
+    } catch {
+    }
+  }
   checkpoint.status = cancellationRequested ? "cancelled" : allNodesDone(plan, checkpoint) ? "completed" : "partial";
   await writeCheckpoint(workspace.dirs.root, checkpoint);
   for (let index = 0; index < seatInputs.length; index += 1) {
@@ -36906,13 +38660,13 @@ ${repairSummary}` });
   let routingRollback = { rolledBack: false };
   if (plan.seats.length > 0) {
     try {
-      routingOutcome = await recordRoutingOutcome(route, { taskId: workspace.taskId, results });
+      routingOutcome = await recordRoutingOutcome(route, { taskId: workspace.taskId, results: results.filter((result) => result.auditMode !== "shadow") });
       routingRollback = await evaluateRoutingRollback(route, routingExperimentDefinition(policy));
     } catch (error62) {
       routingRollback = { rolledBack: false, error: error62.message };
     }
   }
-  const navigator2 = navigatorReview({ plan, results, auditWarnings, quota });
+  const navigator2 = navigatorReview({ plan, results, auditWarnings, quota, allowWrite });
   if (routingRollback.rolledBack) {
     navigator2.findings.push({
       severity: "P1",
@@ -36922,8 +38676,8 @@ ${repairSummary}` });
     });
     if (navigator2.verdict === "pass") navigator2.verdict = "warn";
   }
-  writeJson(join13(workspace.dirs.root, "navigator.json"), navigator2);
-  const resultsPath = join13(workspace.dirs.root, "results.json");
+  writeJson(join16(workspace.dirs.root, "navigator.json"), navigator2);
+  const resultsPath = join16(workspace.dirs.root, "results.json");
   writeJson(resultsPath, results);
   if (memoryKeySource) {
     await recordEpisode({
@@ -36952,8 +38706,16 @@ ${repairSummary}` });
       quota,
       routing: { variant: route.variant, experimentId: route.id, outcome: routingOutcome, rollback: routingRollback },
       health: providerHealth ? { overall: providerHealth.overall, routing: healthRouting } : null,
+      failureRouting,
       budget: { ...budgetSummary(budgetPolicy, budgetTotals, runStartedAt), exceeded: budgetViolations },
       results: results.map((result) => ({
+        ...(() => {
+          const planned = plan.seats.find((seat) => seat.seat === result.seat);
+          return {
+            reasoningEffort: result.reasoningEffort ?? planned?.reasoningEffort ?? null,
+            reasoningSource: planned?.reasoningSource ?? "unknown"
+          };
+        })(),
         seat: result.seat,
         harness: result.harness,
         requestedModel: result.requestedModel,
@@ -36962,11 +38724,16 @@ ${repairSummary}` });
         status: result.status,
         timedOut: result.timedOut,
         stopReason: result.stopReason ?? null,
-        durationMs: result.durationMs
-      }))
+        durationMs: result.durationMs,
+        usage: result.usage ?? null,
+        estimatedUsd: taskCostEntries.find((entry) => entry.seat === result.seat)?.estimatedUsd ?? null,
+        pricingKnown: taskCostEntries.find((entry) => entry.seat === result.seat)?.pricingKnown ?? false
+      })),
+      stageReviews: checkpoint.stageReviews ?? []
     });
   } catch {
   }
+  const finalFailureSummary = summarizeFailureMemory(await readFailureMemory(), { config: config2 });
   return {
     taskId: workspace.taskId,
     resumed: hadCheckpoint,
@@ -36982,6 +38749,7 @@ ${repairSummary}` });
     routingOutcome,
     routingRollback,
     health: providerHealth ? { summary: providerHealth, routing: healthRouting } : null,
+    failureMemory: { summary: finalFailureSummary, routing: failureRouting, path: failureMemoryPath() },
     budget: { ...budgetSummary(budgetPolicy, budgetTotals, runStartedAt), exceeded: budgetViolations },
     quota,
     navigator: navigator2,
@@ -36992,6 +38760,7 @@ ${repairSummary}` });
     checkpoint: {
       path: checkpointFile,
       status: checkpoint.status,
+      stageReviews: checkpoint.stageReviews ?? [],
       counts: results.reduce((counts, result) => {
         counts[result.status] = (counts[result.status] ?? 0) + 1;
         return counts;
@@ -37003,7 +38772,9 @@ ${repairSummary}` });
       manifest: manifestPath,
       events: eventsPath,
       results: resultsPath,
-      navigator: join13(workspace.dirs.root, "navigator.json")
+      navigator: join16(workspace.dirs.root, "navigator.json"),
+      auditMetrics: auditMetricsPath(),
+      failureMemory: failureMemoryPath()
     },
     graph: {
       layers: plan.graph?.layers ?? [],
@@ -37048,14 +38819,18 @@ var init_orchestrator = __esm({
     init_acp2();
     init_task_checkpoint();
     init_cost_ledger();
+    init_captain_usage();
+    init_audit_metrics();
     init_routing_experiment();
     init_moa_mode();
+    init_skill_broker();
+    init_failure_memory();
   }
 });
 
 // mcp/server.mjs
 import { readFileSync as readFileSync9 } from "node:fs";
-import { resolve as resolve23 } from "node:path";
+import { resolve as resolve29 } from "node:path";
 
 // node_modules/zod/v3/helpers/util.js
 var util;
@@ -44554,7 +46329,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve24) => setTimeout(resolve24, pollInterval));
+        await new Promise((resolve30) => setTimeout(resolve30, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error62) {
@@ -44571,7 +46346,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve24, reject) => {
+    return new Promise((resolve30, reject) => {
       const earlyReject = (error62) => {
         reject(error62);
       };
@@ -44649,7 +46424,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve24(parseResult.data);
+            resolve30(parseResult.data);
           }
         } catch (error62) {
           reject(error62);
@@ -44910,12 +46685,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve24, reject) => {
+    return new Promise((resolve30, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve24, interval);
+      const timeoutId = setTimeout(resolve30, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -46006,7 +47781,7 @@ var McpServer = class {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5e3;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve24) => setTimeout(resolve24, pollInterval));
+      await new Promise((resolve30) => setTimeout(resolve30, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError(ErrorCode.InternalError, `Task ${taskId} not found during polling`);
@@ -46670,12 +48445,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve24) => {
+    return new Promise((resolve30) => {
       const json2 = serializeMessage(message);
       if (this._stdout.write(json2)) {
-        resolve24();
+        resolve30();
       } else {
-        this._stdout.once("drain", resolve24);
+        this._stdout.once("drain", resolve30);
       }
     });
   }
@@ -46693,7 +48468,7 @@ init_models();
 init_zcode_model();
 init_ccswitch();
 init_captain();
-import { existsSync as existsSync14 } from "node:fs";
+import { existsSync as existsSync18 } from "node:fs";
 async function probe(label, commandConfig, versionArgs) {
   const { command, args } = commandParts(commandConfig);
   const result = await runCommand({
@@ -46712,13 +48487,33 @@ async function probe(label, commandConfig, versionArgs) {
     error: result.ok ? null : (result.stderr || `exit ${result.code}`).trim()
   };
 }
-async function doctor() {
+function numericVersion(value) {
+  const match = String(value ?? "").match(/(?:^|\s)(\d+)\.(\d+)\.(\d+)(?:\s|$|\))/);
+  return match ? match.slice(1).map(Number) : null;
+}
+function versionAtLeast(actual, minimum) {
+  const left = numericVersion(actual);
+  const right = numericVersion(minimum);
+  if (!left || !right) return null;
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] > right[index]) return true;
+    if (left[index] < right[index]) return false;
+  }
+  return true;
+}
+async function doctor({ checkLatest = false } = {}) {
   const config2 = loadConfig();
   const zcodeScript = config2.commands?.zcode?.args?.[0];
-  const [kimi, zcode, dsh, dshProfile] = await Promise.all([
+  const [kimi, zcode, dsh, pi, claude, codex, claudeHelp, codexHelp, piHelp, dshProfile] = await Promise.all([
     probe("kimi", config2.commands.kimi, ["--version"]),
     probe("zcode", config2.commands.zcode, ["--version"]),
     probe("dsh", config2.commands.dsh, ["--version"]),
+    probe("pi", config2.commands.pi, ["--version"]),
+    probe("claude", config2.commands.claude, ["--version"]),
+    probe("codex", config2.commands.codex, ["--version"]),
+    runCommand({ command: commandParts(config2.commands.claude).command, args: [...commandParts(config2.commands.claude).args, "--help"], timeoutMs: 15e3, stripSecretEnv: true }),
+    runCommand({ command: commandParts(config2.commands.codex).command, args: [...commandParts(config2.commands.codex).args, "exec", "--help"], timeoutMs: 15e3, stripSecretEnv: true }),
+    runCommand({ command: commandParts(config2.commands.pi).command, args: [...commandParts(config2.commands.pi).args, "--help"], timeoutMs: 15e3, stripSecretEnv: true }),
     runCommand({
       command: commandParts(config2.commands.dsh).command,
       args: [...commandParts(config2.commands.dsh).args, "--profile", config2.profiles?.dsh?.fast ?? "headless", "--help"],
@@ -46765,23 +48560,96 @@ async function doctor() {
   } catch (error62) {
     captain = { model: "unknown", source: "error", error: error62.message };
   }
+  const installedCommands = { pi, claude, codex };
+  const minimumVersions = config2.cliLifecycle?.minimumVersions ?? {};
+  const packages = config2.cliLifecycle?.packages ?? {};
+  const latest = checkLatest ? Object.fromEntries(await Promise.all(Object.entries(packages).map(async ([name, packageName]) => {
+    const result = await runCommand({ command: "npm", args: ["view", packageName, "version", "--json"], timeoutMs: 15e3, stripSecretEnv: true });
+    let version2 = null;
+    if (result.ok) {
+      try {
+        version2 = JSON.parse(result.stdout);
+      } catch {
+        version2 = result.stdout.trim().replaceAll('"', "");
+      }
+    }
+    return [name, { package: packageName, available: result.ok, version: version2, error: result.ok ? null : result.stderr.trim() }];
+  }))) : {};
+  const cliLifecycle = {
+    policy: config2.cliLifecycle?.policy ?? "detect-only",
+    upgradeOwner: config2.cliLifecycle?.upgradeOwner ?? "cc-switch-or-user",
+    autoUpgrade: false,
+    commands: Object.fromEntries(Object.entries(installedCommands).map(([name, result]) => {
+      const minimum = minimumVersions[name] ?? null;
+      const meetsMinimum = minimum ? versionAtLeast(result.version, minimum) : null;
+      const latestVersion = latest[name]?.version ?? null;
+      const upToDate = latestVersion ? versionAtLeast(result.version, latestVersion) : null;
+      return [name, {
+        available: result.available,
+        installedVersion: result.version,
+        minimumVersion: minimum,
+        meetsMinimum,
+        latestVersion,
+        upToDate,
+        package: packages[name] ?? null,
+        action: !result.available ? "install" : meetsMinimum === false || upToDate === false ? "upgrade" : "none"
+      }];
+    }))
+  };
+  cliLifecycle.latestCheckPerformed = checkLatest;
+  const helpText = {
+    claude: `${claudeHelp.stdout}
+${claudeHelp.stderr}`,
+    codex: `${codexHelp.stdout}
+${codexHelp.stderr}`,
+    pi: `${piHelp.stdout}
+${piHelp.stderr}`
+  };
+  const cliCapabilities = {
+    claude: {
+      json: /--output-format/.test(helpText.claude),
+      effort: /--effort/.test(helpText.claude),
+      restricted: /--restricted/.test(helpText.claude),
+      isolatedSettings: /--settings/.test(helpText.claude)
+    },
+    codex: {
+      json: /--json/.test(helpText.codex),
+      sandbox: /--sandbox/.test(helpText.codex),
+      worktree: /--worktree/.test(helpText.codex),
+      ephemeral: /--ephemeral/.test(helpText.codex)
+    },
+    pi: {
+      json: /--mode <mode>/.test(helpText.pi),
+      effort: /--thinking/.test(helpText.pi),
+      toolAllowlist: /--tools/.test(helpText.pi),
+      isolatedHome: /PI_CODING_AGENT_DIR/.test(helpText.pi)
+    }
+  };
   return {
     pluginRoot,
     captain,
-    commands: { kimi, zcode, dsh },
+    commands: { kimi, zcode, dsh, pi, claude, codex },
+    cliLifecycle,
+    cliCapabilities,
     models: listModels(models).map((model) => ({ id: model.id, harness: model.harness, tier: model.tier })),
     ccswitch,
     continuity: {
       kimi: "cli-session-resume + acp-session-resume",
       zcode: "cli-session-resume + app-server bridge",
-      dsh: "acp-session-resume"
+      dsh: "acp-session-resume",
+      pi: "cli-session-id",
+      claude: "cli-resume",
+      codex: "ephemeral"
     },
     zcodeSelections,
     checks: {
-      zcodeScriptExists: zcodeScript ? existsSync14(zcodeScript) : false,
+      zcodeScriptExists: zcodeScript ? existsSync18(zcodeScript) : false,
       dshHeadlessProfileAvailable: dshProfile.ok,
       kimiAuthenticatedHint: "Run `kimi provider list` if --version succeeds but requests fail.",
       dshAuthenticatedHint: 'Run a small `dsh --profile headless "reply ok"` probe before enabling audits.',
+      piAuthenticatedHint: "Run `pi auth check --no-refresh --json` and verify kimi-coding/zai-coding-cn readiness.",
+      claudeAuthenticatedHint: "CC Switch Claude cards are projected into private per-provider settings; run a read-only smoke probe before enabling a route.",
+      codexAuthenticatedHint: "CC Switch Codex cards must use a direct Responses transport; run a read-only `codex exec --json` smoke probe before enabling a route.",
       zcodeAuthenticatedHint: "Run ZCode once or use its provider settings before headless execution."
     }
   };
@@ -46811,22 +48679,26 @@ init_provider_health();
 init_provider_state();
 init_quota();
 init_task_checkpoint();
-import { existsSync as existsSync17 } from "node:fs";
-import { readFile as readFile11, readdir as readdir3, stat as stat4 } from "node:fs/promises";
-import { homedir as homedir20 } from "node:os";
-import { join as join15, resolve as resolve21 } from "node:path";
+import { existsSync as existsSync21 } from "node:fs";
+import { readFile as readFile16, readdir as readdir3, stat as stat4 } from "node:fs/promises";
+import { homedir as homedir26 } from "node:os";
+import { join as join18, resolve as resolve27 } from "node:path";
 
 // src/lib/jobs.mjs
 init_control_store();
 init_config();
-import { existsSync as existsSync15 } from "node:fs";
-import { chmod as chmod11, mkdir as mkdir12, open as open3, readFile as readFile9, readdir as readdir2, rename as rename8, stat as stat3, unlink as unlink2, writeFile as writeFile10 } from "node:fs/promises";
-import { randomUUID as randomUUID9 } from "node:crypto";
-import { homedir as homedir18 } from "node:os";
-import { dirname as dirname10, join as join14, resolve as resolve19 } from "node:path";
+import { existsSync as existsSync19 } from "node:fs";
+import { chmod as chmod16, mkdir as mkdir17, open as open3, readFile as readFile14, readdir as readdir2, rename as rename11, stat as stat3, unlink as unlink2, writeFile as writeFile13 } from "node:fs/promises";
+import { randomUUID as randomUUID12 } from "node:crypto";
+import { homedir as homedir24 } from "node:os";
+import { dirname as dirname15, join as join17, resolve as resolve25 } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 var TERMINAL = /* @__PURE__ */ new Set(["completed", "partial", "failed", "cancelled", "paused"]);
+var THREAD_ID_RE = /^[A-Za-z0-9._:-]{1,160}$/;
 var WORKER_ENV_KEYS = /* @__PURE__ */ new Set(["PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TMP", "TEMP", "LANG", "LC_ALL", "TERM", "NO_COLOR", "FORCE_COLOR", "CODEX_HOME", "CC_SWITCH_HOME"]);
 var SECRET_ENV_RE2 = /(API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH|COOKIE)/i;
+var execFileAsync = promisify(execFile);
 function buildJobWorkerEnv(source = process.env, overrides = {}) {
   const env = {};
   for (const [key, value] of Object.entries(source)) {
@@ -46835,27 +48707,27 @@ function buildJobWorkerEnv(source = process.env, overrides = {}) {
   }
   return { ...env, ...overrides };
 }
-function expandHome16(value) {
+function expandHome22(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir18();
-  if (value.startsWith("~/")) return resolve19(homedir18(), value.slice(2));
-  return resolve19(value);
+  if (value === "~") return homedir24();
+  if (value.startsWith("~/")) return resolve25(homedir24(), value.slice(2));
+  return resolve25(value);
 }
 function jobsRoot() {
-  return expandHome16(process.env.CODEX_MOA_JOB_HOME || "~/.codex-moa/jobs");
+  return expandHome22(process.env.CODEX_MOA_JOB_HOME || "~/.codex-moa/jobs");
 }
 function jobDir(jobId) {
   if (!/^job-[A-Za-z0-9._-]{1,100}$/.test(String(jobId))) throw new Error(`Invalid jobId: ${jobId}`);
-  return join14(jobsRoot(), jobId);
+  return join17(jobsRoot(), jobId);
 }
 function jobPath(jobId) {
-  return join14(jobDir(jobId), "job.json");
+  return join17(jobDir(jobId), "job.json");
 }
 function jobInputPath(jobId) {
-  return join14(jobDir(jobId), "input.json");
+  return join17(jobDir(jobId), "input.json");
 }
 function jobLogPath(jobId) {
-  return join14(jobDir(jobId), "worker.log");
+  return join17(jobDir(jobId), "worker.log");
 }
 function publicInput(input2) {
   if (!input2) return null;
@@ -46881,8 +48753,24 @@ function assertJobInputSupported(input2) {
   }
   return input2;
 }
-function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${randomUUID9().slice(0, 8)}`, taskId, input: input2 }) {
+function normalizeThreadId(value) {
+  const threadId = String(value ?? "").trim();
+  return THREAD_ID_RE.test(threadId) ? threadId : null;
+}
+function initialNotification(originThreadId) {
+  return {
+    state: originThreadId ? "pending" : "unavailable",
+    originThreadId,
+    attempts: 0,
+    lastAttemptAt: null,
+    acceptedAt: null,
+    acknowledgedAt: null,
+    lastError: originThreadId ? null : "No valid originating Codex thread ID was available at dispatch time."
+  };
+}
+function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${randomUUID12().slice(0, 8)}`, taskId, input: input2, originThreadId = null }) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
+  const normalizedThreadId = normalizeThreadId(originThreadId);
   return {
     version: 1,
     jobId,
@@ -46897,23 +48785,24 @@ function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${randomUUID9
     pid: null,
     progress: { phase: "queued", completed: 0, total: 0, activeSeat: null },
     control: { revision: 0, messages: [] },
+    notification: initialNotification(normalizedThreadId),
     input: publicInput(input2),
     resultSummary: null,
     error: null
   };
 }
 async function atomicWrite(path, value) {
-  await mkdir12(dirname10(path), { recursive: true });
-  const temporary = `${path}.${randomUUID9()}.tmp`;
-  await writeFile10(temporary, `${JSON.stringify(value, null, 2)}
+  await mkdir17(dirname15(path), { recursive: true });
+  const temporary = `${path}.${randomUUID12()}.tmp`;
+  await writeFile13(temporary, `${JSON.stringify(value, null, 2)}
 `, { mode: 384 });
-  await rename8(temporary, path);
-  await chmod11(path, 384).catch(() => {
+  await rename11(temporary, path);
+  await chmod16(path, 384).catch(() => {
   });
 }
 async function withLock(jobId, fn, timeoutMs = 1e4) {
-  const lockPath = join14(jobDir(jobId), "job.lock");
-  await mkdir12(dirname10(lockPath), { recursive: true });
+  const lockPath = join17(jobDir(jobId), "job.lock");
+  await mkdir17(dirname15(lockPath), { recursive: true });
   const started = Date.now();
   let handle;
   while (!handle) {
@@ -46942,9 +48831,9 @@ async function writeJob(job) {
 }
 async function readJob(jobId) {
   const path = jobPath(jobId);
-  if (!existsSync15(path)) return null;
+  if (!existsSync19(path)) return null;
   try {
-    return JSON.parse(await readFile9(path, "utf8"));
+    return JSON.parse(await readFile14(path, "utf8"));
   } catch {
     return null;
   }
@@ -46961,7 +48850,7 @@ async function updateJob(jobId, patch) {
 }
 async function listJobs(limit = 50) {
   const root = jobsRoot();
-  if (!existsSync15(root)) return [];
+  if (!existsSync19(root)) return [];
   const entries = await readdir2(root, { withFileTypes: true });
   const jobs = [];
   for (const entry of entries) {
@@ -46996,11 +48885,12 @@ function publicJob(job) {
       pendingMessages: (job.control?.messages ?? []).filter((item) => item.status === "pending").length,
       deliveredMessages: (job.control?.messages ?? []).filter((item) => item.status === "delivered").length,
       lastMessageId: job.control?.messages?.at(-1)?.id ?? null
-    }
+    },
+    notification: job.notification ?? initialNotification(null)
   };
 }
 async function spawnJobWorker(record2) {
-  const workerPath = join14(pluginRoot, "scripts", "moa-job-worker.mjs");
+  const workerPath = join17(pluginRoot, "scripts", "moa-job-worker.mjs");
   const logHandle = await open3(jobLogPath(record2.jobId), "a", 384);
   const { spawn: spawn3 } = await import("node:child_process");
   const child = spawn3(process.execPath, [workerPath, record2.jobId], {
@@ -47014,19 +48904,97 @@ async function spawnJobWorker(record2) {
   });
   return updateJob(record2.jobId, { pid: child.pid, status: "queued" });
 }
-async function startJob({ input: input2, jobId, taskId }) {
+async function startJob({ input: input2, jobId, taskId, originThreadId = input2?.originThreadId ?? process.env.CODEX_THREAD_ID }) {
   assertJobInputSupported(input2);
-  const record2 = createJobRecord({ jobId, taskId, input: input2 });
+  const record2 = createJobRecord({ jobId, taskId, input: input2, originThreadId });
   await writeJob(record2);
   await atomicWrite(jobInputPath(record2.jobId), publicInput(input2));
   return spawnJobWorker(record2);
+}
+function completionNotificationMessage(job) {
+  const navigator2 = job?.resultSummary?.navigator ? ` Navigator verdict: ${job.resultSummary.navigator}.` : "";
+  return [
+    `Codex MOA background job ${job.jobId} is now ${job.status}.${navigator2}`,
+    `Call moa_job_status for ${job.jobId}, inspect its artifacts and stage evidence, then continue captain-side verification, conflict resolution, and integration without rerunning completed seats.`,
+    `After the completion has been handled, call moa_job_ack for ${job.jobId}.`
+  ].join(" ");
+}
+async function codexQueueNotification({ threadId, message }) {
+  const codexBin = process.env.CODEX_MOA_CODEX_BIN || "codex";
+  const { stdout = "", stderr = "" } = await execFileAsync(codexBin, ["queue", "--thread", threadId, "--message", message], {
+    timeout: 2e4,
+    maxBuffer: 256 * 1024,
+    env: buildJobWorkerEnv(process.env)
+  });
+  return { stdout: stdout.trim(), stderr: stderr.trim() };
+}
+async function notifyJobCompletion(jobId, { deliver = codexQueueNotification, force = false, retries = 3 } = {}) {
+  let job = await readJob(jobId);
+  if (!job) throw new Error(`Job not found: ${jobId}`);
+  if (!TERMINAL.has(job.status)) throw new Error(`Job ${jobId} is ${job.status}; completion notification is only valid for terminal jobs.`);
+  const notification = job.notification ?? initialNotification(null);
+  if (!notification.originThreadId) return publicJob(job);
+  if (!force && ["delivered", "acknowledged"].includes(notification.state)) return publicJob(job);
+  const attempts = Math.max(1, Math.min(3, Number(retries) || 1));
+  let lastError = null;
+  for (let index = 0; index < attempts; index += 1) {
+    const attemptAt = (/* @__PURE__ */ new Date()).toISOString();
+    job = await updateJob(jobId, (current) => ({
+      ...current,
+      notification: {
+        ...current.notification ?? initialNotification(notification.originThreadId),
+        state: "sending",
+        attempts: Number(current.notification?.attempts ?? 0) + 1,
+        lastAttemptAt: attemptAt,
+        lastError: null
+      }
+    }));
+    try {
+      await deliver({
+        threadId: notification.originThreadId,
+        message: completionNotificationMessage(job),
+        job: publicJob(job)
+      });
+      const delivered = await updateJob(jobId, (current) => ({
+        ...current,
+        notification: {
+          ...current.notification,
+          state: "delivered",
+          acceptedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          lastError: null
+        }
+      }));
+      return publicJob(delivered);
+    } catch (error62) {
+      lastError = String(error62?.message ?? error62).slice(0, 1e3);
+      await updateJob(jobId, (current) => ({
+        ...current,
+        notification: { ...current.notification, state: "failed", lastError }
+      }));
+      if (index + 1 < attempts) await new Promise((resolveDelay) => setTimeout(resolveDelay, 250 * (index + 1)));
+    }
+  }
+  return publicJob(await readJob(jobId));
+}
+async function acknowledgeJobNotification(jobId) {
+  const job = await readJob(jobId);
+  if (!job) throw new Error(`Job not found: ${jobId}`);
+  const updated = await updateJob(jobId, (current) => ({
+    ...current,
+    notification: {
+      ...current.notification ?? initialNotification(null),
+      state: "acknowledged",
+      acknowledgedAt: (/* @__PURE__ */ new Date()).toISOString()
+    }
+  }));
+  return publicJob(updated);
 }
 async function steerJob(jobId, message) {
   if (!String(message ?? "").trim()) throw new Error("Steering message is required");
   const job = await readJob(jobId);
   if (!job) throw new Error(`Job not found: ${jobId}`);
   if (TERMINAL.has(job.status)) throw new Error(`Job ${jobId} is ${job.status}; resume a paused job or start a new job.`);
-  const entry = { id: `msg-${randomUUID9().slice(0, 12)}`, message: String(message).trim(), status: "pending", createdAt: (/* @__PURE__ */ new Date()).toISOString(), deliveredAt: null };
+  const entry = { id: `msg-${randomUUID12().slice(0, 12)}`, message: String(message).trim(), status: "pending", createdAt: (/* @__PURE__ */ new Date()).toISOString(), deliveredAt: null };
   const updated = await updateJob(jobId, (current) => ({
     ...current,
     control: { revision: Number(current.control?.revision ?? 0) + 1, messages: [...current.control?.messages ?? [], entry] }
@@ -47048,7 +49016,7 @@ async function resumeJob(jobId) {
   const job = await readJob(jobId);
   if (!job) throw new Error(`Job not found: ${jobId}`);
   if (job.status !== "paused") throw new Error(`Job ${jobId} is ${job.status}; only paused jobs can resume.`);
-  const input2 = JSON.parse(await readFile9(jobInputPath(jobId), "utf8"));
+  const input2 = JSON.parse(await readFile14(jobInputPath(jobId), "utf8"));
   await atomicWrite(jobInputPath(jobId), { ...input2, resume: true });
   const updated = await updateJob(jobId, {
     status: "queued",
@@ -47083,18 +49051,18 @@ async function waitForJob(jobId, timeoutMs = 1e4, pollMs = 250) {
 }
 
 // src/lib/patch-metrics.mjs
-import { existsSync as existsSync16 } from "node:fs";
-import { appendFile as appendFile3, chmod as chmod12, mkdir as mkdir13, readFile as readFile10 } from "node:fs/promises";
-import { homedir as homedir19 } from "node:os";
-import { dirname as dirname11, resolve as resolve20 } from "node:path";
-function expandHome17(value) {
+import { existsSync as existsSync20 } from "node:fs";
+import { appendFile as appendFile5, chmod as chmod17, mkdir as mkdir18, readFile as readFile15 } from "node:fs/promises";
+import { homedir as homedir25 } from "node:os";
+import { dirname as dirname16, resolve as resolve26 } from "node:path";
+function expandHome23(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir19();
-  if (value.startsWith("~/")) return resolve20(homedir19(), value.slice(2));
-  return resolve20(value);
+  if (value === "~") return homedir25();
+  if (value.startsWith("~/")) return resolve26(homedir25(), value.slice(2));
+  return resolve26(value);
 }
 function patchMetricsPath() {
-  return expandHome17(process.env.CODEX_MOA_PATCH_METRICS || "~/.codex-moa/patch-metrics.jsonl");
+  return expandHome23(process.env.CODEX_MOA_PATCH_METRICS || "~/.codex-moa/patch-metrics.jsonl");
 }
 async function recordPatchEvent(event, path = patchMetricsPath()) {
   const entry = {
@@ -47108,22 +49076,22 @@ async function recordPatchEvent(event, path = patchMetricsPath()) {
     durationMs: Number.isFinite(Number(event.durationMs)) ? Number(event.durationMs) : null,
     error: event.error ? String(event.error).slice(0, 2e3) : null
   };
-  await mkdir13(dirname11(path), { recursive: true });
-  await appendFile3(path, `${JSON.stringify(entry)}
+  await mkdir18(dirname16(path), { recursive: true });
+  await appendFile5(path, `${JSON.stringify(entry)}
 `, { encoding: "utf8", mode: 384 });
-  await chmod12(path, 384).catch(() => {
+  await chmod17(path, 384).catch(() => {
   });
   return entry;
 }
 async function readPatchMetrics(path = patchMetricsPath(), limit = 1e4) {
-  if (!existsSync16(path)) return [];
+  if (!existsSync20(path)) return [];
   try {
-    return (await readFile10(path, "utf8")).split(/\r?\n/).filter(Boolean).slice(-limit).map((line) => JSON.parse(line));
+    return (await readFile15(path, "utf8")).split(/\r?\n/).filter(Boolean).slice(-limit).map((line) => JSON.parse(line));
   } catch {
     return [];
   }
 }
-function rate2(numerator, denominator) {
+function rate3(numerator, denominator) {
   return denominator > 0 ? numerator / denominator : null;
 }
 function summarizePatchMetrics(entries = []) {
@@ -47156,40 +49124,44 @@ function summarizePatchMetrics(entries = []) {
     entries: entries.length,
     actions,
     conflicts,
-    conflictRate: rate2(conflicts, entries.length),
+    conflictRate: rate3(conflicts, entries.length),
     applyAttempts: applies.attempts,
     applySuccesses: applies.successes,
     applyFailures: applies.failures,
-    acceptanceRate: rate2(applies.successes, applies.attempts),
-    applyFailureRate: rate2(applies.failures, applies.attempts),
+    acceptanceRate: rate3(applies.successes, applies.attempts),
+    applyFailureRate: rate3(applies.failures, applies.attempts),
     revertAttempts: reverts.attempts,
     revertSuccesses: reverts.successes,
-    revertRate: rate2(reverts.successes, applies.successes),
+    revertRate: rate3(reverts.successes, applies.successes),
     bySeat,
     byModel
   };
 }
 
 // src/lib/status-summary.mjs
-function expandHome18(value) {
+init_captain_usage();
+init_captain();
+init_audit_metrics();
+init_failure_memory();
+function expandHome24(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir20();
-  if (value.startsWith("~/")) return resolve21(homedir20(), value.slice(2));
-  return resolve21(value);
+  if (value === "~") return homedir26();
+  if (value.startsWith("~/")) return resolve27(homedir26(), value.slice(2));
+  return resolve27(value);
 }
 function blackboardRoot(config2 = loadConfig()) {
-  return expandHome18(config2.blackboardDir ?? "~/.codex-moa/blackboard");
+  return expandHome24(config2.blackboardDir ?? "~/.codex-moa/blackboard");
 }
-async function readJson3(path) {
+async function readJson4(path) {
   try {
-    return JSON.parse(await readFile11(path, "utf8"));
+    return JSON.parse(await readFile16(path, "utf8"));
   } catch {
     return null;
   }
 }
 async function latestBlackboardState(config2 = loadConfig()) {
   const root = blackboardRoot(config2);
-  if (!existsSync17(root)) return { root, navigator: null, checkpoints: [] };
+  if (!existsSync21(root)) return { root, navigator: null, checkpoints: [] };
   let entries = [];
   try {
     entries = await readdir3(root, { withFileTypes: true });
@@ -47199,7 +49171,7 @@ async function latestBlackboardState(config2 = loadConfig()) {
   const tasks = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const path = join15(root, entry.name);
+    const path = join18(root, entry.name);
     try {
       const info = await stat4(path);
       tasks.push({ path, taskId: entry.name, mtimeMs: info.mtimeMs });
@@ -47210,10 +49182,10 @@ async function latestBlackboardState(config2 = loadConfig()) {
   const checkpoints = [];
   let navigator2 = null;
   for (const task of tasks.slice(0, 30)) {
-    const checkpoint = await readJson3(join15(task.path, "checkpoint.json"));
-    if (checkpoint) checkpoints.push({ ...summarizeCheckpoint(checkpoint), path: join15(task.path, "checkpoint.json") });
+    const checkpoint = await readJson4(join18(task.path, "checkpoint.json"));
+    if (checkpoint) checkpoints.push({ ...summarizeCheckpoint(checkpoint), path: join18(task.path, "checkpoint.json") });
     if (!navigator2) {
-      const review = await readJson3(join15(task.path, "navigator.json"));
+      const review = await readJson4(join18(task.path, "navigator.json"));
       if (review) navigator2 = { taskId: task.taskId, ...review };
     }
   }
@@ -47231,6 +49203,11 @@ async function buildStatusSummary({ config: config2 = loadConfig(), recentHours 
   const blackboard = await latestBlackboardState(config2);
   const jobs = await listJobs(50);
   const patchMetrics = summarizePatchMetrics(await readPatchMetrics());
+  const captain = await resolveCaptain();
+  const captainUsage = await readCaptainUsage();
+  const auditMetrics = summarizeAuditMetrics(await readAuditMetrics());
+  const failureMemory = summarizeFailureMemory(await readFailureMemory(), { config: config2 });
+  const activeFailureGuards = Object.values(failureMemory.routes).filter((route) => route.activeGuard).length;
   const activeJobs = jobs.filter((job) => ["queued", "running", "cancelling"].includes(job.status));
   const activeSeats = seats2.filter((seat) => seat.status === "running");
   const completedSeats = seats2.filter((seat) => seat.status === "done");
@@ -47239,7 +49216,7 @@ async function buildStatusSummary({ config: config2 = loadConfig(), recentHours 
   const navigator2 = blackboard.navigator;
   const statusLevel = (() => {
     if (health.overall === "critical" || navigator2?.verdict === "block") return "critical";
-    if (health.overall === "warning" || navigator2?.verdict === "warn" || navigator2?.verdict === "unreviewed") return "warning";
+    if (health.overall === "warning" || navigator2?.verdict === "warn" || navigator2?.verdict === "unreviewed" || activeFailureGuards > 0) return "warning";
     return "healthy";
   })();
   const providerCounts = Object.values(health.providers).reduce((counts, provider) => {
@@ -47278,6 +49255,10 @@ async function buildStatusSummary({ config: config2 = loadConfig(), recentHours 
     } : null,
     checkpoints: blackboard.checkpoints,
     patchMetrics,
+    captainUsage,
+    captainAllocation: captainAllocation(captain, captainUsage),
+    auditMetrics,
+    failureMemory: { ...failureMemory, activeGuards: activeFailureGuards },
     providerHealth: health,
     providerCounts,
     cost,
@@ -47291,6 +49272,30 @@ init_routing_experiment();
 // src/lib/interactive-run.mjs
 var LONG_TASK_RE = /(\bssh\b|remote host|remote server|benchmark|load test|stress test|soak test|model loading|multi[- ]stage|end[- ]to[- ]end|远程|压测|基准|模型加载|多阶段|全链路)/i;
 var INTERACTIVE_LIMIT_MS = 6e4;
+var JOB_WAIT_LIMIT_MS = 1e4;
+var ACTIVE_JOB_STATES = /* @__PURE__ */ new Set(["queued", "running", "cancelling"]);
+function backgroundJobHandoff(job, { event = "status" } = {}) {
+  const jobId = job?.jobId ?? null;
+  const active = ACTIVE_JOB_STATES.has(job?.status);
+  return {
+    policy: "yield-after-background-dispatch",
+    event,
+    jobIsBackground: true,
+    captainShouldYield: active,
+    foregroundBudgetMs: INTERACTIVE_LIMIT_MS,
+    maxWaitMs: JOB_WAIT_LIMIT_MS,
+    appQueueFixed: true,
+    notification: job?.notification ?? null,
+    instruction: active ? "Return control to the user now. Do not keep this Codex turn open with repeated polling or unrelated local work; use a later status turn and moa_job_steer for new constraints." : "The job is settled. Inspect its artifacts before accepting or integrating the result.",
+    commands: jobId ? {
+      status: `$codex-moa job status ${jobId}`,
+      steer: `$codex-moa job steer ${jobId} <message>`,
+      pause: `$codex-moa job pause ${jobId}`,
+      cancel: `$codex-moa job cancel ${jobId}`
+    } : null,
+    limitation: "Completion delivery uses the official Codex queue interface. A delivered state means the daemon accepted the message; moa_job_ack records that the captain actually handled it."
+  };
+}
 function backgroundRequirement(input2 = {}) {
   const reasons = [];
   if (Number(input2.timeoutMs ?? 0) > INTERACTIVE_LIMIT_MS) reasons.push(`timeoutMs exceeds ${INTERACTIVE_LIMIT_MS}`);
@@ -47320,57 +49325,59 @@ init_worktree();
 
 // src/lib/retention.mjs
 init_seat_registry();
-import { existsSync as existsSync18 } from "node:fs";
-import { chmod as chmod13, mkdir as mkdir14, readdir as readdir4, readFile as readFile12, rename as rename9, rm, stat as stat5, writeFile as writeFile11 } from "node:fs/promises";
-import { randomUUID as randomUUID10 } from "node:crypto";
-import { homedir as homedir21 } from "node:os";
-import { basename as basename2, dirname as dirname12, join as join16, resolve as resolve22, sep as sep2 } from "node:path";
+import { existsSync as existsSync22 } from "node:fs";
+import { chmod as chmod18, mkdir as mkdir19, readdir as readdir4, readFile as readFile17, rename as rename12, rm as rm3, stat as stat5, writeFile as writeFile14 } from "node:fs/promises";
+import { randomUUID as randomUUID13 } from "node:crypto";
+import { homedir as homedir27 } from "node:os";
+import { basename as basename3, dirname as dirname17, join as join19, resolve as resolve28, sep as sep2 } from "node:path";
 init_cost_ledger();
 init_routing_experiment();
+init_audit_metrics();
+init_failure_memory();
 init_worktree();
-function expandHome19(value) {
+function expandHome25(value) {
   if (typeof value !== "string") return value;
-  if (value === "~") return homedir21();
-  if (value.startsWith("~/")) return resolve22(homedir21(), value.slice(2));
-  return resolve22(value);
+  if (value === "~") return homedir27();
+  if (value.startsWith("~/")) return resolve28(homedir27(), value.slice(2));
+  return resolve28(value);
 }
-function within(parent, child) {
-  const base = `${resolve22(parent)}${sep2}`;
-  return resolve22(child).startsWith(base);
+function within2(parent, child) {
+  const base = `${resolve28(parent)}${sep2}`;
+  return resolve28(child).startsWith(base);
 }
-async function readJson4(path) {
+async function readJson5(path) {
   try {
-    return JSON.parse(await readFile12(path, "utf8"));
+    return JSON.parse(await readFile17(path, "utf8"));
   } catch {
     return null;
   }
 }
 async function listDirectories(root) {
-  if (!existsSync18(root)) return [];
+  if (!existsSync22(root)) return [];
   const entries = await readdir4(root, { withFileTypes: true });
   const result = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const path = join16(root, entry.name);
+    const path = join19(root, entry.name);
     const info = await stat5(path).catch(() => null);
     if (info) result.push({ name: entry.name, path, mtimeMs: info.mtimeMs });
   }
   return result.sort((a, b) => b.mtimeMs - a.mtimeMs);
 }
 async function readJsonl2(path) {
-  if (!existsSync18(path)) return [];
+  if (!existsSync22(path)) return [];
   try {
-    return (await readFile12(path, "utf8")).split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+    return (await readFile17(path, "utf8")).split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
   } catch {
     return [];
   }
 }
 async function writeJsonlAtomic(path, entries) {
-  await mkdir14(dirname12(path), { recursive: true });
-  const temporary = `${path}.${randomUUID10()}.tmp`;
-  await writeFile11(temporary, entries.map((entry) => JSON.stringify(entry)).join("\n") + (entries.length ? "\n" : ""), { mode: 384 });
-  await rename9(temporary, path);
-  await chmod13(path, 384).catch(() => {
+  await mkdir19(dirname17(path), { recursive: true });
+  const temporary = `${path}.${randomUUID13()}.tmp`;
+  await writeFile14(temporary, entries.map((entry) => JSON.stringify(entry)).join("\n") + (entries.length ? "\n" : ""), { mode: 384 });
+  await rename12(temporary, path);
+  await chmod18(path, 384).catch(() => {
   });
 }
 function retentionPolicy(config2 = {}) {
@@ -47394,6 +49401,14 @@ function retentionPolicy(config2 = {}) {
       maxAgeMs: Number(source.costLedger?.maxAgeDays ?? 180) * day,
       maxEntries: Number(source.costLedger?.maxEntries ?? 5e4)
     },
+    auditMetrics: {
+      maxAgeMs: Number(source.auditMetrics?.maxAgeDays ?? 365) * day,
+      maxEntries: Number(source.auditMetrics?.maxEntries ?? 1e5)
+    },
+    failureMemory: {
+      maxAgeMs: Number(source.failureMemory?.maxAgeDays ?? 365) * day,
+      maxEntries: Number(source.failureMemory?.maxEntries ?? 1e5)
+    },
     routingHistory: {
       maxEntriesPerExperiment: Number(source.routingHistory?.maxEntriesPerExperiment ?? 200)
     }
@@ -47401,18 +49416,18 @@ function retentionPolicy(config2 = {}) {
 }
 async function planRetention({ config: config2 = {}, now = Date.now() } = {}) {
   const policy = retentionPolicy(config2);
-  if (!policy.enabled) return { enabled: false, blackboard: [], jobs: [], worktrees: [], costLedger: null, routingHistory: [] };
+  if (!policy.enabled) return { enabled: false, blackboard: [], jobs: [], worktrees: [], costLedger: null, auditMetrics: null, failureMemory: null, routingHistory: [] };
   const activeTaskIds = new Set(listSeats(readSeatRegistry()).filter((seat) => seat.status === "running").map((seat) => seat.taskId));
   for (const job of await listJobs(1e3)) {
     if (["queued", "running", "cancelling"].includes(job.status)) activeTaskIds.add(job.taskId);
   }
-  const blackboardRoot2 = expandHome19(config2.blackboardDir ?? "~/.codex-moa/blackboard");
+  const blackboardRoot2 = expandHome25(config2.blackboardDir ?? "~/.codex-moa/blackboard");
   const blackboardDirs = await listDirectories(blackboardRoot2);
   const blackboard = [];
   for (let index = 0; index < blackboardDirs.length; index += 1) {
     const task = blackboardDirs[index];
     if (activeTaskIds.has(task.name)) continue;
-    const checkpoint = await readJson4(join16(task.path, "checkpoint.json"));
+    const checkpoint = await readJson5(join19(task.path, "checkpoint.json"));
     const terminal = !checkpoint || ["completed", "partial", "cancelled"].includes(checkpoint.status);
     const tooOld = now - task.mtimeMs > policy.blackboard.maxAgeMs;
     const overLimit = index >= policy.blackboard.maxTasks;
@@ -47424,17 +49439,17 @@ async function planRetention({ config: config2 = {}, now = Date.now() } = {}) {
   const jobDirs = await listDirectories(jobsRoot());
   for (let index = 0; index < jobDirs.length; index += 1) {
     const jobDir2 = jobDirs[index];
-    const job = await readJson4(join16(jobDir2.path, "job.json"));
+    const job = await readJson5(join19(jobDir2.path, "job.json"));
     if (!job || ["queued", "running", "cancelling"].includes(job.status)) continue;
     const tooOld = now - jobDir2.mtimeMs > policy.jobs.maxAgeMs;
     const overLimit = index >= policy.jobs.maxJobs;
     if (tooOld || overLimit) jobs.push({ jobId: job.jobId, taskId: job.taskId, path: jobDir2.path, ageMs: now - jobDir2.mtimeMs, reason: tooOld ? "age" : "limit" });
   }
-  const managedWorktreeRoot = expandHome19("~/.codex-moa/worktrees");
+  const managedWorktreeRoot = expandHome25("~/.codex-moa/worktrees");
   const worktrees = [];
   for (const seat of listSeats(readSeatRegistry())) {
     const path = seat.worktree;
-    if (!path || !within(managedWorktreeRoot, path) || existsSync18(path) === false) continue;
+    if (!path || !within2(managedWorktreeRoot, path) || existsSync22(path) === false) continue;
     const info = await stat5(path).catch(() => null);
     if (!info || now - info.mtimeMs <= policy.worktrees.maxAgeMs) continue;
     const state = await inspectWorktree(path, { resultStatus: seat.status });
@@ -47445,8 +49460,16 @@ async function planRetention({ config: config2 = {}, now = Date.now() } = {}) {
   const cutoff = now - policy.costLedger.maxAgeMs;
   const keepLedger = ledger.filter((entry, index) => Date.parse(entry.time) >= cutoff || index >= Math.max(0, ledger.length - policy.costLedger.maxEntries));
   const costLedger = keepLedger.length === ledger.length ? null : { path: costLedgerPath(), entries: ledger.length, keep: keepLedger.length, remove: ledger.length - keepLedger.length };
+  const audits = await readJsonl2(auditMetricsPath());
+  const auditCutoff = now - policy.auditMetrics.maxAgeMs;
+  const keepAudits = audits.filter((entry, index) => Date.parse(entry.time) >= auditCutoff || index >= Math.max(0, audits.length - policy.auditMetrics.maxEntries));
+  const auditMetrics = keepAudits.length === audits.length ? null : { path: auditMetricsPath(), entries: audits.length, keep: keepAudits.length, remove: audits.length - keepAudits.length };
+  const failures = await readJsonl2(failureMemoryPath());
+  const failureCutoff = now - policy.failureMemory.maxAgeMs;
+  const keepFailures = failures.filter((entry, index) => Date.parse(entry.time) >= failureCutoff || index >= Math.max(0, failures.length - policy.failureMemory.maxEntries));
+  const failureMemory = keepFailures.length === failures.length ? null : { path: failureMemoryPath(), entries: failures.length, keep: keepFailures.length, remove: failures.length - keepFailures.length };
   const routingPath = routingExperimentStatePath();
-  const routingState = await readJson4(routingPath);
+  const routingState = await readJson5(routingPath);
   const routingHistory = [];
   for (const [id2, experiment] of Object.entries(routingState?.experiments ?? {})) {
     const history = experiment.history ?? [];
@@ -47454,16 +49477,16 @@ async function planRetention({ config: config2 = {}, now = Date.now() } = {}) {
       routingHistory.push({ id: id2, before: history.length, after: policy.routingHistory.maxEntriesPerExperiment, path: routingPath });
     }
   }
-  return { enabled: true, policy, blackboard, jobs, worktrees, costLedger, routingHistory };
+  return { enabled: true, policy, blackboard, jobs, worktrees, costLedger, auditMetrics, failureMemory, routingHistory };
 }
 async function applyRetention({ config: config2 = {}, dryRun = true, now = Date.now() } = {}) {
   const plan = await planRetention({ config: config2, now });
-  if (dryRun || plan.enabled === false) return { dryRun, plan, applied: { blackboard: 0, jobs: 0, worktrees: 0, costLedger: 0, routingHistory: 0 }, errors: [] };
-  const applied = { blackboard: 0, jobs: 0, worktrees: 0, costLedger: 0, routingHistory: 0 };
+  if (dryRun || plan.enabled === false) return { dryRun, plan, applied: { blackboard: 0, jobs: 0, worktrees: 0, costLedger: 0, auditMetrics: 0, failureMemory: 0, routingHistory: 0 }, errors: [] };
+  const applied = { blackboard: 0, jobs: 0, worktrees: 0, costLedger: 0, auditMetrics: 0, failureMemory: 0, routingHistory: 0 };
   const errors = [];
   for (const item of plan.blackboard) {
     try {
-      await rm(item.path, { recursive: true, force: true });
+      await rm3(item.path, { recursive: true, force: true });
       applied.blackboard += 1;
     } catch (error62) {
       errors.push({ path: item.path, error: error62.message });
@@ -47471,7 +49494,7 @@ async function applyRetention({ config: config2 = {}, dryRun = true, now = Date.
   }
   for (const item of plan.jobs) {
     try {
-      await rm(item.path, { recursive: true, force: true });
+      await rm3(item.path, { recursive: true, force: true });
       applied.jobs += 1;
     } catch (error62) {
       errors.push({ path: item.path, error: error62.message });
@@ -47498,21 +49521,45 @@ async function applyRetention({ config: config2 = {}, dryRun = true, now = Date.
       errors.push({ path: plan.costLedger.path, error: error62.message });
     }
   }
+  if (plan.auditMetrics) {
+    try {
+      const entries = await readJsonl2(plan.auditMetrics.path);
+      const policy = retentionPolicy(config2);
+      const cutoff = now - policy.auditMetrics.maxAgeMs;
+      const keep = entries.filter((entry, index) => Date.parse(entry.time) >= cutoff || index >= Math.max(0, entries.length - policy.auditMetrics.maxEntries));
+      await writeJsonlAtomic(plan.auditMetrics.path, keep);
+      applied.auditMetrics = entries.length - keep.length;
+    } catch (error62) {
+      errors.push({ path: plan.auditMetrics.path, error: error62.message });
+    }
+  }
+  if (plan.failureMemory) {
+    try {
+      const entries = await readJsonl2(plan.failureMemory.path);
+      const policy = retentionPolicy(config2);
+      const cutoff = now - policy.failureMemory.maxAgeMs;
+      const keep = entries.filter((entry, index) => Date.parse(entry.time) >= cutoff || index >= Math.max(0, entries.length - policy.failureMemory.maxEntries));
+      await writeJsonlAtomic(plan.failureMemory.path, keep);
+      applied.failureMemory = entries.length - keep.length;
+    } catch (error62) {
+      errors.push({ path: plan.failureMemory.path, error: error62.message });
+    }
+  }
   if (plan.routingHistory.length > 0) {
     try {
       const path = plan.routingHistory[0].path;
-      const state = await readJson4(path);
+      const state = await readJson5(path);
       if (state?.experiments) {
         for (const [id2, experiment] of Object.entries(state.experiments)) {
           const max = retentionPolicy(config2).routingHistory.maxEntriesPerExperiment;
           if (Array.isArray(experiment.history) && experiment.history.length > max) experiment.history = experiment.history.slice(-max);
         }
-        await mkdir14(dirname12(path), { recursive: true });
-        const temporary = `${path}.${randomUUID10()}.tmp`;
-        await writeFile11(temporary, `${JSON.stringify(state, null, 2)}
+        await mkdir19(dirname17(path), { recursive: true });
+        const temporary = `${path}.${randomUUID13()}.tmp`;
+        await writeFile14(temporary, `${JSON.stringify(state, null, 2)}
 `, { mode: 384 });
-        await rename9(temporary, path);
-        await chmod13(path, 384).catch(() => {
+        await rename12(temporary, path);
+        await chmod18(path, 384).catch(() => {
         });
         applied.routingHistory = plan.routingHistory.reduce((sum, item) => sum + (item.before - item.after), 0);
       }
@@ -47526,6 +49573,145 @@ async function applyRetention({ config: config2 = {}, dryRun = true, now = Date.
 // mcp/server.mjs
 init_provider_state();
 init_moa_mode();
+init_effective_models();
+
+// src/lib/capability-probe.mjs
+init_config();
+init_effective_models();
+init_models();
+init_reasoning();
+init_ccswitch();
+init_adapters();
+import { mkdtemp as mkdtemp2, rm as rm4, writeFile as writeFile15 } from "node:fs/promises";
+import { tmpdir as tmpdir2 } from "node:os";
+import { join as join20 } from "node:path";
+import { deflateSync } from "node:zlib";
+function routeMetadata(model, harness, snapshot) {
+  const route = model[harness];
+  if (!route?.provider) return { configured: false };
+  const provider = snapshot?.providers?.find((item) => item.appType === harness && item.id === route.provider);
+  const entry = provider?.modelEntries?.find((item) => item.id === route.model || item.name === route.model) ?? null;
+  return {
+    configured: Boolean(provider),
+    providerId: route.provider,
+    providerName: provider?.name ?? null,
+    model: route.model,
+    apiFormat: provider?.apiFormat ?? null,
+    transport: provider?.transport?.routingMode ?? null,
+    cardCapabilities: entry ? {
+      contextWindow: entry.contextWindow,
+      maxOutputTokens: entry.maxTokens,
+      reasoningLevels: entry.levels,
+      defaultReasoningLevel: entry.defaultLevel,
+      input: entry.input,
+      reasoningEnabled: entry.reasoningEnabled
+    } : null
+  };
+}
+function crc32(buffer) {
+  let crc = 4294967295;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) crc = crc >>> 1 ^ 3988292384 & -(crc & 1);
+  }
+  return (crc ^ 4294967295) >>> 0;
+}
+function pngChunk(type, data) {
+  const name = Buffer.from(type, "ascii");
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  const checksum = Buffer.alloc(4);
+  checksum.writeUInt32BE(crc32(Buffer.concat([name, data])));
+  return Buffer.concat([length, name, data, checksum]);
+}
+function redPng(width = 32, height = 32) {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 2, 0, 0, 0], 8);
+  const row = Buffer.concat([Buffer.from([0]), ...Array.from({ length: width }, () => Buffer.from([255, 0, 0]))]);
+  const pixels = Buffer.concat(Array.from({ length: height }, () => row));
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk("IHDR", header),
+    pngChunk("IDAT", deflateSync(pixels)),
+    pngChunk("IEND", Buffer.alloc(0))
+  ]);
+}
+async function capabilityMatrix() {
+  const snapshot = await readCcSwitchSnapshot().catch(() => null);
+  const modelsConfig = loadEffectiveModels({ snapshot });
+  return {
+    source: "cc-switch-readonly+vendor-policy",
+    probedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    models: listModels(modelsConfig).map((model) => ({
+      id: model.id,
+      family: model.family,
+      defaultHarness: model.harness,
+      supportedHarnesses: model.supportedHarnesses ?? [model.harness],
+      capabilities: model.capabilities ?? [],
+      reasoning: model.reasoning,
+      limits: model.limits,
+      routes: Object.fromEntries((model.supportedHarnesses ?? [model.harness]).filter((harness) => ["pi", "claude", "codex"].includes(harness)).map((harness) => [harness, routeMetadata(model, harness, snapshot)]))
+    }))
+  };
+}
+async function liveCapabilityProbe({ model: selector, harness = "pi", cwd = process.cwd(), reasoningEffort, timeoutMs = 6e4, feature = "text-tool" } = {}) {
+  const config2 = loadConfig();
+  const modelsConfig = loadEffectiveModels();
+  const model = resolveModel(selector, modelsConfig);
+  if (!(model.supportedHarnesses ?? [model.harness]).includes(harness)) {
+    throw new Error(`${model.id} does not support harness=${harness}`);
+  }
+  const effort = resolveReasoningEffort(model.id, reasoningEffort ?? model.reasoning?.default, modelsConfig);
+  const seat = createExplicitSeat({
+    model: model.id,
+    harness,
+    role: "reviewer",
+    mode: "plan",
+    reasoningEffort: effort,
+    cwd,
+    maxTurns: 3
+  }, 0, modelsConfig);
+  const adapter = getAdapter(harness);
+  const startedAt = Date.now();
+  let temporary = null;
+  let prompt = "Read package.json with a read-only tool, then answer exactly: CAPABILITY_OK <package-name>. Do not edit any file.";
+  let expected = /^CAPABILITY_OK\s+\S+/m;
+  if (feature === "image") {
+    if (!model.capabilities?.includes("image")) throw new Error(`${model.id} does not declare image input capability`);
+    temporary = await mkdtemp2(join20(tmpdir2(), "codex-moa-image-probe-"));
+    const imagePath = join20(temporary, "red.png");
+    await writeFile15(imagePath, redPng());
+    seat.attachments = [imagePath];
+    prompt = "Confirm that the image attachment was accepted, then answer exactly IMAGE_OK. Do not edit any file.";
+    expected = /^IMAGE_OK$/m;
+  }
+  const result = await adapter({ seat, prompt, config: config2, timeoutMs, allowWrite: false }).finally(async () => {
+    if (temporary) await rm4(temporary, { recursive: true, force: true });
+  });
+  return {
+    model: model.id,
+    harness,
+    reasoningEffort: effort,
+    status: result.status,
+    durationMs: Date.now() - startedAt,
+    feature,
+    passed: expected.test(result.summary ?? ""),
+    textAndReadTool: feature === "text-tool" ? expected.test(result.summary ?? "") : null,
+    imageInput: feature === "image" ? expected.test(result.summary ?? "") : null,
+    usage: result.usage ?? null,
+    error: result.status === "done" ? null : result.stderr,
+    summary: String(result.summary ?? "").slice(0, 500)
+  };
+}
+
+// mcp/server.mjs
+init_captain_usage();
+init_cost_ledger();
+init_audit_metrics();
+init_failure_memory();
+init_provider_health();
 var MODEL_IDS = ["kimi-k3", "kimi-2.8", "kimi-k2.8", "GLM-5.3", "GLM-5.3-flash", "DeepSeek-flash"];
 var modelSchema = _enum2(MODEL_IDS);
 var orchestrationModeSchema = _enum2(["off", "auto", "force"]);
@@ -47540,7 +49726,7 @@ var budgetSchema = object2({
 }).optional();
 var assignmentSchema = object2({
   model: modelSchema,
-  harness: _enum2(["kimi", "zcode", "dsh"]).optional(),
+  harness: _enum2(["kimi", "zcode", "dsh", "pi", "claude", "codex"]).optional(),
   role: roleSchema.optional().default("executor"),
   mode: _enum2(["plan", "edit", "build"]).optional(),
   runtime: _enum2(["cli", "acp"]).optional().default("cli"),
@@ -47555,11 +49741,14 @@ var assignmentSchema = object2({
   allowedTools: string2().optional(),
   disallowedTools: string2().optional(),
   profile: string2().optional(),
-  env: record(string2(), string2()).optional()
+  env: record(string2(), string2()).optional(),
+  skills: array(string2().min(1)).max(12).optional(),
+  auditMode: _enum2(["gate", "shadow"]).optional(),
+  blocking: boolean2().optional()
 });
 function pluginManifest() {
   try {
-    return JSON.parse(readFileSync9(resolve23(pluginRoot, ".codex-plugin", "plugin.json"), "utf8"));
+    return JSON.parse(readFileSync9(resolve29(pluginRoot, ".codex-plugin", "plugin.json"), "utf8"));
   } catch {
     return { name: "codex-moa", version: "unknown" };
   }
@@ -47640,9 +49829,11 @@ server.registerTool("moa_evolve", {
   inputSchema: {
     action: _enum2(["status", "record", "optimize", "propose", "list", "get", "approve", "reject", "apply", "rollback"]),
     taskId: string2().optional(),
+    originThreadId: string2().optional().describe("Originating Codex thread. Normally captured automatically from CODEX_THREAD_ID; set only when the host explicitly provides it."),
     accepted: boolean2().optional(),
     testsPassed: boolean2().optional(),
     quality: number2().min(0).max(10).optional(),
+    stage: _enum2(["plan", "execution", "audit", "final"]).optional().default("final"),
     notes: string2().optional(),
     proposalId: string2().optional(),
     confirmation: string2().optional(),
@@ -47669,6 +49860,7 @@ server.registerTool("moa_evolve", {
         accepted: input2.accepted,
         testsPassed: input2.testsPassed,
         quality: input2.quality,
+        stage: input2.stage,
         notes: input2.notes
       }));
     }
@@ -47878,7 +50070,7 @@ server.registerTool("moa_patch_metrics", {
 });
 server.registerTool("moa_retention", {
   title: "Codex MOA Retention",
-  description: "Plan or apply retention/compaction for blackboard, jobs, worktrees, cost ledger, and routing history.",
+  description: "Plan or apply retention/compaction for blackboard, jobs, worktrees, cost ledger, audit metrics, failure memory, and routing history.",
   inputSchema: {
     action: _enum2(["plan", "apply"]),
     allowWrite: boolean2().optional().default(false),
@@ -47910,13 +50102,41 @@ server.registerTool("moa_context", {
     return errorResult(error62);
   }
 });
+server.registerTool("moa_capabilities", {
+  title: "Codex MOA Model Capabilities",
+  description: "Read the CC Switch and vendor capability matrix, or run one bounded read-only live model/Harness probe.",
+  inputSchema: {
+    live: boolean2().optional().default(false),
+    model: modelSchema.optional(),
+    harness: _enum2(["pi", "claude", "codex"]).optional().default("pi"),
+    cwd: string2().optional(),
+    reasoningEffort: reasoningEffortSchema.optional(),
+    feature: _enum2(["text-tool", "image"]).optional().default("text-tool"),
+    timeoutMs: number2().int().positive().max(6e4).optional().default(6e4)
+  }
+}, async (input2) => {
+  try {
+    if (!input2.live) return textResult(await capabilityMatrix());
+    if (!input2.model) throw new Error("model is required for a live capability probe");
+    return textResult(await liveCapabilityProbe({
+      model: input2.model,
+      harness: input2.harness,
+      cwd: input2.cwd ?? process.cwd(),
+      reasoningEffort: input2.reasoningEffort,
+      feature: input2.feature,
+      timeoutMs: input2.timeoutMs
+    }));
+  } catch (error62) {
+    return errorResult(error62);
+  }
+});
 server.registerTool("moa_doctor", {
   title: "Codex MOA Doctor",
-  description: "Check KimiCode, ZCode, DeepSeekHarness, and plugin dependencies.",
-  inputSchema: {}
-}, async () => {
+  description: "Check Pi, Claude Code, Codex CLI, compatibility fallbacks, lifecycle policy, and plugin dependencies.",
+  inputSchema: { checkLatest: boolean2().optional().default(false) }
+}, async ({ checkLatest }) => {
   try {
-    return textResult(await doctor());
+    return textResult(await doctor({ checkLatest }));
   } catch (error62) {
     return errorResult(error62);
   }
@@ -47957,6 +50177,57 @@ server.registerTool("moa_captain", {
     return errorResult(error62);
   }
 });
+server.registerTool("moa_captain_usage", {
+  title: "Codex MOA Captain Usage",
+  description: "Read or update the GPT captain quota snapshot used for dynamic delegation. The Codex caller obtains current account limits and supplies only normalized percentages.",
+  inputSchema: {
+    action: _enum2(["read", "update"]).optional().default("read"),
+    source: string2().optional(),
+    observedAt: string2().datetime().optional(),
+    planType: string2().optional(),
+    ordinaryUsageAllowed: boolean2().optional(),
+    limits: array(object2({
+      limitId: string2(),
+      usedPercent: number2().min(0).max(100),
+      windowDurationMins: number2().nonnegative().optional(),
+      resetsAt: number2().nonnegative().optional()
+    })).optional()
+  }
+}, async (input2) => {
+  try {
+    if (input2.action === "update") {
+      if (!input2.limits?.length) throw new Error("limits are required for action=update");
+      return textResult(await writeCaptainUsage(input2));
+    }
+    return textResult(await readCaptainUsage() ?? { status: "not_recorded" });
+  } catch (error62) {
+    return errorResult(error62);
+  }
+});
+server.registerTool("moa_audit_metrics", {
+  title: "Codex MOA Audit Metrics",
+  description: "Read execution-audit pairing metrics or record captain adjudication of audit findings.",
+  inputSchema: {
+    action: _enum2(["status", "record"]).optional().default("status"),
+    taskId: string2().optional(),
+    auditorSeat: string2().optional(),
+    acceptedFindings: number2().int().nonnegative().optional(),
+    falsePositives: number2().int().nonnegative().optional(),
+    taskAccepted: boolean2().optional(),
+    testsPassed: boolean2().optional(),
+    notes: string2().max(2e3).optional()
+  }
+}, async (input2) => {
+  try {
+    if (input2.action === "record") {
+      if (!input2.taskId || !input2.auditorSeat) throw new Error("taskId and auditorSeat are required for action=record");
+      return textResult(await recordAuditAdjudication(input2));
+    }
+    return textResult(summarizeAuditMetrics(await readAuditMetrics()));
+  } catch (error62) {
+    return errorResult(error62);
+  }
+});
 server.registerTool("moa_provider_recovery", {
   title: "Codex MOA Provider Recovery",
   description: "Inspect provider circuit state or probe half-open providers for automatic recovery.",
@@ -47989,6 +50260,7 @@ server.registerTool("moa_plan", {
     stakes: _enum2(["low", "medium", "high"]).optional().default("medium"),
     mode: _enum2(["implement", "review", "audit", "research"]).optional().default("implement"),
     vision: boolean2().optional().default(false),
+    skills: array(string2().min(1)).max(12).optional(),
     seats: array(object2({
       seat: string2(),
       model: modelSchema.optional(),
@@ -48000,7 +50272,8 @@ server.registerTool("moa_plan", {
       limitMode: _enum2(["balanced", "max"]).optional().default("balanced"),
       continuityKey: string2().optional(),
       cwd: string2().optional(),
-      mode: _enum2(["plan", "edit", "build"]).optional()
+      mode: _enum2(["plan", "edit", "build"]).optional(),
+      skills: array(string2().min(1)).max(12).optional()
     })).optional(),
     assignments: array(assignmentSchema).optional()
   }
@@ -48009,10 +50282,32 @@ server.registerTool("moa_plan", {
     const { planMoA: planMoA2 } = await Promise.resolve().then(() => (init_router(), router_exports));
     const captain = await resolveCaptain({ captainModel: input2.captainModel });
     const orchestration = await resolveMoAMode(input2.orchestrationMode);
-    const plan = planMoA2({ ...input2, captain, orchestrationMode: orchestration.mode });
-    const models = loadModels();
-    const auditWarnings = auditConflict(captain, plan.seats, models);
     const snapshot = await readQuotaSnapshot();
+    const usage = await readCaptainUsage();
+    const routePerformance = summarizeCostLedger(await readCostLedger()).routes;
+    const models = loadEffectiveModels();
+    const plan = planMoA2({ ...input2, captain, orchestrationMode: orchestration.mode }, {
+      models,
+      quotaSnapshot: snapshot,
+      captainAllocation: captainAllocation(captain, usage),
+      routePerformance
+    });
+    const failureSummary = summarizeFailureMemory(await readFailureMemory());
+    const failureRouting = applyFailureAvoidance(plan.seats, { summary: failureSummary, modelsConfig: models, captain });
+    failureRouting.adjustments.push(...reconcileAuditPairing(plan.seats, {
+      modelsConfig: models,
+      captain,
+      routeAllowed: (model, harness) => !failureGuardFor(failureSummary, model, harness)
+    }));
+    for (const node2 of plan.graph?.nodes ?? []) {
+      const seat = plan.seats.find((item) => item.seat === node2.id);
+      if (seat) {
+        node2.model = seat.model;
+        node2.harness = seat.harness;
+      }
+    }
+    plan.failureRouting = failureRouting;
+    const auditWarnings = auditConflict(captain, plan.seats, models);
     const result = {
       ...plan,
       orchestration,
@@ -48031,7 +50326,7 @@ server.registerTool("moa_plan", {
 });
 server.registerTool("moa_start", {
   title: "Start Codex MOA Job",
-  description: "Start a persisted background MoA run and return immediately with a job handle.",
+  description: "Start a persisted background MoA run and return immediately with a job handle. After dispatch, return control to the user instead of keeping the Codex turn open with polling or unrelated local work.",
   inputSchema: {
     task: string2().min(1),
     cwd: string2().min(1),
@@ -48045,6 +50340,7 @@ server.registerTool("moa_start", {
     stakes: _enum2(["low", "medium", "high"]).optional().default("medium"),
     mode: _enum2(["implement", "review", "audit", "research"]).optional().default("implement"),
     vision: boolean2().optional().default(false),
+    skills: array(string2().min(1)).max(12).optional(),
     allowWrite: boolean2().optional().default(false),
     respectQuota: boolean2().optional().default(true),
     allowDepleted: boolean2().optional().default(false),
@@ -48073,7 +50369,8 @@ server.registerTool("moa_start", {
       maxTurns: number2().int().positive().optional(),
       allowedTools: string2().optional(),
       disallowedTools: string2().optional(),
-      env: record(string2(), string2()).optional()
+      env: record(string2(), string2()).optional(),
+      skills: array(string2().min(1)).max(12).optional()
     })).optional(),
     assignments: array(assignmentSchema).optional()
   }
@@ -48081,7 +50378,13 @@ server.registerTool("moa_start", {
   try {
     const taskId = input2.taskId ?? createTaskId("moa-job");
     const job = publicJob(await startJob({ input: { ...input2, taskId }, taskId }));
-    return textResult({ ...job, kind: "job", canSteer: true, nextPollAfterMs: 5e3 });
+    return textResult({
+      ...job,
+      kind: "job",
+      canSteer: true,
+      nextPollAfterMs: 5e3,
+      interaction: backgroundJobHandoff(job, { event: "started" })
+    });
   } catch (error62) {
     return errorResult(error62);
   }
@@ -48098,21 +50401,50 @@ server.registerTool("moa_job_status", {
     if (!jobId) return textResult({ jobs: await listJobs(limit) });
     const job = await readJob(jobId);
     if (!job) throw new Error(`Job not found: ${jobId}`);
-    return textResult(publicJob(job));
+    const visible = publicJob(job);
+    return textResult({ ...visible, interaction: backgroundJobHandoff(visible, { event: "status" }) });
   } catch (error62) {
     return errorResult(error62);
   }
 });
 server.registerTool("moa_job_wait", {
   title: "Wait for Codex MOA Job",
-  description: "Wait briefly for a background job to reach a settled state; use status between waits.",
+  description: "Wait once for at most ten seconds for a background job to settle. If it remains active, return control to the user; do not loop in the same Codex turn.",
   inputSchema: {
     jobId: string2(),
-    timeoutMs: number2().int().positive().max(1e4).optional().default(5e3)
+    timeoutMs: number2().int().positive().max(JOB_WAIT_LIMIT_MS).optional().default(5e3)
   }
 }, async ({ jobId, timeoutMs }) => {
   try {
-    return textResult(await waitForJob(jobId, timeoutMs));
+    const result = await waitForJob(jobId, timeoutMs);
+    return textResult({ ...result, interaction: backgroundJobHandoff(result.job, { event: "wait" }) });
+  } catch (error62) {
+    return errorResult(error62);
+  }
+});
+server.registerTool("moa_job_notify", {
+  title: "Retry Codex MOA Job Notification",
+  description: "Retry the durable completion notification to the originating Codex thread. Uses the official Codex queue command and records whether the daemon accepted it.",
+  inputSchema: {
+    jobId: string2(),
+    force: boolean2().optional().default(false)
+  }
+}, async ({ jobId, force }) => {
+  try {
+    const job = await notifyJobCompletion(jobId, { force });
+    return textResult({ ...job, interaction: backgroundJobHandoff(job, { event: "notified" }) });
+  } catch (error62) {
+    return errorResult(error62);
+  }
+});
+server.registerTool("moa_job_ack", {
+  title: "Acknowledge Codex MOA Job Notification",
+  description: "Mark a terminal background-job completion notice as handled after the captain has inspected its evidence and continued the workflow.",
+  inputSchema: { jobId: string2() }
+}, async ({ jobId }) => {
+  try {
+    const job = await acknowledgeJobNotification(jobId);
+    return textResult({ ...job, interaction: backgroundJobHandoff(job, { event: "acknowledged" }) });
   } catch (error62) {
     return errorResult(error62);
   }
@@ -48123,7 +50455,8 @@ server.registerTool("moa_job_steer", {
   inputSchema: { jobId: string2(), message: string2().min(1) }
 }, async ({ jobId, message }) => {
   try {
-    return textResult(await steerJob(jobId, message));
+    const result = await steerJob(jobId, message);
+    return textResult({ ...result, interaction: backgroundJobHandoff(result.job, { event: "steered" }) });
   } catch (error62) {
     return errorResult(error62);
   }
@@ -48180,6 +50513,7 @@ server.registerTool("moa_run", {
     stakes: _enum2(["low", "medium", "high"]).optional().default("medium"),
     mode: _enum2(["implement", "review", "audit", "research"]).optional().default("implement"),
     vision: boolean2().optional().default(false),
+    skills: array(string2().min(1)).max(12).optional(),
     allowWrite: boolean2().optional().default(false),
     diff: string2().optional(),
     files: array(string2()).optional(),
@@ -48204,7 +50538,8 @@ server.registerTool("moa_run", {
       maxTurns: number2().int().positive().optional(),
       allowedTools: string2().optional(),
       disallowedTools: string2().optional(),
-      env: record(string2(), string2()).optional()
+      env: record(string2(), string2()).optional(),
+      skills: array(string2().min(1)).max(12).optional()
     })).optional(),
     assignments: array(assignmentSchema).optional()
   }
@@ -48222,10 +50557,12 @@ server.registerTool("moa_models", {
   inputSchema: {}
 }, async () => {
   try {
-    const models = loadModels();
+    const models = loadEffectiveModels();
     const snapshot = await readCcSwitchSnapshot();
     return textResult({
       models: listModels(models),
+      reasoningSources: models.reasoningSources ?? {},
+      metadataSources: models.metadataSources ?? {},
       ccswitch: snapshot.available ? {
         skill: ccSwitchSkillStatus(snapshot, "codex-moa"),
         bindings: bindModelsToCcSwitch(snapshot, models),

@@ -14,6 +14,9 @@ export function buildTaskGraph(seats = []) {
     role: seat.role,
     model: seat.model,
     runtime: seat.runtime ?? "cli",
+    auditMode: seat.auditMode ?? null,
+    blocking: seat.blocking !== false,
+    pairedExecutor: seat.pairedExecutor ?? null,
     dependsOn: []
   }));
   const byRole = (role) => nodes.filter((node) => node.role === role);

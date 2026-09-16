@@ -53,6 +53,113 @@ export function extractOutput(stdout) {
   return raw;
 }
 
+function jsonEvents(stdout) {
+  const raw = String(stdout ?? "").trim();
+  if (!raw) return [];
+  const events = [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {}
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) continue;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) events.push(...parsed);
+      else events.push(parsed);
+    } catch {}
+  }
+  return events;
+}
+
+function messageText(message) {
+  if (!message || message.role !== "assistant") return "";
+  if (typeof message.content === "string") return message.content.trim();
+  if (!Array.isArray(message.content)) return "";
+  return message.content
+    .filter((item) => item?.type === "text" && typeof item.text === "string")
+    .map((item) => item.text.trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+// Pi JSON mode emits the complete user, assistant, and tool transcript as JSONL.
+// Only the last completed assistant message is the seat's answer.
+export function extractPiOutput(stdout) {
+  const assistantMessages = jsonEvents(stdout)
+    .filter((event) => event?.type === "message_end")
+    .map((event) => event.message)
+    .filter((message) => message?.role === "assistant");
+  for (let index = assistantMessages.length - 1; index >= 0; index -= 1) {
+    const text = messageText(assistantMessages[index]);
+    if (text) return text;
+  }
+  if (assistantMessages.length > 0) return "";
+  return extractOutput(stdout);
+}
+
+export function extractClaudeOutput(stdout) {
+  const events = jsonEvents(stdout);
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type === "result" && typeof event.result === "string" && event.result.trim()) return event.result.trim();
+    const text = messageText(event?.message ?? event);
+    if (text) return text;
+  }
+  return extractOutput(stdout);
+}
+
+export function extractCodexOutput(stdout) {
+  const events = jsonEvents(stdout);
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    const item = event?.item ?? event;
+    if (["agent_message", "message"].includes(item?.type) && typeof item.text === "string" && item.text.trim()) {
+      return item.text.trim();
+    }
+    if (event?.type === "turn.completed" && typeof event.final_output === "string" && event.final_output.trim()) {
+      return event.final_output.trim();
+    }
+  }
+  return extractOutput(stdout);
+}
+
+export function extractPiError(stdout) {
+  const assistantMessages = jsonEvents(stdout)
+    .filter((event) => event?.type === "message_end")
+    .map((event) => event.message)
+    .filter((message) => message?.role === "assistant");
+  const last = assistantMessages.at(-1);
+  if (!last) return null;
+  if (last.stopReason === "error" || last.errorMessage) {
+    return String(last.errorMessage || "Pi assistant stopped with an error");
+  }
+  return null;
+}
+
+export function extractPiUsage(stdout) {
+  const usages = jsonEvents(stdout)
+    .filter((event) => event?.type === "message_end" && event.message?.role === "assistant")
+    .map((event) => event.message.usage)
+    .filter((usage) => usage && typeof usage === "object");
+  if (usages.length === 0) return extractUsage(stdout);
+  const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
+  const inputTokens = usages.reduce((sum, usage) => sum + number(usage.input ?? usage.inputTokens ?? usage.input_tokens), 0);
+  const outputTokens = usages.reduce((sum, usage) => sum + number(usage.output ?? usage.outputTokens ?? usage.output_tokens), 0);
+  const cacheReadTokens = usages.reduce((sum, usage) => sum + number(usage.cacheRead ?? usage.cacheReadTokens ?? usage.cache_read_tokens), 0);
+  const cacheWriteTokens = usages.reduce((sum, usage) => sum + number(usage.cacheWrite ?? usage.cacheWriteTokens ?? usage.cache_write_tokens), 0);
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    contextTokens: number(usages.at(-1)?.totalTokens ?? usages.at(-1)?.contextTokens) || null
+  };
+}
+
 function findSessionId(value, depth = 0) {
   if (depth > 8 || value == null) return null;
   if (typeof value !== "object") return null;

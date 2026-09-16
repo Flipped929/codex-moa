@@ -7,6 +7,8 @@ import { readSeatRegistry, listSeats } from "./seat-registry.mjs";
 import { listJobs, jobsRoot } from "./jobs.mjs";
 import { costLedgerPath } from "./cost-ledger.mjs";
 import { routingExperimentStatePath } from "./routing-experiment.mjs";
+import { auditMetricsPath } from "./audit-metrics.mjs";
+import { failureMemoryPath } from "./failure-memory.mjs";
 import { inspectWorktree, removeWorktree } from "./worktree.mjs";
 
 function expandHome(value) {
@@ -76,6 +78,14 @@ export function retentionPolicy(config = {}) {
       maxAgeMs: Number(source.costLedger?.maxAgeDays ?? 180) * day,
       maxEntries: Number(source.costLedger?.maxEntries ?? 50000)
     },
+    auditMetrics: {
+      maxAgeMs: Number(source.auditMetrics?.maxAgeDays ?? 365) * day,
+      maxEntries: Number(source.auditMetrics?.maxEntries ?? 100000)
+    },
+    failureMemory: {
+      maxAgeMs: Number(source.failureMemory?.maxAgeDays ?? 365) * day,
+      maxEntries: Number(source.failureMemory?.maxEntries ?? 100000)
+    },
     routingHistory: {
       maxEntriesPerExperiment: Number(source.routingHistory?.maxEntriesPerExperiment ?? 200)
     }
@@ -84,7 +94,7 @@ export function retentionPolicy(config = {}) {
 
 export async function planRetention({ config = {}, now = Date.now() } = {}) {
   const policy = retentionPolicy(config);
-  if (!policy.enabled) return { enabled: false, blackboard: [], jobs: [], worktrees: [], costLedger: null, routingHistory: [] };
+  if (!policy.enabled) return { enabled: false, blackboard: [], jobs: [], worktrees: [], costLedger: null, auditMetrics: null, failureMemory: null, routingHistory: [] };
   const activeTaskIds = new Set(listSeats(readSeatRegistry()).filter((seat) => seat.status === "running").map((seat) => seat.taskId));
   for (const job of await listJobs(1000)) {
     if (["queued", "running", "cancelling"].includes(job.status)) activeTaskIds.add(job.taskId);
@@ -133,6 +143,16 @@ export async function planRetention({ config = {}, now = Date.now() } = {}) {
   const keepLedger = ledger.filter((entry, index) => Date.parse(entry.time) >= cutoff || index >= Math.max(0, ledger.length - policy.costLedger.maxEntries));
   const costLedger = keepLedger.length === ledger.length ? null : { path: costLedgerPath(), entries: ledger.length, keep: keepLedger.length, remove: ledger.length - keepLedger.length };
 
+  const audits = await readJsonl(auditMetricsPath());
+  const auditCutoff = now - policy.auditMetrics.maxAgeMs;
+  const keepAudits = audits.filter((entry, index) => Date.parse(entry.time) >= auditCutoff || index >= Math.max(0, audits.length - policy.auditMetrics.maxEntries));
+  const auditMetrics = keepAudits.length === audits.length ? null : { path: auditMetricsPath(), entries: audits.length, keep: keepAudits.length, remove: audits.length - keepAudits.length };
+
+  const failures = await readJsonl(failureMemoryPath());
+  const failureCutoff = now - policy.failureMemory.maxAgeMs;
+  const keepFailures = failures.filter((entry, index) => Date.parse(entry.time) >= failureCutoff || index >= Math.max(0, failures.length - policy.failureMemory.maxEntries));
+  const failureMemory = keepFailures.length === failures.length ? null : { path: failureMemoryPath(), entries: failures.length, keep: keepFailures.length, remove: failures.length - keepFailures.length };
+
   const routingPath = routingExperimentStatePath();
   const routingState = await readJson(routingPath);
   const routingHistory = [];
@@ -143,13 +163,13 @@ export async function planRetention({ config = {}, now = Date.now() } = {}) {
     }
   }
 
-  return { enabled: true, policy, blackboard, jobs, worktrees, costLedger, routingHistory };
+  return { enabled: true, policy, blackboard, jobs, worktrees, costLedger, auditMetrics, failureMemory, routingHistory };
 }
 
 export async function applyRetention({ config = {}, dryRun = true, now = Date.now() } = {}) {
   const plan = await planRetention({ config, now });
-  if (dryRun || plan.enabled === false) return { dryRun, plan, applied: { blackboard: 0, jobs: 0, worktrees: 0, costLedger: 0, routingHistory: 0 }, errors: [] };
-  const applied = { blackboard: 0, jobs: 0, worktrees: 0, costLedger: 0, routingHistory: 0 };
+  if (dryRun || plan.enabled === false) return { dryRun, plan, applied: { blackboard: 0, jobs: 0, worktrees: 0, costLedger: 0, auditMetrics: 0, failureMemory: 0, routingHistory: 0 }, errors: [] };
+  const applied = { blackboard: 0, jobs: 0, worktrees: 0, costLedger: 0, auditMetrics: 0, failureMemory: 0, routingHistory: 0 };
   const errors = [];
   for (const item of plan.blackboard) {
     try { await rm(item.path, { recursive: true, force: true }); applied.blackboard += 1; }
@@ -175,6 +195,26 @@ export async function applyRetention({ config = {}, dryRun = true, now = Date.no
       await writeJsonlAtomic(plan.costLedger.path, keep);
       applied.costLedger = ledger.length - keep.length;
     } catch (error) { errors.push({ path: plan.costLedger.path, error: error.message }); }
+  }
+  if (plan.auditMetrics) {
+    try {
+      const entries = await readJsonl(plan.auditMetrics.path);
+      const policy = retentionPolicy(config);
+      const cutoff = now - policy.auditMetrics.maxAgeMs;
+      const keep = entries.filter((entry, index) => Date.parse(entry.time) >= cutoff || index >= Math.max(0, entries.length - policy.auditMetrics.maxEntries));
+      await writeJsonlAtomic(plan.auditMetrics.path, keep);
+      applied.auditMetrics = entries.length - keep.length;
+    } catch (error) { errors.push({ path: plan.auditMetrics.path, error: error.message }); }
+  }
+  if (plan.failureMemory) {
+    try {
+      const entries = await readJsonl(plan.failureMemory.path);
+      const policy = retentionPolicy(config);
+      const cutoff = now - policy.failureMemory.maxAgeMs;
+      const keep = entries.filter((entry, index) => Date.parse(entry.time) >= cutoff || index >= Math.max(0, entries.length - policy.failureMemory.maxEntries));
+      await writeJsonlAtomic(plan.failureMemory.path, keep);
+      applied.failureMemory = entries.length - keep.length;
+    } catch (error) { errors.push({ path: plan.failureMemory.path, error: error.message }); }
   }
   if (plan.routingHistory.length > 0) {
     try {

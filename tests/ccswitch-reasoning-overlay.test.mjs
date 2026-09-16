@@ -139,3 +139,100 @@ test("不会合并不同 provider 卡的思考档位", () => {
   assert.equal(index["GLM-5.3"].selectedProvider.id, "codex-glm-current");
   assert.ok(index["GLM-5.3"].conflicts.some((provider) => provider.id === "codex-glm"));
 });
+
+test("Pi 模型精确采用所配置 provider 的档位、限制和图片能力，DSH 保持独立", () => {
+  const local = modelsConfig();
+  local.models["GLM-5.3"] = {
+    ...local.models["GLM-5.3"],
+    harness: "pi",
+    pi: { provider: "pi-glm", model: "glm-5.3" },
+    capabilities: ["text", "image", "tool-use"],
+    limits: { contextWindow: 1000, maxOutputTokens: 100 }
+  };
+  local.models["DeepSeek-flash"] = {
+    ...local.models["DeepSeek-flash"],
+    harness: "dsh",
+    capabilities: ["text", "image", "audit"],
+    limits: { contextWindow: 2000, maxOutputTokens: 200 }
+  };
+  const state = snapshot();
+  state.providers.push(
+    {
+      id: "pi-glm",
+      appType: "pi",
+      name: "Pi GLM",
+      isCurrent: false,
+      models: ["glm-5.3"],
+      modelEntries: [{
+        id: "glm-5.3",
+        name: "glm-5.3",
+        levels: ["high"],
+        defaultLevel: "high",
+        contextWindow: 1048576,
+        maxTokens: 131072,
+        input: ["text"],
+        reasoningEnabled: true
+      }]
+    },
+    {
+      id: "pi-deepseek",
+      appType: "pi",
+      name: "Pi DeepSeek",
+      isCurrent: false,
+      models: ["deepseek-flash"],
+      modelEntries: [{
+        id: "deepseek-flash",
+        name: "deepseek-flash",
+        levels: ["high"],
+        defaultLevel: "high",
+        contextWindow: 999999,
+        maxTokens: 999999,
+        input: ["text"],
+        reasoningEnabled: true
+      }]
+    }
+  );
+
+  const effective = applyCcSwitchReasoning(local, state);
+  const glm = effective.models["GLM-5.3"];
+  assert.deepEqual(glm.reasoning.supported, ["high"]);
+  assert.equal(glm.reasoning.extendedThinking, true);
+  assert.equal(glm.limits.contextWindow, 1048576);
+  assert.equal(glm.limits.maxOutputTokens, 131072);
+  assert.equal(glm.capabilities.includes("image"), false);
+  assert.equal(effective.metadataSources["GLM-5.3"], "cc-switch");
+
+  const deepseek = effective.models["DeepSeek-flash"];
+  assert.equal(deepseek.limits.contextWindow, 2000);
+  assert.equal(deepseek.limits.maxOutputTokens, 200);
+  assert.equal(deepseek.capabilities.includes("image"), true);
+  assert.equal(effective.metadataSources["DeepSeek-flash"], "local");
+});
+
+test("Pi 卡开启思考但映射为空时使用厂商档位基线", () => {
+  const local = modelsConfig();
+  local.models["GLM-5.3"] = {
+    ...local.models["GLM-5.3"],
+    harness: "pi",
+    pi: { provider: "pi-glm", model: "glm-5.3" },
+    reasoning: {
+      supported: ["low", "high", "max"],
+      default: "high",
+      canDisable: false,
+      vendorProfile: { supported: ["high", "max"], default: "max" }
+    }
+  };
+  const state = snapshot();
+  state.providers.push({
+    id: "pi-glm",
+    appType: "pi",
+    name: "Pi GLM",
+    isCurrent: false,
+    models: ["glm-5.3"],
+    modelEntries: [{ id: "glm-5.3", name: "glm-5.3", levels: [], defaultLevel: null, reasoningEnabled: true }]
+  });
+  const effective = applyCcSwitchReasoning(local, state);
+  assert.deepEqual(effective.models["GLM-5.3"].reasoning.supported, ["high", "max"]);
+  assert.equal(effective.models["GLM-5.3"].reasoning.default, "max");
+  assert.equal(effective.reasoningSources["GLM-5.3"], "cc-switch+vendor");
+});

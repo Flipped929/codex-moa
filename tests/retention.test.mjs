@@ -16,6 +16,8 @@ test("plans and applies retention for blackboard, jobs, cost ledger, and routing
   process.env.CODEX_MOA_SEAT_REGISTRY = join(root, "seats.json");
   process.env.CODEX_MOA_JOB_HOME = jobs;
   process.env.CODEX_MOA_COST_LEDGER = ledger;
+  process.env.CODEX_MOA_AUDIT_METRICS = join(root, "audit.jsonl");
+  process.env.CODEX_MOA_FAILURE_MEMORY = join(root, "failures.jsonl");
   process.env.CODEX_MOA_ROUTING_EXPERIMENT_PATH = routing;
   const old = new Date("2020-01-01T00:00:00Z").toISOString();
   const recent = new Date().toISOString();

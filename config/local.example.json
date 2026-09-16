@@ -13,6 +13,18 @@
     "dsh": {
       "command": "dsh",
       "args": []
+    },
+    "pi": {
+      "command": "pi",
+      "args": []
+    },
+    "claude": {
+      "command": "claude",
+      "args": []
+    },
+    "codex": {
+      "command": "codex",
+      "args": []
     }
   },
   "profiles": {
@@ -28,6 +40,21 @@
     "provider": "",
     "headlessProvider": "builtin:bigmodel-coding-plan",
     "headlessHome": "~/.codex-moa/zcode-home"
+  },
+  "pi": {
+    "headlessHome": "~/.codex-moa/pi-home",
+    "syncCcSwitchProviders": true,
+    "providerAllowlist": [
+      "cc-switch-kimi-for-coding",
+      "cc-switch-zhipu-glm",
+      "deepseek"
+    ]
+  },
+  "claude": {
+    "headlessHome": "~/.codex-moa/claude-homes"
+  },
+  "codex": {
+    "headlessHome": "~/.codex-moa/codex-homes"
   },
   "worktrees": {
     "cleanup": "clean_success",
@@ -58,6 +85,14 @@
       "maxAgeDays": 365,
       "maxEntries": 100000
     },
+    "auditMetrics": {
+      "maxAgeDays": 365,
+      "maxEntries": 100000
+    },
+    "failureMemory": {
+      "maxAgeDays": 365,
+      "maxEntries": 100000
+    },
     "routingHistory": {
       "maxEntriesPerExperiment": 500
     }
@@ -68,5 +103,12 @@
     "maxOpenMs": 3600000,
     "latencyWarningMs": 10000,
     "windowSize": 100
+  },
+  "failureMemory": {
+    "transientWindowHours": 6,
+    "transientThreshold": 2,
+    "transientGuardHours": 1,
+    "protocolGuardHours": 2,
+    "deterministicGuardHours": 24
   }
 }

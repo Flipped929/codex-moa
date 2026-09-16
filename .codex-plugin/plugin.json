@@ -1,7 +1,7 @@
 {
   "name": "codex-moa",
-  "version": "0.19.2+codex.20260915144837",
-  "description": "Codex-orchestrated mixture of agents for KimiCode, ZCode, and DeepSeekHarness.",
+  "version": "0.22.2+codex.20260916134618",
+  "description": "Codex-orchestrated mixture of agents for Pi, Claude Code, Codex CLI, KimiCode, ZCode, and DeepSeekHarness.",
   "author": {
     "name": "Flipped929"
   },
@@ -15,14 +15,17 @@
     "kimi",
     "glm",
     "deepseek",
-    "deepseek-harness"
+    "deepseek-harness",
+    "pi",
+    "claude-code",
+    "codex-cli"
   ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Codex MOA",
-    "shortDescription": "Orchestrate KimiCode, ZCode, and DeepSeekHarness from Codex.",
-    "longDescription": "Codex MOA keeps Codex as the captain while delegating execution to KimiCode and ZCode and independent audit to DeepSeekHarness. It uses structured task contracts, isolated worktrees, blackboard artifacts, and cost-aware scheduling.",
+    "shortDescription": "Orchestrate Pi, Claude Code, Codex CLI, and specialist Harnesses from Codex.",
+    "longDescription": "Codex MOA keeps the page-selected Codex model as captain while delegating CC Switch-managed Kimi, GLM, and DeepSeek work through isolated Pi, Claude Code, or Codex CLI Harnesses. It retains KimiCode, ZCode, and DeepSeekHarness as compatibility and audit paths, with structured task contracts, isolated worktrees, capability probes, quota balancing, and cost-aware scheduling.",
     "developerName": "Flipped929",
     "category": "Developer Tools",
     "capabilities": [

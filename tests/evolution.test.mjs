@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { analyzeEvolution, applyProposal, createProposal, getProposal, rollbackProposal, updateProposalStatus } from "../src/lib/evolution.mjs";
+import { analyzeEvolution, applyProposal, createProposal, getProposal, recordOutcome, rollbackProposal, updateProposalStatus, validateReasoningPolicyPatch } from "../src/lib/evolution.mjs";
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "codex-moa-evolution-"));
@@ -105,4 +105,59 @@ test("evolution analysis marks low-sample rates as descriptive", async () => {
   assert.equal(analysis.seats.executor.successRate, 1);
   assert.equal(analysis.seats.executor.sampleSufficient, false);
   assert.equal(analysis.evidencePolicy.minimumSamples, 3);
+});
+
+test("reasoning evolution rejects efforts outside the effective model capability", () => {
+  const modelTable = {
+    models: {
+      "GLM-5.3": { id: "GLM-5.3", reasoning: { supported: ["high", "max"], default: "max" } }
+    },
+    aliases: {}
+  };
+  assert.throws(
+    () => validateReasoningPolicyPatch({ reasoning: { byModel: { "GLM-5.3": { byLevel: { L1: "low" } } } } }, modelTable),
+    /maps it to high/
+  );
+  const valid = validateReasoningPolicyPatch({ reasoning: { mode: "task-aware", byModel: { "GLM-5.3": { byLevel: { L3: "max" } } } } }, modelTable);
+  assert.equal(valid.ok, true);
+  assert.equal(valid.checks[0].effective, "max");
+});
+
+test("evolution analysis groups outcomes by model and effective reasoning effort", async () => {
+  const { paths } = await fixture();
+  await writeFile(paths.events, `${JSON.stringify({
+    type: "task_completed",
+    results: [{ requestedModel: "kimi-k3", harness: "pi", reasoningEffort: "high", reasoningSource: "vendor-profile", status: "done", timedOut: false, durationMs: 20, usage: { totalTokens: 30, outputTokens: 10 } }]
+  })}\n`, "utf8");
+  const analysis = await analyzeEvolution(paths);
+  assert.equal(analysis.reasoningRoutes["kimi-k3@pi@high"].runs, 1);
+  assert.equal(analysis.reasoningRoutes["kimi-k3@pi@high"].totalTokens, 30);
+  assert.equal(analysis.reasoningRoutes["kimi-k3@pi@high"].outputTps, 500);
+  assert.equal(analysis.reasoningRoutes["kimi-k3@pi@high"].sampleSufficient, false);
+});
+
+test("evolution analysis compares execution routes by level with quality before cost and speed", async () => {
+  const { paths } = await fixture();
+  const events = [1, 2, 3].map((index) => JSON.stringify({
+    type: "task_completed",
+    taskId: `route-${index}`,
+    level: "L1",
+    stageReviews: [{ phase: "execution", blockingPassed: true }],
+    results: [{ role: "executor", requestedModel: "GLM-5.3-flash", harness: "pi", status: "done", timedOut: false, durationMs: 1000, usage: { outputTokens: 100 }, estimatedUsd: 0.02 }]
+  })).join("\n");
+  await writeFile(paths.events, `${events}\n`, "utf8");
+  await recordOutcome({ taskId: "route-1", stage: "execution", accepted: true, testsPassed: true, quality: 8 }, paths);
+  for (const index of [1, 2, 3]) await recordOutcome({ taskId: `route-${index}`, stage: "final", accepted: true, testsPassed: true, quality: 9 }, paths);
+  const analysis = await analyzeEvolution(paths);
+  const route = analysis.executionRoutes["L1:GLM-5.3-flash@pi"];
+  assert.equal(route.sampleSufficient, true);
+  assert.equal(route.qualityGatePassed, true);
+  assert.equal(route.acceptanceRate, 1);
+  assert.equal(route.averageQuality, 9);
+  assert.equal(route.outputTps, 100);
+  assert.ok(Math.abs(route.costPerAcceptedTask - 0.02) < 1e-9);
+  assert.equal(analysis.stageReviews.automatic, 3);
+  assert.equal(analysis.stageReviews.captainRecorded, 1);
+  assert.equal(analysis.acceptanceRate, 1);
+  assert.equal(analysis.bestQualifiedRouteByLevel.L1.route, "L1:GLM-5.3-flash@pi");
 });

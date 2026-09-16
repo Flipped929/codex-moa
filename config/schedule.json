@@ -14,6 +14,7 @@
     "offPeakMultiplier": 0.5
   },
   "glmNightCampaign": {
+    "enabled": false,
     "name": "GLM-5.3-Flash 夜间畅用活动",
     "startDate": "2026-09-03",
     "endDate": "2026-09-20",

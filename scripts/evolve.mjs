@@ -19,6 +19,7 @@ async function main() {
       accepted: rest.includes("--accepted"),
       testsPassed: rest.includes("--tests-passed"),
       quality: rest.find((item) => item.startsWith("--quality="))?.split("=")[1],
+      stage: rest.find((item) => item.startsWith("--stage="))?.split("=")[1] ?? "final",
       notes: rest.filter((item) => !item.startsWith("--")).join(" ")
     });
   }

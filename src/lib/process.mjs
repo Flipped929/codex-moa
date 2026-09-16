@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
 
 const SECRET_ENV_RE = /(API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH)/i;
-export function buildEnv(extra = {}, stripSecretEnv = true) {
+export function buildEnv(extra = {}, stripSecretEnv = true, allowSecretExtraEnv = false) {
   const base = stripSecretEnv
     ? Object.fromEntries(Object.entries(process.env).filter(([key]) => !SECRET_ENV_RE.test(key)))
     : { ...process.env };
-  const safeExtra = stripSecretEnv
+  const safeExtra = stripSecretEnv && !allowSecretExtraEnv
     ? Object.fromEntries(Object.entries(extra).filter(([key]) => !SECRET_ENV_RE.test(key)))
     : extra;
   return { ...base, ...safeExtra };
@@ -29,7 +29,8 @@ export function runCommand({
   env = {},
   timeoutMs = 300000,
   maxOutputBytes = 8 * 1024 * 1024,
-  stripSecretEnv = true
+  stripSecretEnv = true,
+  allowSecretExtraEnv = false
 }) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
@@ -41,7 +42,7 @@ export function runCommand({
     try {
       child = spawn(command, args, {
         cwd,
-        env: buildEnv(env, stripSecretEnv),
+        env: buildEnv(env, stripSecretEnv, allowSecretExtraEnv),
         detached: process.platform !== "win32",
         shell: false,
         stdio: ["pipe", "pipe", "pipe"]

@@ -46,6 +46,7 @@ export function createCheckpoint({ taskId, input, plan }) {
       rationale: plan.rationale,
       routingExperiment: plan.routingExperiment ?? null
     },
+    stageReviews: [],
     nodes: {}
   };
 }
@@ -130,6 +131,7 @@ export function summarizeCheckpoint(checkpoint) {
     status: checkpoint.status,
     updatedAt: checkpoint.updatedAt,
     counts,
-    resumedCount: checkpoint.resumedCount ?? 0
+    resumedCount: checkpoint.resumedCount ?? 0,
+    stageReviews: checkpoint.stageReviews ?? []
   };
 }

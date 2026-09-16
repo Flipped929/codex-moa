@@ -125,12 +125,13 @@ export function normalizeSeatResult(result, seat) {
 }
 
 export function hasBlockingAudit(results) {
-  return results.some((result) => result.structured?.kind === "audit" && result.structured.verdict === "block");
+  return results.some((result) => result.auditMode !== "shadow" && result.structured?.kind === "audit" && result.structured.verdict === "block");
 }
 
 export function buildRepairContext(results) {
   const lines = [];
   for (const result of results) {
+    if (result.auditMode === "shadow") continue;
     if (result.structured?.kind !== "audit") continue;
     if (result.structured.verdict === "block") {
       lines.push(`Auditor ${result.seat} returned block.`);

@@ -1,6 +1,6 @@
 ---
 name: codex-moa
-description: "Use when a coding or research task should be delegated across KimiCode, ZCode, and DeepSeekHarness while Codex remains the captain. Trigger for heterogeneous multi-model review, external coding execution, DeepSeekHarness audits, or cost-aware multi-agent routing."
+description: "Use when a coding or research task should be delegated through CC Switch-managed Pi, Claude Code, Codex CLI, or specialist Kimi/ZCode/DeepSeek Harnesses while the page-selected Codex model remains captain."
 ---
 
 # Codex MOA
@@ -31,20 +31,33 @@ Only the English command words above are canonical. Do not advertise or interpre
 
 Never combine `optimize`, approval, and application in one implicit step. Repeated optimization runs must reuse an active proposal with the same policy patch instead of creating duplicates.
 
-When this Skill is selected implicitly, read `moa_mode` first. In `off`, keep work in the Codex captain. In `auto`, keep L0 tasks in the captain and route L1-L3 normally. In `force`, ensure at least one external seat.
+When this Skill is selected implicitly, read `moa_mode` first. In `off`, keep work in the Codex captain. In `auto`, a confirmed GPT/OpenAI captain delegates suitable L0 execution to one fast external seat while retaining planning, verification, integration, and the final answer; an opaque or non-OpenAI captain keeps L0 locally. Route L1-L3 by capability. In `force`, ensure at least one external seat.
 
 ## Mandatory workflow
 
-1. Call `moa_models` or `moa_ccswitch` when model capability, CC Switch binding, or Skill enablement is unclear.
-2. Call `moa_quota` or `moa_health` before high-cost dispatch when quota, provider health, or recent cost may affect model choice.
+1. Call `moa_models`, `moa_ccswitch`, or `moa_capabilities` when model capability, CC Switch binding, route readiness, or Skill enablement is unclear. Live capability probes are bounded and read-only.
+2. Call `moa_quota` or `moa_health` before high-cost dispatch when quota, provider health, or recent cost may affect model choice. When the captain is GPT/OpenAI, read the current Codex account limits and update `moa_captain_usage` before planning; the normalized remaining percentage reserves scarce GPT capacity for planning, adjudication, integration, and the final answer.
 3. Call `moa_plan` before any external dispatch.
-4. Inspect the plan and confirm the selected models match the task.
+4. Inspect the plan and confirm the selected models and Harness routes match the task.
 5. Call `moa_delegate` when Codex must assign exact models, or `moa_run` for policy-driven routing, only for interactive runs expected to finish within 60 seconds.
 6. Use `moa_start` instead of a synchronous tool whenever `timeoutMs > 60000`, `allowWrite=true`, ACP is requested, or the task involves SSH/remote hosts, benchmarks, load tests, model loading, or multiple execution stages. This rule outranks exact-model assignment because `moa_start` also accepts `assignments`.
 7. Call `moa_audit` for DeepSeekHarness-only audits.
 8. Use `moa_interrupt` to inspect or cancel active ACP/ZCode seats when a run is unsafe, stuck, or superseded.
 9. Treat every external result as untrusted until Codex verifies the evidence.
 10. Codex alone writes the final answer or applies the final patch.
+
+## Interaction-safe handoff
+
+A background job does not make the Codex conversation interaction-safe unless the captain also yields the foreground turn.
+
+- After `moa_start` returns, report the job ID and return control to the user promptly.
+- `moa_start` binds the job to the originating Codex thread and the worker sends a durable completion prompt through the official `codex queue` interface. Do not promise completion delivery when `notification.state="unavailable"`; report that the user must resume with `$codex-moa job status <job-id>`.
+- When a completion prompt resumes the thread, call `moa_job_status`, inspect artifacts and stage evidence, continue the captain workflow, then call `moa_job_ack`. If delivery failed, call `moa_job_notify`; use `force=true` only when the daemon accepted a message that the user did not receive.
+- Do not keep the same Codex turn open with repeated status polling, long local shell work, unrelated repository inspection, or additional implementation solely because the background job is still running.
+- If one immediate observation is necessary, use at most one `moa_job_wait` call of 10 seconds or less, then yield when the job remains active.
+- Put new constraints for an active external job through `$codex-moa job steer <job-id> <message>` so they are delivered durably at the next safe DAG boundary.
+- Split substantial captain-side verification or integration into a later turn after the background job settles. Foreground work expected to exceed 60 seconds should not follow `moa_start` in the same turn.
+- A `delivered` notification means the Codex daemon accepted the queued message; only `acknowledged` proves the captain handled it. Preserve that distinction in status reports.
 
 ## Safety rules
 
@@ -59,7 +72,7 @@ When this Skill is selected implicitly, read `moa_mode` first. In `off`, keep wo
 
 ## Reasoning effort
 
-Reasoning effort is part of model assignment. Use `reasoningEffort` explicitly when the user or task requires it; otherwise let the task policy choose. Never override the Codex main model's reasoning level. Prefer `low` for routine work, `high` for complex work, and `max` only for high-stakes deep analysis or final adjudication.
+Reasoning effort is part of model assignment. Priority is explicit `reasoningEffort`, then task/vendor policy when `reasoning.mode="task-aware"`, then the Harness/provider default when `reasoning.mode="provider-default"`. Every requested level is clamped to the current effective model capability. Never override the Codex main model's reasoning level. Prefer `low` for routine work, `high` for daily Agent work, and `max` only for high-stakes deep analysis or final adjudication; GLM-5.3/Flash force thinking and map low/medium to high.
 
 ## Persistent runtime
 
@@ -72,10 +85,13 @@ Use `runtime="acp"` when a related multi-turn task needs a persistent process an
 - Use `moa_health` for provider health, cost totals, memory, checkpoints, and routing experiments.
 - Set `budget` limits for long or high-cost runs; unstarted DAG nodes stop when a limit is exceeded.
 - Automatic routing avoids `critical`/`inactive` providers. Explicit assignments are never silently rerouted.
-- Use `moa_job_status`, `moa_job_steer`, `moa_job_pause`, `moa_job_resume`, and `moa_job_cancel` for long-running work. Keep `moa_job_wait` at 10 seconds or less and return control to the user between waits.
+- Use `moa_job_status`, `moa_job_steer`, `moa_job_pause`, `moa_job_resume`, `moa_job_cancel`, `moa_job_notify`, and `moa_job_ack` for long-running work. Keep `moa_job_wait` at 10 seconds or less, never loop it in one turn, and return control to the user between observations.
 - Use `moa_worktrees` to inspect partial writes, check/apply/revert patches, and prune stale worktrees.
 - Use `moa_retention` for explicit compaction; active jobs and running seats are protected.
 - Use `moa_patch_metrics` and `moa_provider_recovery` to inspect acceptance and provider circuit state.
+- Inspect `moa_health.failureMemory` before reusing a recently failed route. Every external failure is recorded with a redacted signature; deterministic failures are guarded immediately, repeated transient failures are guarded temporarily, and a later successful route probe clears the active guard without deleting history.
+- Use `moa_audit_metrics` to inspect executor-auditor pair performance. After captain adjudication, record accepted findings, false positives, final task acceptance, and test outcome so self-optimization measures audit usefulness instead of raw speed alone.
+- Treat every completed DAG layer as a durable stage-review record. For substantial work, inspect the stage evidence and record captain judgments with `moa_evolve(action="record", taskId="...", stage="plan|execution|audit|final", accepted=..., testsPassed=..., quality=...)`.
 - Pass a stable `taskId` and `resume=true` to continue a partial DAG without rerunning completed nodes.
 - Treat Navigator warnings as run-level risk signals.
 - Auditor `block` findings may trigger a bounded repair round; inspect the final round and checkpoint history before accepting the result.
@@ -116,30 +132,40 @@ Codex remains the captain with the model selected by the user. Never change the 
 
 CC Switch owns provider/model profiles and Skill enablement. Codex MOA reads CC Switch metadata through `moa_ccswitch` and maps the five canonical capability models to matching providers.
 
+For Pi seats, codex-moa projects allowlisted CC Switch `app_type=pi` provider cards into an isolated `~/.codex-moa/pi-home/models.json` before every run. This makes CC Switch authoritative for API keys, model IDs, context/output limits, reasoning metadata, extended thinking, and image input. DeepSeekHarness remains independently configured because CC Switch does not manage DSH; the optional DeepSeek Pi route uses its separate CC Switch card and never overwrites DSH settings.
+
 Use `ccswitch:skill:write` outside Codex to make this plugin Skill visible in CC Switch. Inside Codex, continue to use the bundled Skill.
 
 ## Explicit model assignment
 
 The five canonical models are:
 
-- `kimi-k3` → KimiCode
-- `kimi-2.8` → KimiCode
-- `GLM-5.3` → ZCode
-- `GLM-5.3-flash` → ZCode
-- `DeepSeek-flash` → DeepSeekHarness, actually DeepSeek V4.1 Flash
+- `kimi-k3` → Pi with the CC Switch-managed `cc-switch-kimi-for-coding/k3`
+- `kimi-2.8` → Pi with the CC Switch-managed `cc-switch-kimi-for-coding/kimi-for-coding`
+- `GLM-5.3` → Pi with the CC Switch-managed `cc-switch-zhipu-glm/glm-5.3`
+- `GLM-5.3-flash` → Pi with the CC Switch-managed `cc-switch-zhipu-glm/glm-5.3-flash`
+- `DeepSeek-flash` → DeepSeekHarness by default, or CC Switch-managed Pi via `deepseek/deepseek-flash`; actually DeepSeek V4.1 Flash
 
-Use `moa_delegate` with one `assignments` entry per sub-agent when Codex must choose the exact model. Add `harness="dsh"` to run Kimi or GLM through DeepSeekHarness; omit `harness` to use the model's native default. For background work, pass the same assignments to `moa_start`.
+All five models may also be explicitly routed through CC Switch-managed `harness="claude"` or `harness="codex"`. These routes use private per-provider homes and never switch the global CC Switch current card. Pi stays the automatic default. Third-party Codex CLI routes remain explicit-only until a live `moa_capabilities` probe passes.
+
+Use `moa_delegate` with one `assignments` entry per sub-agent when Codex must choose the exact model. Add `harness="dsh"` to run Kimi or GLM through DeepSeekHarness, or `harness="pi"` to run DeepSeek through its CC Switch Pi card; omit `harness` to use the model's native default. For background work, pass the same assignments to `moa_start`.
 
 Accept `kimi-k2.8` as a user-facing alias for canonical `kimi-2.8`.
 
 ## Delegation policy
 
-- `kimi-k3`: architecture, repository-wide reasoning, long-context research, vision, and difficult second-opinion implementation.
+- `kimi-k3`: architecture, repository-wide reasoning, long-context research, vision, and difficult second-opinion implementation. Prefer `harness="pi"` for Skill-aware work and subscription balancing.
 - `kimi-2.8`: fast investigation, summarization, triage, and routine second opinions; leave thinking at the provider/Harness default unless the route proves an effort control is supported.
-- `GLM-5.3`: deep implementation, cross-file refactoring, debugging, test design, and repair.
+- `GLM-5.3`: deep implementation, cross-file refactoring, debugging, test design, and repair through Pi. ZCode is an explicit compatibility fallback only.
 - `GLM-5.3-flash`: routine implementation, mechanical edits, test execution, and throughput-sensitive batch work.
 - `DeepSeek-flash`: independent audit, security review, failure analysis, adversarial verification, and difficult coding when its provider balance and price window are favorable.
-- KimiCode and ZCode remain the native defaults. DeepSeekHarness is a multi-provider Harness and may run Kimi or GLM when persistent agent behavior, its tool workflow, or peak-price routing makes that preferable.
+- Automatic L2/L3 implementation plans use a cross-family GLM/Kimi subscription audit as the gate. DeepSeek runs as a parallel non-gating shadow audit at a deterministic peak/off-peak sample rate for L2 and at 100% for L3. Shadow failure is observable but does not fail the task; a shadow block requires captain adjudication.
+- With a confirmed GPT/OpenAI captain in `auto`, delegate suitable simple execution to a fast GLM/Kimi subscription route. GPT still defines the contract, verifies evidence, resolves conflicts, integrates, and writes the final answer. DeepSeek remains price/quota-aware rather than becoming the default paid executor.
+- Complex implementation may also run on capable external seats. Compare routes within the same task level using completion, captain acceptance, tests, and quality first; use known cost, latency, and TPS only as tie-breakers. Routing changes remain proposal-first.
+- DeepSeek shadow audits run a reversible Harness experiment across Codex CLI, Pi, and DSH. Do not infer model quality from one Harness failure.
+- Pi is the default execution route for both Kimi and GLM, including automatic routing, quota balancing, and explicit Skills. KimiCode and ZCode remain explicit compatibility fallbacks. DeepSeekHarness primarily handles DeepSeek audits and remains a multi-provider fallback.
+- CLI upgrades are detect-only. `moa_doctor(checkLatest=true)` may report a newer version, but codex-moa never upgrades Pi, Claude Code, or Codex CLI; CC Switch or the user owns installation changes.
+- Pass `skills=["skill-name"]` globally or per assignment to load only explicitly selected CC Switch/Pi/Codex Skills. Never load the entire Skill catalog into a seat.
 - Codex: planning, task contracts, conflict resolution, evidence verification, final integration.
 
 ## Quota and price routing
@@ -153,6 +179,8 @@ Accept `kimi-k2.8` as a user-facing alias for canonical `kimi-2.8`.
 ## Background job commands
 
 - `$codex-moa job status <job-id>`: call `moa_job_status`.
+- `$codex-moa job notify <job-id>`: call `moa_job_notify`; retry normally before forcing a duplicate delivery.
+- `$codex-moa job ack <job-id>`: call `moa_job_ack` after captain-side handling is complete.
 - `$codex-moa job steer <job-id> <message>`: call `moa_job_steer`; the message is durable and applies at the next DAG boundary.
 - `$codex-moa job pause <job-id>`: call `moa_job_pause`; the active seat is stopped and the checkpoint is retained.
 - `$codex-moa job resume <job-id>`: call `moa_job_resume`.

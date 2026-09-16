@@ -37,7 +37,9 @@ function extractModelEntries(settingsConfig) {
         levels: unique(model?.reasoningLevels ?? []).map(normalizeReasoningLevel),
         defaultLevel: model?.defaultReasoningLevel ? normalizeReasoningLevel(model.defaultReasoningLevel) : null,
         contextWindow: model?.contextWindow ?? null,
-        maxTokens: model?.maxOutputTokens ?? model?.maxTokens ?? null
+        maxTokens: model?.maxOutputTokens ?? model?.maxTokens ?? null,
+        input: unique(model?.input ?? model?.modalities ?? []),
+        reasoningEnabled: typeof model?.reasoning === "boolean" ? model.reasoning : null
       });
     }
     for (const model of parsed.models ?? []) {
@@ -45,10 +47,14 @@ function extractModelEntries(settingsConfig) {
       entries.push({
         id: model?.id ?? null,
         name: model?.name ?? null,
-        levels: levels.length > 0 ? levels : model?.reasoning ? ["high"] : [],
+        // An empty map means CC Switch enabled reasoning but did not constrain
+        // selectable efforts. The model's vendor profile supplies that baseline.
+        levels,
         defaultLevel: model?.defaultEffort ? normalizeReasoningLevel(model.defaultEffort) : null,
         contextWindow: model?.contextWindow ?? null,
-        maxTokens: model?.maxTokens ?? null
+        maxTokens: model?.maxTokens ?? null,
+        input: unique(model?.input ?? []),
+        reasoningEnabled: typeof model?.reasoning === "boolean" ? model.reasoning : null
       });
     }
   }
@@ -296,6 +302,62 @@ export async function readCcSwitchSnapshot() {
   };
 }
 
+// Sensitive provider material for the isolated Pi runtime. Keep this internal to
+// execution paths: callers must never return or log the provider configs.
+export async function readCcSwitchPiProviderConfigs() {
+  const paths = ccSwitchPaths();
+  if (!existsSync(paths.database)) return { available: false, reason: "cc-switch database not found", providers: {} };
+  const rows = await querySqlite(paths.database, `
+    SELECT id, name, settings_config
+    FROM providers
+    WHERE app_type = 'pi'
+    ORDER BY name
+  `);
+  const providers = {};
+  const errors = [];
+  for (const row of rows) {
+    try {
+      const value = JSON.parse(row.settings_config || "{}");
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("provider config must be an object");
+      if (!value.baseUrl || !value.api || !Array.isArray(value.models)) throw new Error("baseUrl, api, and models are required");
+      providers[row.id] = value;
+    } catch (error) {
+      errors.push({ id: row.id, name: row.name, error: error.message });
+    }
+  }
+  return { available: true, providers, errors, source: paths.database };
+}
+
+// Sensitive CLI provider material for isolated harness runtimes. These values
+// must only be written to private per-provider homes and must never be returned
+// by MCP tools, doctor reports, logs, or result cards.
+export async function readCcSwitchCliProviderConfig(appType, providerId) {
+  if (!["claude", "codex"].includes(appType)) throw new Error(`Unsupported CC Switch CLI app type: ${appType}`);
+  if (!providerId) throw new Error(`Missing CC Switch ${appType} provider id`);
+  const paths = ccSwitchPaths();
+  if (!existsSync(paths.database)) return { available: false, reason: "cc-switch database not found" };
+  const escapedAppType = String(appType).replaceAll("'", "''");
+  const escapedProviderId = String(providerId).replaceAll("'", "''");
+  const rows = await querySqlite(paths.database, `
+    SELECT id, name, settings_config
+    FROM providers
+    WHERE app_type = '${escapedAppType}' AND id = '${escapedProviderId}'
+    LIMIT 1
+  `);
+  const row = rows[0];
+  if (!row) return { available: false, reason: `CC Switch ${appType} provider not found: ${providerId}` };
+  let settings;
+  try {
+    settings = JSON.parse(row.settings_config || "{}");
+  } catch (error) {
+    throw new Error(`Invalid CC Switch ${appType} provider config for ${providerId}: ${error.message}`);
+  }
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+    throw new Error(`Invalid CC Switch ${appType} provider config for ${providerId}`);
+  }
+  return { available: true, id: row.id, name: row.name, settings, source: paths.database };
+}
+
 function normalize(value) {
   return String(value ?? "").toLowerCase().replace(/\[[^\]]+\]/g, "").replace(/[^a-z0-9]+/g, "");
 }
@@ -470,6 +532,30 @@ function selectReasoningProvider(providers) {
   })[0] ?? null;
 }
 
+function exactPiProvider(snapshot, model) {
+  const providerId = model?.pi?.provider;
+  const modelId = model?.pi?.model;
+  if (!providerId || !modelId) return null;
+  const provider = (snapshot?.providers ?? []).find((item) => item.appType === "pi" && item.id === providerId);
+  if (!provider) return null;
+  const entry = (provider.modelEntries ?? []).find((item) => normalize(item.id) === normalize(modelId));
+  if (!entry) return null;
+  return {
+    ...provider,
+    matchedModels: [entry.id],
+    matchedEntries: [entry],
+    matchedReasoningLevels: unique(entry.levels ?? []),
+    matchedReasoningDefaults: unique([entry.defaultLevel])
+  };
+}
+
+function selectedProviderForModel(snapshot, model, fallbackProviders) {
+  // A Pi-routed model is governed by its explicitly configured Pi provider card.
+  // DSH models deliberately have no Pi mapping and therefore remain independent.
+  if (model?.harness === "dsh") return null;
+  return exactPiProvider(snapshot, model) ?? selectReasoningProvider(fallbackProviders);
+}
+
 // ── cc-switch 作为思考等级唯一真源（用户裁决 2026-09-15）─────────────────────
 // 「所有由 cc-switch 管的模型，各 agent 请求思考等级要找 cc-switch」：
 // 可选档位与默认档位以 cc-switch 的 modelCatalog（codex 类）/ thinkingLevelMap（pi 类）为准，
@@ -520,13 +606,14 @@ export function ccSwitchReasoningIndex(snapshot, modelsConfig = loadModels()) {
     const list = Array.isArray(providers) ? providers : [];
     // Provider cards are independent authorities. Never union levels across
     // cards, because the resulting set may not exist on any real endpoint.
-    const selected = selectReasoningProvider(list);
+    const selected = selectedProviderForModel(snapshot, modelsConfig.models?.[modelId], list);
     const levels = unique(selected?.matchedReasoningLevels ?? []);
     const defaults = unique(selected?.matchedReasoningDefaults ?? []);
-    if (levels.length === 0 && defaults.length === 0) continue;
+    if (levels.length === 0 && defaults.length === 0 && !selected?.matchedEntries?.length) continue;
     index[modelId] = {
       levels,
       defaultLevel: defaults[0] ?? null,
+      entry: selected?.matchedEntries?.[0] ?? null,
       selectedProvider: selected ? { id: selected.id, name: selected.name, appType: selected.appType, isCurrent: selected.isCurrent } : null,
       providers: list.map((provider) => ({ id: provider.id, name: provider.name, appType: provider.appType, isCurrent: provider.isCurrent })),
       conflicts: list.filter((provider) => provider.id !== selected?.id)
@@ -546,34 +633,60 @@ export function applyCcSwitchReasoning(modelsConfig = loadModels(), snapshot) {
   const index = ccSwitchReasoningIndex(snapshot, modelsConfig);
   const models = {};
   const reasoningSources = {};
+  const metadataSources = {};
   for (const [id, model] of Object.entries(modelsConfig.models ?? {})) {
     const managed = index[id];
     const localSupported = model.reasoning?.supported ?? [];
-    // cc-switch 没档位声明（或压根没纳管）→ 整个模型保留本地值
-    if (!managed || managed.levels.length === 0) {
+    const entry = managed?.entry ?? null;
+    // cc-switch 未命中该模型 → 整个模型保留本地值。
+    if (!managed) {
       models[id] = { ...model };
       reasoningSources[id] = "local";
+      metadataSources[id] = "local";
       continue;
     }
-    const supported = managed.levels;
+    const vendor = model.reasoning?.vendorProfile ?? {};
+    const supported = managed.levels.length > 0
+      ? managed.levels
+      : entry?.reasoningEnabled === false
+        ? ["off"]
+        : vendor.supported ?? localSupported;
     // 已纳管的模型以 cc-switch 为准：显式默认（须合法）→ 否则取最高档
     // （与 cc-switch 自身 apply_codex_reasoning_level_override 的回落一致）
     const defaultLevel =
       (managed.defaultLevel && supported.includes(managed.defaultLevel) ? managed.defaultLevel : null)
+      ?? (vendor.default && supported.includes(vendor.default) ? vendor.default : null)
       ?? supported[supported.length - 1]
       ?? null;
+    const capabilities = [...(model.capabilities ?? [])].filter((capability) => capability !== "image");
+    if (entry?.input?.includes("image")) capabilities.push("image");
+    const hasManagedReasoning = managed.levels.length > 0 || typeof entry?.reasoningEnabled === "boolean";
+    const reasoning = hasManagedReasoning
+      ? {
+          ...(model.reasoning ?? {}),
+          supported,
+          default: defaultLevel,
+          canDisable: supported.includes("off"),
+          extendedThinking: entry?.reasoningEnabled ?? null,
+          source: "cc-switch"
+        }
+      : { ...(model.reasoning ?? {}) };
     models[id] = {
       ...model,
-      reasoning: {
-        ...(model.reasoning ?? {}),
-        supported,
-        default: defaultLevel,
-        source: "cc-switch"
+      capabilities: entry?.input?.length ? unique(capabilities) : [...(model.capabilities ?? [])],
+      reasoning,
+      limits: {
+        ...(model.limits ?? {}),
+        ...(Number.isFinite(entry?.contextWindow) ? { contextWindow: entry.contextWindow } : {}),
+        ...(Number.isFinite(entry?.maxTokens) ? { maxOutputTokens: entry.maxTokens } : {})
       }
     };
-    reasoningSources[id] = "cc-switch";
+    reasoningSources[id] = hasManagedReasoning
+      ? (managed.levels.length > 0 || entry?.reasoningEnabled === false ? "cc-switch" : "cc-switch+vendor")
+      : "local";
+    metadataSources[id] = entry ? "cc-switch" : "local";
   }
-  return { ...modelsConfig, models, reasoningSources };
+  return { ...modelsConfig, models, reasoningSources, metadataSources };
 }
 
 export async function writeCcSwitchSnapshot(snapshot) {

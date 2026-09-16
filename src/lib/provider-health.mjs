@@ -24,10 +24,11 @@ export function summarizeProviderHealth({ snapshot, ledger = [], lowThreshold = 
   const cutoff = Date.now() - recentHours * 3600000;
   const recentLedger = ledger.filter((entry) => !entry.time || Date.parse(entry.time) >= cutoff);
   const cost = summarizeCostLedger(recentLedger);
+  const operationalCost = summarizeCostLedger(recentLedger.filter((entry) => entry.auditMode !== "shadow"));
   const providers = {};
   for (const id of ["kimi", "zai", "deepseek"]) {
     const quota = snapshot?.providers?.[id] ?? { provider: id, status: "not_configured", windows: [] };
-    const recent = cost.providers?.[id] ?? { runs: 0, failures: 0, tokens: 0 };
+    const recent = operationalCost.providers?.[id] ?? { runs: 0, failures: 0, tokens: 0 };
     const circuit = providerCircuitStatus(circuitState, id, config);
     let status = providerState({ ...quota, lowThreshold }, recent);
     if (circuit.circuit === "open") status = "critical";
@@ -55,6 +56,12 @@ export function summarizeProviderHealth({ snapshot, ledger = [], lowThreshold = 
   return {
     overall: worstStatus(Object.values(providers).map((provider) => provider.status)),
     providers,
+    routes: Object.fromEntries(Object.entries(cost.routes ?? {}).map(([key, route]) => [key, {
+      ...route,
+      status: route.runs >= 2 && route.failures / route.runs >= 0.5 ? "warning" : "healthy",
+      successRate: route.runs > 0 ? route.successes / route.runs : null,
+      averageDurationMs: route.runs > 0 ? route.durationMs / route.runs : null
+    }])),
     cost
   };
 }
@@ -76,6 +83,12 @@ export function applyProviderHealthRouting(seats, { health, modelsConfig, captai
     const currentProvider = providerForFamily(seat.family ?? modelsConfig.models?.[seat.model]?.family);
     const currentStatus = health.providers[currentProvider]?.status ?? "healthy";
     if (!["critical", "inactive"].includes(currentStatus)) continue;
+    if (seat.auditMode === "shadow") {
+      seat.skipDispatch = true;
+      seat.skipReason = `shadow provider ${currentProvider} is ${currentStatus}`;
+      adjustments.push({ seat: seat.seat, action: "skipped_shadow", from: seat.model, provider: currentProvider, status: currentStatus });
+      continue;
+    }
     if (allowUnhealthy) {
       adjustments.push({ seat: seat.seat, action: "allowed_unhealthy", from: seat.model, provider: currentProvider, status: currentStatus });
       continue;
@@ -110,9 +123,53 @@ export function applyProviderHealthRouting(seats, { health, modelsConfig, captai
     seat.model = replacement.id;
     seat.providerModel = replacement.providerModel;
     seat.dsh = replacement.dsh;
+    seat.pi = replacement.pi;
+    seat.claude = replacement.claude;
+    seat.codex = replacement.codex;
     seat.harness = replacement.harness;
+    seat.family = replacement.family;
     seat.modelTier = replacement.tier;
     seat.healthAdjusted = true;
   }
   return { adjustments, blocked };
+}
+
+export function reconcileAuditPairing(seats, { health, modelsConfig, captain = null, routeAllowed = () => true } = {}) {
+  const adjustments = [];
+  const candidates = listModels(modelsConfig);
+  for (const gate of seats.filter((seat) => seat.role === "auditor" && seat.auditMode !== "shadow")) {
+    const executor = seats.find((seat) => seat.seat === gate.pairedExecutor) ?? seats.find((seat) => seat.role === "executor");
+    if (!executor) continue;
+    const executorFamily = modelsConfig.models?.[executor.model]?.family;
+    const gateFamily = modelsConfig.models?.[gate.model]?.family;
+    if (executorFamily && gateFamily !== executorFamily && (!captain?.family || captain.family === "unknown" || gateFamily !== captain.family)) continue;
+    const replacement = candidates
+      .filter((model) => model.family !== executorFamily)
+      .filter((model) => !captain?.family || captain.family === "unknown" || model.family !== captain.family)
+      .filter((model) => health?.providers?.[providerForFamily(model.family)]?.status !== "critical")
+      .filter((model) => health?.providers?.[providerForFamily(model.family)]?.status !== "inactive")
+      .filter((model) => {
+        const harness = (model.supportedHarnesses ?? [model.harness]).includes("pi") ? "pi" : model.harness;
+        return routeAllowed(model.id, harness);
+      })
+      .sort((left, right) => {
+        const leftSubscription = ["moonshot", "zhipu"].includes(left.family) ? 0 : 1;
+        const rightSubscription = ["moonshot", "zhipu"].includes(right.family) ? 0 : 1;
+        return leftSubscription - rightSubscription;
+      })[0];
+    if (!replacement) continue;
+    const from = { model: gate.model, harness: gate.harness };
+    gate.model = replacement.id;
+    gate.providerModel = replacement.providerModel;
+    gate.dsh = replacement.dsh;
+    gate.pi = replacement.pi;
+    gate.claude = replacement.claude;
+    gate.codex = replacement.codex;
+    gate.harness = (replacement.supportedHarnesses ?? [replacement.harness]).includes("pi") ? "pi" : replacement.harness;
+    gate.family = replacement.family;
+    gate.modelTier = replacement.tier;
+    gate.healthAdjusted = true;
+    adjustments.push({ seat: gate.seat, action: "reconciled_cross_family_gate", from, to: { model: gate.model, harness: gate.harness }, executor: executor.model });
+  }
+  return adjustments;
 }
