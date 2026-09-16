@@ -25,6 +25,7 @@ async function testConfig() {
 }
 
 test("Claude Code adapter uses isolated settings and read-only controls", async () => {
+  const activity = [];
   const result = await runClaudeSeat({
     seat: {
       seat: "claude-kimi",
@@ -38,13 +39,15 @@ test("Claude Code adapter uses isolated settings and read-only controls", async 
     prompt: "inspect only",
     config: await testConfig(),
     timeoutMs: 5000,
-    allowWrite: false
+    allowWrite: false,
+    onActivity: (event) => activity.push(event)
   });
   const args = JSON.parse(result.summary);
   assert.equal(args[args.indexOf("--model") + 1], "k3[1M]");
   assert.ok(args.includes("--restricted"));
   assert.equal(args[args.indexOf("--permission-mode") + 1], "plan");
   assert.equal(result.providerConfigSource, "cc-switch-isolated-projection");
+  assert.ok(activity.some((event) => event.stream === "stdout" && event.bytes > 0));
 });
 
 test("Codex CLI adapter uses isolated CODEX_HOME and a read-only sandbox", async () => {

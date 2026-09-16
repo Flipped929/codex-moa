@@ -2,7 +2,7 @@ import { commandParts, createResult, resolveCwd } from "./base.mjs";
 import { runCommand } from "../lib/process.mjs";
 import { extractOutput, extractSessionId, extractUsage } from "../lib/parser.mjs";
 
-export async function runKimiSeat({ seat, prompt, config, timeoutMs, allowWrite = false }) {
+export async function runKimiSeat({ seat, prompt, config, timeoutMs, allowWrite = false, onActivity }) {
   const cwd = resolveCwd(seat.cwd, config.defaultCwd);
   const { command, args: baseArgs } = commandParts(config.commands.kimi);
   const args = [
@@ -37,7 +37,9 @@ export async function runKimiSeat({ seat, prompt, config, timeoutMs, allowWrite 
         KIMI_MODEL_MAX_COMPLETION_TOKENS: String(seat.outputBudget)
       } : {})
     },
-    stripSecretEnv: config.safety?.stripSecretEnv !== false
+    stripSecretEnv: config.safety?.stripSecretEnv !== false,
+    onStdoutChunk: (chunk) => onActivity?.({ stream: "stdout", bytes: chunk.length }),
+    onStderrChunk: (chunk) => onActivity?.({ stream: "stderr", bytes: chunk.length })
   });
   const text = extractOutput(run.stdout);
   const sessionId = extractSessionId(run.stdout) ?? seat.continuitySessionId ?? null;

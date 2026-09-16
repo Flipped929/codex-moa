@@ -6,7 +6,7 @@ import { preparePiHome } from "../lib/pi-home.mjs";
 const READ_ONLY_TOOLS = "read,grep,find,ls";
 const WRITE_TOOLS = "read,bash,edit,write,grep,find,ls";
 
-export async function runPiSeat({ seat, prompt, config, timeoutMs, allowWrite = false, signal }) {
+export async function runPiSeat({ seat, prompt, config, timeoutMs, allowWrite = false, signal, onActivity }) {
   const cwd = resolveCwd(seat.cwd, config.defaultCwd);
   const { command, args: baseArgs } = commandParts(config.commands.pi);
   const provider = seat.pi?.provider;
@@ -46,7 +46,9 @@ export async function runPiSeat({ seat, prompt, config, timeoutMs, allowWrite = 
     timeoutMs,
     env: piHome ? { PI_CODING_AGENT_DIR: piHome.home } : {},
     stripSecretEnv: config.safety?.stripSecretEnv !== false,
-    signal
+    signal,
+    onStdoutChunk: (chunk) => onActivity?.({ stream: "stdout", bytes: chunk.length }),
+    onStderrChunk: (chunk) => onActivity?.({ stream: "stderr", bytes: chunk.length })
   });
   const text = extractPiOutput(run.stdout);
   const piError = extractPiError(run.stdout);

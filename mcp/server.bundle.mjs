@@ -30338,18 +30338,19 @@ function applyFailureAvoidance(seats2, { summary, modelsConfig, captain = null, 
     const active = guarded(summary, seat.model, seat.harness);
     if (!active) continue;
     const current = resolveModel(seat.model, modelsConfig);
+    const alternateHarness = (current.supportedHarnesses ?? [current.harness]).find((harness) => harness !== seat.harness && !guarded(summary, current.id, harness));
+    if (alternateHarness) {
+      const from2 = `${seat.model}@${seat.harness}`;
+      seat.originalHarness ??= seat.harness;
+      seat.harness = alternateHarness;
+      seat.failureAdjusted = true;
+      adjustments.push({ seat: seat.seat, action: "changed_harness_same_model", from: from2, to: `${seat.model}@${seat.harness}`, guard: active });
+      continue;
+    }
     if (seat.auditMode === "shadow") {
-      const alternateHarness = (current.supportedHarnesses ?? [current.harness]).find((harness) => harness !== seat.harness && !guarded(summary, current.id, harness));
-      if (alternateHarness) {
-        const from2 = `${seat.model}@${seat.harness}`;
-        seat.harness = alternateHarness;
-        seat.failureAdjusted = true;
-        adjustments.push({ seat: seat.seat, action: "changed_harness", from: from2, to: `${seat.model}@${seat.harness}`, guard: active });
-      } else {
-        seat.skipDispatch = true;
-        seat.skipReason = `active failure guard for ${seat.model}@${seat.harness}`;
-        adjustments.push({ seat: seat.seat, action: "skipped_shadow", from: `${seat.model}@${seat.harness}`, guard: active });
-      }
+      seat.skipDispatch = true;
+      seat.skipReason = `active failure guard for ${seat.model}@${seat.harness}`;
+      adjustments.push({ seat: seat.seat, action: "skipped_shadow", from: `${seat.model}@${seat.harness}`, guard: active });
       continue;
     }
     const pairedExecutor = seats2.find((item) => item.seat === seat.pairedExecutor) ?? seats2.find((item) => item.role === "executor");
@@ -32076,7 +32077,7 @@ var init_base = __esm({
 });
 
 // src/adapters/kimi.mjs
-async function runKimiSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false }) {
+async function runKimiSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false, onActivity }) {
   const cwd = resolveCwd(seat.cwd, config2.defaultCwd);
   const { command, args: baseArgs } = commandParts(config2.commands.kimi);
   const args = [
@@ -32107,7 +32108,9 @@ async function runKimiSeat({ seat, prompt, config: config2, timeoutMs, allowWrit
         KIMI_MODEL_MAX_COMPLETION_TOKENS: String(seat.outputBudget)
       } : {}
     },
-    stripSecretEnv: config2.safety?.stripSecretEnv !== false
+    stripSecretEnv: config2.safety?.stripSecretEnv !== false,
+    onStdoutChunk: (chunk) => onActivity?.({ stream: "stdout", bytes: chunk.length }),
+    onStderrChunk: (chunk) => onActivity?.({ stream: "stderr", bytes: chunk.length })
   });
   const text = extractOutput(run.stdout);
   const sessionId = extractSessionId(run.stdout) ?? seat.continuitySessionId ?? null;
@@ -32355,7 +32358,7 @@ var init_zcode_home = __esm({
 });
 
 // src/adapters/zcode.mjs
-async function runZCodeSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false }) {
+async function runZCodeSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false, onActivity }) {
   const cwd = resolveCwd(seat.cwd, config2.defaultCwd);
   const { command, args: baseArgs } = commandParts(config2.commands.zcode);
   let mode = SAFE_MODES.has(seat.mode) ? seat.mode : "plan";
@@ -32388,7 +32391,9 @@ async function runZCodeSeat({ seat, prompt, config: config2, timeoutMs, allowWri
       cwd,
       timeoutMs,
       env: { HOME: zcodeHome.home },
-      stripSecretEnv: config2.safety?.stripSecretEnv !== false
+      stripSecretEnv: config2.safety?.stripSecretEnv !== false,
+      onStdoutChunk: (chunk) => onActivity?.({ stream: "stdout", bytes: chunk.length }),
+      onStderrChunk: (chunk) => onActivity?.({ stream: "stderr", bytes: chunk.length })
     });
     const text = extractOutput(run.stdout);
     const sessionId = extractSessionId(run.stdout) ?? seat.continuitySessionId ?? null;
@@ -32513,7 +32518,7 @@ var init_dsh_home = __esm({
 });
 
 // src/adapters/dsh.mjs
-async function runDshSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false }) {
+async function runDshSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false, onActivity }) {
   const cwd = resolveCwd(seat.cwd, config2.defaultCwd);
   const { command, args: baseArgs } = commandParts(config2.commands.dsh);
   const tier = seat.modelTier === "deep" ? "deep" : "fast";
@@ -32535,7 +32540,9 @@ async function runDshSeat({ seat, prompt, config: config2, timeoutMs, allowWrite
       DSH_PERMISSION_MODE: permissionMode,
       ...seat.env ?? {}
     },
-    stripSecretEnv: config2.safety?.stripSecretEnv !== false
+    stripSecretEnv: config2.safety?.stripSecretEnv !== false,
+    onStdoutChunk: (chunk) => onActivity?.({ stream: "stdout", bytes: chunk.length }),
+    onStderrChunk: (chunk) => onActivity?.({ stream: "stderr", bytes: chunk.length })
   });
   const text = extractOutput(run.stdout);
   const usage = extractUsage(run.stdout);
@@ -32611,7 +32618,7 @@ var init_pi_home = __esm({
 });
 
 // src/adapters/pi.mjs
-async function runPiSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false, signal }) {
+async function runPiSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false, signal, onActivity }) {
   const cwd = resolveCwd(seat.cwd, config2.defaultCwd);
   const { command, args: baseArgs } = commandParts(config2.commands.pi);
   const provider = seat.pi?.provider;
@@ -32649,7 +32656,9 @@ async function runPiSeat({ seat, prompt, config: config2, timeoutMs, allowWrite 
     timeoutMs,
     env: piHome ? { PI_CODING_AGENT_DIR: piHome.home } : {},
     stripSecretEnv: config2.safety?.stripSecretEnv !== false,
-    signal
+    signal,
+    onStdoutChunk: (chunk) => onActivity?.({ stream: "stdout", bytes: chunk.length }),
+    onStderrChunk: (chunk) => onActivity?.({ stream: "stderr", bytes: chunk.length })
   });
   const text = extractPiOutput(run.stdout);
   const piError = extractPiError(run.stdout);
@@ -32843,7 +32852,7 @@ var init_cli_homes = __esm({
 
 // src/adapters/claude.mjs
 import { randomUUID as randomUUID9 } from "node:crypto";
-async function runClaudeSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false, signal }) {
+async function runClaudeSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false, signal, onActivity }) {
   const cwd = resolveCwd(seat.cwd, config2.defaultCwd);
   const { command, args: baseArgs } = commandParts(config2.commands.claude);
   const provider = seat.claude?.provider;
@@ -32888,7 +32897,9 @@ async function runClaudeSeat({ seat, prompt, config: config2, timeoutMs, allowWr
     timeoutMs,
     env: { CLAUDE_CONFIG_DIR: runtime.home },
     stripSecretEnv: config2.safety?.stripSecretEnv !== false,
-    signal
+    signal,
+    onStdoutChunk: (chunk) => onActivity?.({ stream: "stdout", bytes: chunk.length }),
+    onStderrChunk: (chunk) => onActivity?.({ stream: "stderr", bytes: chunk.length })
   });
   const text = extractClaudeOutput(run.stdout);
   const sessionId = extractSessionId(run.stdout) ?? requestedSessionId;
@@ -32921,7 +32932,7 @@ var init_claude = __esm({
 });
 
 // src/adapters/codex.mjs
-async function runCodexSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false, signal }) {
+async function runCodexSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false, signal, onActivity }) {
   const cwd = resolveCwd(seat.cwd, config2.defaultCwd);
   const { command, args: baseArgs } = commandParts(config2.commands.codex);
   const provider = seat.codex?.provider;
@@ -32966,7 +32977,9 @@ Only these explicitly selected Skills are available under CODEX_HOME/skills: ${r
     env: { CODEX_HOME: runtime.home, CODEX_MOA_PROVIDER_API_KEY: runtime.providerApiKey },
     stripSecretEnv: config2.safety?.stripSecretEnv !== false,
     allowSecretExtraEnv: true,
-    signal
+    signal,
+    onStdoutChunk: (chunk) => onActivity?.({ stream: "stdout", bytes: chunk.length }),
+    onStderrChunk: (chunk) => onActivity?.({ stream: "stderr", bytes: chunk.length })
   });
   const text = extractCodexOutput(run.stdout);
   return createResult({
@@ -36966,7 +36979,7 @@ function acpCommandFor(harness, config2, seat = {}) {
 function seatKey(seat) {
   return seat.continuityKeyResolved ?? `${seat.taskId ?? "task"}:${seat.seat}:${seat.harness}:${seat.model}`;
 }
-async function createSeat({ seat, config: config2, allowWrite, timeoutMs }) {
+async function createSeat({ seat, config: config2, allowWrite, timeoutMs, onActivity }) {
   const env = {};
   let selection = null;
   if (seat.harness === "kimi") {
@@ -37006,11 +37019,11 @@ async function createSeat({ seat, config: config2, allowWrite, timeoutMs }) {
     const args = [...base.args, "--provider", provider, "--model", model, "--mode", "rpc", "--tools", writeEnabled ? "read,bash,edit,write,grep,find,ls" : "read,grep,find,ls", "--approve"];
     if (seat.reasoningEffort) args.push("--thinking", seat.reasoningEffort);
     for (const skillPath of seat.skillPaths ?? []) args.push("--skill", skillPath);
-    return new PiRpcSeat({ key, taskId: seat.taskId, seat: seat.seat, model: seat.model, command: base.command, args, cwd: seat.cwd, writeAllowed: writeEnabled, env: piHome ? { PI_CODING_AGENT_DIR: piHome.home } : {}, sessionId: seat.continuitySessionId });
+    return new PiRpcSeat({ key, taskId: seat.taskId, seat: seat.seat, model: seat.model, command: base.command, args, cwd: seat.cwd, writeAllowed: writeEnabled, env: piHome ? { PI_CODING_AGENT_DIR: piHome.home } : {}, sessionId: seat.continuitySessionId, onActivity });
   }
   if (["claude", "codex"].includes(seat.harness)) {
     const { getAdapter: getAdapter2 } = await Promise.resolve().then(() => (init_adapters(), adapters_exports));
-    return new CliResumeSeat({ key, taskId: seat.taskId, seat, model: seat.model, harness: seat.harness, cwd: seat.cwd, runner: getAdapter2(seat.harness), config: config2, timeoutMs, allowWrite });
+    return new CliResumeSeat({ key, taskId: seat.taskId, seat, model: seat.model, harness: seat.harness, cwd: seat.cwd, runner: getAdapter2(seat.harness), config: config2, timeoutMs, allowWrite, onActivity });
   }
   const command = acpCommandFor(seat.harness, config2, seat);
   if (seat.harness === "zcode") {
@@ -37024,7 +37037,8 @@ async function createSeat({ seat, config: config2, allowWrite, timeoutMs }) {
       cwd: seat.cwd,
       writeAllowed: allowWrite && seat.autoApprove,
       env,
-      selection
+      selection,
+      onActivity
     });
   }
   return new AcpSeat({
@@ -37038,16 +37052,18 @@ async function createSeat({ seat, config: config2, allowWrite, timeoutMs }) {
     cwd: seat.cwd,
     writeAllowed: allowWrite && seat.autoApprove,
     timeoutMs,
-    env
+    env,
+    onActivity
   });
 }
-async function runAcpSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false }) {
+async function runAcpSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false, onActivity }) {
   const key = seatKey(seat);
   let seatProcess = seats.get(key);
   if (!seatProcess) {
-    seatProcess = await createSeat({ seat, config: config2, allowWrite, timeoutMs });
+    seatProcess = await createSeat({ seat, config: config2, allowWrite, timeoutMs, onActivity });
     seats.set(key, seatProcess);
   }
+  seatProcess.onActivity = onActivity;
   let controlRequest = null;
   let polling = false;
   const interval = setInterval(async () => {
@@ -37133,7 +37149,7 @@ var init_acp_seat = __esm({
     seats = /* @__PURE__ */ new Map();
     DEFAULT_POLL_MS = 500;
     AcpSeat = class {
-      constructor({ key, taskId, seat, harness, model, command, args, cwd, writeAllowed, timeoutMs, env = {} }) {
+      constructor({ key, taskId, seat, harness, model, command, args, cwd, writeAllowed, timeoutMs, env = {}, onActivity }) {
         this.runtime = "acp";
         this.key = key;
         this.taskId = taskId ?? null;
@@ -37156,6 +37172,7 @@ var init_acp_seat = __esm({
         this.cancelRequested = false;
         this.contextUsage = null;
         this.exit = null;
+        this.onActivity = onActivity;
       }
       async start() {
         if (this.agent && !this.connection?.signal?.aborted) return;
@@ -37174,6 +37191,7 @@ var init_acp_seat = __esm({
         const stream = ndJsonStream2(input2, output2);
         const app = client({ name: "codex-moa" }).onNotification(methods.client.session.update, (ctx) => {
           const update = ctx.params.update;
+          this.onActivity?.({ stream: "protocol", event: update?.sessionUpdate ?? "session_update" });
           this.updates.push(update);
           if (update?.sessionUpdate === "usage_update") {
             this.contextUsage = {
@@ -37261,7 +37279,7 @@ var init_acp_seat = __esm({
       }
     };
     ZCodeSeat = class {
-      constructor({ key, taskId, seat, model, command, args, cwd, writeAllowed, env = {}, selection = {} }) {
+      constructor({ key, taskId, seat, model, command, args, cwd, writeAllowed, env = {}, selection = {}, onActivity }) {
         this.runtime = "zcode-app-server";
         this.key = key;
         this.taskId = taskId ?? null;
@@ -37284,6 +37302,7 @@ var init_acp_seat = __esm({
         this.cancelRequested = false;
         this.exit = null;
         this.lastProjection = null;
+        this.onActivity = onActivity;
       }
       workspace() {
         return { workspacePath: this.cwd, workspaceKey: this.cwd };
@@ -37322,6 +37341,7 @@ var init_acp_seat = __esm({
         this.send({ id: id2, error: { code, message } });
       }
       handleMessage(message) {
+        this.onActivity?.({ stream: "protocol", event: message?.type ?? "message" });
         if (message.id !== void 0 && message.method) {
           void this.handleServerRequest(message);
           return;
@@ -37531,7 +37551,7 @@ var init_acp_seat = __esm({
       }
     };
     PiRpcSeat = class {
-      constructor({ key, taskId, seat, model, command, args, cwd, writeAllowed, env = {}, sessionId = null }) {
+      constructor({ key, taskId, seat, model, command, args, cwd, writeAllowed, env = {}, sessionId = null, onActivity }) {
         this.runtime = "pi-rpc";
         this.key = key;
         this.taskId = taskId ?? null;
@@ -37553,6 +37573,7 @@ var init_acp_seat = __esm({
         this.promptActive = false;
         this.cancelRequested = false;
         this.exit = null;
+        this.onActivity = onActivity;
       }
       send(message) {
         if (!this.child?.stdin?.writable) throw new Error("Pi RPC process is not writable");
@@ -37577,6 +37598,7 @@ var init_acp_seat = __esm({
         });
       }
       handleMessage(message) {
+        this.onActivity?.({ stream: "protocol", event: message?.type ?? "message" });
         if (message?.type === "response" && message.id && this.pending.has(String(message.id))) {
           const pending = this.pending.get(String(message.id));
           this.pending.delete(String(message.id));
@@ -37674,7 +37696,7 @@ var init_acp_seat = __esm({
       }
     };
     CliResumeSeat = class {
-      constructor({ key, taskId, seat, model, harness, cwd, runner, config: config2, timeoutMs, allowWrite }) {
+      constructor({ key, taskId, seat, model, harness, cwd, runner, config: config2, timeoutMs, allowWrite, onActivity }) {
         this.runtime = `${harness}-resume-bridge`;
         this.key = key;
         this.taskId = taskId ?? null;
@@ -37689,6 +37711,7 @@ var init_acp_seat = __esm({
         this.sessionId = null;
         this.controller = null;
         this.promptActive = false;
+        this.onActivity = onActivity;
       }
       async prompt({ prompt, resumeSessionId }) {
         this.sessionId = resumeSessionId ?? this.sessionId;
@@ -37701,7 +37724,8 @@ var init_acp_seat = __esm({
             config: this.config,
             timeoutMs: this.timeoutMs,
             allowWrite: this.allowWrite,
-            signal: this.controller.signal
+            signal: this.controller.signal,
+            onActivity: this.onActivity
           });
           this.sessionId = result.sessionId ?? this.sessionId;
           return {
@@ -37729,9 +37753,9 @@ var init_acp_seat = __esm({
 });
 
 // src/adapters/acp.mjs
-async function runAcpAdapter({ seat, prompt, config: config2, timeoutMs, allowWrite = false }) {
+async function runAcpAdapter({ seat, prompt, config: config2, timeoutMs, allowWrite = false, onActivity }) {
   const startedAt = Date.now();
-  const result = await runAcpSeat({ seat, prompt, config: config2, timeoutMs, allowWrite });
+  const result = await runAcpSeat({ seat, prompt, config: config2, timeoutMs, allowWrite, onActivity });
   const status = result.stopReason === "cancelled" ? "cancelled" : result.stopReason === "error" ? "failed" : result.text ? "done" : "failed";
   return createResult({
     seat,
@@ -38498,6 +38522,14 @@ async function runMoA(input2, deps = {}) {
     }
     plan.failureRouting = failureRouting;
   }
+  for (const seat of plan.seats) applyRuntimeResolution(seat);
+  for (const node2 of plan.graph?.nodes ?? []) {
+    const seat = plan.seats.find((item) => item.seat === node2.id);
+    if (!seat) continue;
+    node2.runtimeMode = seat.runtimeMode;
+    node2.runtimeTransport = seat.runtimeTransport;
+    node2.controlCapability = seat.controlCapability;
+  }
   if (checkpoint) {
     const knownSeats = new Set(Object.keys(checkpoint.nodes ?? {}));
     const missing = plan.seats.filter((seat) => !knownSeats.has(seat.seat)).map((seat) => seat.seat);
@@ -38632,6 +38664,22 @@ async function runMoA(input2, deps = {}) {
     }
   };
   const runSeat = async (seat, layerIndex = 0, options = {}) => {
+    let lastActivityReportAt = 0;
+    let observedOutputBytes = 0;
+    const onActivity = (activity = {}) => {
+      observedOutputBytes += Number(activity.bytes ?? 0);
+      const now = Date.now();
+      if (now - lastActivityReportAt < 2e3) return;
+      lastActivityReportAt = now;
+      void reportProgress({
+        type: "seat_activity",
+        activeSeat: seat.seat,
+        layer: layerIndex,
+        activityStream: activity.stream ?? "protocol",
+        activityEvent: activity.event ?? null,
+        observedOutputBytes
+      });
+    };
     const adapter = adapterFor(seat);
     const prompt = promptForSeat(seat, {
       task: input2.task,
@@ -38659,7 +38707,8 @@ ${memoryPack}` : null
         prompt,
         config: config2,
         timeoutMs: input2.timeoutMs ?? plan.budget.defaultTimeoutMs,
-        allowWrite
+        allowWrite,
+        onActivity
       });
     } catch (error62) {
       result = resultFailure(seat, error62);
@@ -49060,6 +49109,9 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 var TERMINAL = /* @__PURE__ */ new Set(["completed", "partial", "failed", "cancelled", "paused"]);
 var THREAD_ID_RE = /^[A-Za-z0-9._:-]{1,160}$/;
+var DEFAULT_HEARTBEAT_MS = 5e3;
+var DEFAULT_SILENCE_WARNING_MS = 18e4;
+var DEFAULT_HEARTBEAT_LOST_MS = 3e4;
 var WORKER_ENV_KEYS = /* @__PURE__ */ new Set(["PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TMP", "TEMP", "LANG", "LC_ALL", "TERM", "NO_COLOR", "FORCE_COLOR", "CODEX_HOME", "CC_SWITCH_HOME"]);
 var SECRET_ENV_RE2 = /(API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH|COOKIE)/i;
 var execFileAsync = promisify(execFile);
@@ -49133,18 +49185,118 @@ function normalizeThreadId(value) {
   const threadId = String(value ?? "").trim();
   return THREAD_ID_RE.test(threadId) ? threadId : null;
 }
-function initialNotification(originThreadId) {
+function metadataThreadId(extra = {}) {
+  const meta3 = extra?._meta ?? {};
+  const headers = extra?.requestInfo?.headers;
+  const candidates = [
+    meta3["codex/threadId"],
+    meta3["codex/thread_id"],
+    meta3["openai/threadId"],
+    meta3.codexThreadId,
+    meta3.codex?.threadId,
+    meta3.threadId,
+    meta3.thread_id,
+    meta3.conversationId,
+    meta3.conversation_id,
+    headers?.get?.("x-codex-thread-id"),
+    headers?.["x-codex-thread-id"],
+    headers?.["X-Codex-Thread-Id"]
+  ];
+  return candidates.map(normalizeThreadId).find(Boolean) ?? null;
+}
+function resolveOriginThreadBinding({ explicit, extra, env = process.env } = {}) {
+  const explicitId = normalizeThreadId(explicit);
+  if (explicitId) return { threadId: explicitId, source: "explicit" };
+  const metadataId = metadataThreadId(extra);
+  if (metadataId) return { threadId: metadataId, source: "mcp-request-meta" };
+  const environmentId = normalizeThreadId(env?.CODEX_THREAD_ID);
+  if (environmentId) return { threadId: environmentId, source: "environment" };
+  return { threadId: null, source: null };
+}
+function initialNotification(originThreadId, policy = "best-effort", bindingSource = null) {
+  const disabled = policy === "off";
   return {
-    state: originThreadId ? "pending" : "unavailable",
+    state: disabled ? "disabled" : originThreadId ? "pending" : "unavailable",
+    handlingState: "pending",
+    policy,
     originThreadId,
+    bindingSource,
     attempts: 0,
     lastAttemptAt: null,
     acceptedAt: null,
     acknowledgedAt: null,
-    lastError: originThreadId ? null : "No valid originating Codex thread ID was available at dispatch time."
+    lastError: disabled || originThreadId ? null : "No valid originating Codex thread ID was available at dispatch time."
   };
 }
-function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${randomUUID14().slice(0, 8)}`, taskId, input: input2, originThreadId = null }) {
+function initialSupervisor(now) {
+  return {
+    state: "queued",
+    heartbeatAt: now,
+    lastProgressAt: now,
+    lastEvent: "queued",
+    currentAction: "Waiting for worker start",
+    activeSeat: null,
+    activeSince: null,
+    elapsedMs: 0,
+    silenceMs: 0,
+    estimatedRemainingMs: null,
+    etaConfidence: "none",
+    attention: null
+  };
+}
+function estimatedRemaining(progress, elapsedMs) {
+  const completed = Number(progress?.completed ?? 0);
+  const total = Number(progress?.total ?? 0);
+  if (completed <= 0 || total <= completed) return { value: total > 0 && completed >= total ? 0 : null, confidence: total > 0 && completed >= total ? "high" : "none" };
+  return { value: Math.max(0, Math.round(elapsedMs / completed * (total - completed))), confidence: completed >= 2 ? "medium" : "low" };
+}
+function actionForProgress(progress = {}) {
+  const seat = progress.activeSeat ? ` (${progress.activeSeat})` : "";
+  const actions = {
+    running: "Preparing task graph",
+    seat_started: `Running external model seat${seat}`,
+    seat_activity: `Receiving live activity from external model${seat}`,
+    seat_finished: "Reviewing completed seat output",
+    layer_started: "Starting task-graph layer",
+    layer_finished: "Persisting stage evidence",
+    steering_applied: "Applying operator steering",
+    pausing: "Stopping active seat at a safe boundary",
+    cancelling: "Cancelling active seat",
+    completed: "Completed",
+    partial: "Completed with partial results",
+    failed: "Failed",
+    cancelled: "Cancelled",
+    paused: "Paused"
+  };
+  return actions[progress.phase] ?? String(progress.phase ?? "running").replaceAll("_", " ");
+}
+function supervisorView(job, nowMs = Date.now()) {
+  const supervisor = job?.supervisor ?? initialSupervisor(job?.createdAt ?? new Date(nowMs).toISOString());
+  const heartbeatMs = Date.parse(supervisor.heartbeatAt ?? job?.updatedAt ?? job?.createdAt ?? 0);
+  const lastProgressMs = Date.parse(supervisor.lastProgressAt ?? job?.updatedAt ?? job?.createdAt ?? 0);
+  const startedMs = Date.parse(job?.startedAt ?? job?.createdAt ?? 0);
+  const elapsedMs = Math.max(0, nowMs - startedMs);
+  const silenceMs = Math.max(0, nowMs - lastProgressMs);
+  const heartbeatAgeMs = Math.max(0, nowMs - heartbeatMs);
+  const active = ["queued", "running", "cancelling"].includes(job?.status);
+  const heartbeatLost = active && heartbeatAgeMs > DEFAULT_HEARTBEAT_LOST_MS;
+  const attention = heartbeatLost ? "worker-heartbeat-lost" : active && silenceMs > DEFAULT_SILENCE_WARNING_MS ? "seat-silent" : supervisor.attention ?? null;
+  const eta = estimatedRemaining(job?.progress, elapsedMs);
+  return {
+    ...supervisor,
+    state: heartbeatLost ? "lost" : attention === "seat-silent" ? "silent" : TERMINAL.has(job?.status) ? job.status : supervisor.state,
+    currentAction: actionForProgress(job?.progress),
+    activeSeat: job?.progress?.activeSeat ?? supervisor.activeSeat ?? null,
+    elapsedMs,
+    silenceMs,
+    heartbeatAgeMs,
+    estimatedRemainingMs: eta.value,
+    etaConfidence: eta.confidence,
+    attention,
+    nextHeartbeatExpectedAt: active ? new Date(heartbeatMs + DEFAULT_HEARTBEAT_MS * 2).toISOString() : null
+  };
+}
+function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${randomUUID14().slice(0, 8)}`, taskId, input: input2, originThreadId = null, notificationPolicy = "best-effort", bindingSource = null }) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const normalizedThreadId = normalizeThreadId(originThreadId);
   return {
@@ -49160,8 +49312,9 @@ function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${randomUUID1
     finishedAt: null,
     pid: null,
     progress: { phase: "queued", completed: 0, total: 0, activeSeat: null },
+    supervisor: initialSupervisor(now),
     control: { revision: 0, messages: [] },
-    notification: initialNotification(normalizedThreadId),
+    notification: initialNotification(normalizedThreadId, notificationPolicy, bindingSource),
     input: publicInput(input2),
     resultSummary: null,
     error: null
@@ -49251,6 +49404,7 @@ function publicJob(job) {
     finishedAt: job.finishedAt,
     pid: job.pid,
     progress: job.progress,
+    supervisor: supervisorView(job),
     resultSummary: job.resultSummary,
     error: job.error,
     logPath: jobLogPath(job.jobId),
@@ -49280,9 +49434,15 @@ async function spawnJobWorker(record2) {
   });
   return updateJob(record2.jobId, { pid: child.pid, status: "queued" });
 }
-async function startJob({ input: input2, jobId, taskId, originThreadId = input2?.originThreadId ?? process.env.CODEX_THREAD_ID }) {
+async function startJob({ input: input2, jobId, taskId, originThreadId, originThreadSource, notificationPolicy = input2?.notificationPolicy ?? "required", requestExtra }) {
   assertJobInputSupported(input2);
-  const record2 = createJobRecord({ jobId, taskId, input: input2, originThreadId });
+  const binding = resolveOriginThreadBinding({ explicit: originThreadId ?? input2?.originThreadId, extra: requestExtra });
+  const resolvedThreadId = binding.threadId;
+  const resolvedSource = originThreadSource ?? binding.source;
+  if (notificationPolicy === "required" && !resolvedThreadId) {
+    throw new Error("Background job refused: no originating Codex thread ID is available. Pass originThreadId from the current CODEX_THREAD_ID, or explicitly set notificationPolicy=best-effort/off.");
+  }
+  const record2 = createJobRecord({ jobId, taskId, input: input2, originThreadId: resolvedThreadId, notificationPolicy, bindingSource: resolvedSource });
   await writeJob(record2);
   await atomicWrite(jobInputPath(record2.jobId), publicInput(input2));
   return spawnJobWorker(record2);
@@ -49309,8 +49469,9 @@ async function notifyJobCompletion(jobId, { deliver = codexQueueNotification, fo
   if (!job) throw new Error(`Job not found: ${jobId}`);
   if (!TERMINAL.has(job.status)) throw new Error(`Job ${jobId} is ${job.status}; completion notification is only valid for terminal jobs.`);
   const notification = job.notification ?? initialNotification(null);
+  if (notification.state === "disabled") return publicJob(job);
   if (!notification.originThreadId) return publicJob(job);
-  if (!force && ["delivered", "acknowledged"].includes(notification.state)) return publicJob(job);
+  if (!force && (notification.state === "delivered" || notification.handlingState === "acknowledged" || notification.state === "acknowledged")) return publicJob(job);
   const attempts = Math.max(1, Math.min(3, Number(retries) || 1));
   let lastError = null;
   for (let index = 0; index < attempts; index += 1) {
@@ -49359,7 +49520,7 @@ async function acknowledgeJobNotification(jobId) {
     ...current,
     notification: {
       ...current.notification ?? initialNotification(null),
-      state: "acknowledged",
+      handlingState: "acknowledged",
       acknowledgedAt: (/* @__PURE__ */ new Date()).toISOString()
     }
   }));
@@ -49653,6 +49814,7 @@ var ACTIVE_JOB_STATES = /* @__PURE__ */ new Set(["queued", "running", "cancellin
 function backgroundJobHandoff(job, { event = "status" } = {}) {
   const jobId = job?.jobId ?? null;
   const active = ACTIVE_JOB_STATES.has(job?.status);
+  const notificationBound = Boolean(job?.notification?.originThreadId && job?.notification?.state !== "disabled");
   return {
     policy: "yield-after-background-dispatch",
     event,
@@ -49660,7 +49822,14 @@ function backgroundJobHandoff(job, { event = "status" } = {}) {
     captainShouldYield: active,
     foregroundBudgetMs: INTERACTIVE_LIMIT_MS,
     maxWaitMs: JOB_WAIT_LIMIT_MS,
-    appQueueFixed: true,
+    appQueueFixed: notificationBound,
+    notificationBound,
+    supervisor: job?.supervisor ?? null,
+    nativeControlPlane: {
+      preferred: true,
+      role: "monitor-only",
+      instruction: "When native Codex subagents are available, keep a lightweight supervisor agent attached to this job. It monitors status, relays steering, and reports attention-required events; the selected GLM/Kimi/DeepSeek model remains the executor."
+    },
     notification: job?.notification ?? null,
     instruction: active ? "Return control to the user now. Do not keep this Codex turn open with repeated polling or unrelated local work; use a later status turn and moa_job_steer for new constraints." : "The job is settled. Inspect its artifacts before accepting or integrating the result.",
     commands: jobId ? {
@@ -49669,7 +49838,7 @@ function backgroundJobHandoff(job, { event = "status" } = {}) {
       pause: `$codex-moa job pause ${jobId}`,
       cancel: `$codex-moa job cancel ${jobId}`
     } : null,
-    limitation: "Completion delivery uses the official Codex queue interface. A delivered state means the daemon accepted the message; moa_job_ack records that the captain actually handled it."
+    limitation: notificationBound ? "Completion delivery uses the official Codex queue interface. A delivered state means the daemon accepted the message; handlingState=acknowledged means the captain actually handled it." : job?.notification?.state === "disabled" ? "Queue delivery is intentionally disabled; a native Codex supervisor must remain attached and return terminal artifacts to the captain." : "This job is not bound to a Codex thread and cannot wake the captain automatically. Required notification policy should reject this condition before dispatch."
   };
 }
 function backgroundRequirement(input2 = {}) {
@@ -50712,6 +50881,8 @@ server.registerTool("moa_start", {
     task: string2().min(1),
     cwd: string2().min(1),
     taskId: string2().optional(),
+    originThreadId: string2().optional().describe("Originating Codex thread ID. Pass the current CODEX_THREAD_ID when request metadata does not expose it."),
+    notificationPolicy: _enum2(["required", "best-effort", "off"]).optional().default("required"),
     resume: boolean2().optional().default(false),
     routingExperiment: boolean2().optional().default(true),
     captainModel: string2().optional(),
@@ -50756,10 +50927,10 @@ server.registerTool("moa_start", {
     })).optional(),
     assignments: array(assignmentSchema).optional()
   }
-}, async (input2) => {
+}, async (input2, extra) => {
   try {
     const taskId = input2.taskId ?? createTaskId("moa-job");
-    const job = publicJob(await startJob({ input: { ...input2, taskId }, taskId }));
+    const job = publicJob(await startJob({ input: { ...input2, taskId }, taskId, requestExtra: extra, notificationPolicy: input2.notificationPolicy }));
     return textResult({
       ...job,
       kind: "job",

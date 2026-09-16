@@ -98,6 +98,8 @@ This repository currently implements the MVP control plane:
 - Time policy for DeepSeek peak/off-peak; the legacy GLM night campaign no longer changes the default Harness.
 - DeepSeekHarness multi-provider routes for Kimi and GLM, with native Harnesses retained as defaults.
 - Durable job steering plus pause/resume at checkpoint boundaries; synchronous runs are limited to interactive work.
+- Fail-closed originating-thread binding for background jobs, plus deterministic worker/seat heartbeats, live output activity, silence/loss detection, and confidence-labelled ETA.
+- Native Codex subagent control proxies by default for transparent background-job lifecycle monitoring while GLM/Kimi/DeepSeek remain the actual execution models; required thread-bound fallback is retained for hosts without native subagents.
 - Real ACP smoke harness for KimiCode, DeepSeekHarness, and the ZCode app-server bridge.
 - Task DAG checkpoint/resume, cost ledger, provider health, routing A/B experiments with automatic rollback.
 - Local control dashboard, interrupt/cancel requests, and richer ClaudeBar runtime status sections.
@@ -263,7 +265,7 @@ moa_job_ack(jobId="job-...")
 
 Job state is persisted under `~/.codex-moa/jobs/<job-id>/`. The worker process owns the run; the MCP server only starts, observes, waits, or requests cancellation. Async jobs reject per-seat `env` values so credentials are not persisted; use provider configuration or synchronous `moa_run` for seat-local environment variables.
 
-`moa_start` also returns an `interaction` handoff contract. While a job is active, the captain should report the job ID and yield the Codex foreground turn instead of polling repeatedly or continuing substantial local work. One wait may last at most 10 seconds. Later constraints should use `moa_job_steer`. The worker binds the origin `CODEX_THREAD_ID` and sends terminal continuation through the official `codex queue` command. `delivered` means the daemon accepted the message; `acknowledged` means the captain actually handled it. Failed delivery is durable and can be retried with `moa_job_notify`.
+`moa_start` also returns an `interaction` handoff contract. While a job is active, the captain should report the job ID and yield the Codex foreground turn instead of polling repeatedly or continuing substantial local work. One wait may last at most 10 seconds. Later constraints should use `moa_job_steer`. Required notification binding resolves the origin from explicit `originThreadId`, MCP request metadata, or `CODEX_THREAD_ID`; an unbound job is rejected instead of becoming a black box. The worker sends terminal continuation through the official `codex queue` command. `state="delivered"` means the daemon accepted the message; `handlingState="acknowledged"` means the captain actually handled it. Failed delivery is durable and can be retried with `moa_job_notify`.
 
 ## Retention and compaction
 

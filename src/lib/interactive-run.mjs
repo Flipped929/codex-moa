@@ -8,6 +8,7 @@ const ACTIVE_JOB_STATES = new Set(["queued", "running", "cancelling"]);
 export function backgroundJobHandoff(job, { event = "status" } = {}) {
   const jobId = job?.jobId ?? null;
   const active = ACTIVE_JOB_STATES.has(job?.status);
+  const notificationBound = Boolean(job?.notification?.originThreadId && job?.notification?.state !== "disabled");
   return {
     policy: "yield-after-background-dispatch",
     event,
@@ -15,7 +16,14 @@ export function backgroundJobHandoff(job, { event = "status" } = {}) {
     captainShouldYield: active,
     foregroundBudgetMs: INTERACTIVE_LIMIT_MS,
     maxWaitMs: JOB_WAIT_LIMIT_MS,
-    appQueueFixed: true,
+    appQueueFixed: notificationBound,
+    notificationBound,
+    supervisor: job?.supervisor ?? null,
+    nativeControlPlane: {
+      preferred: true,
+      role: "monitor-only",
+      instruction: "When native Codex subagents are available, keep a lightweight supervisor agent attached to this job. It monitors status, relays steering, and reports attention-required events; the selected GLM/Kimi/DeepSeek model remains the executor."
+    },
     notification: job?.notification ?? null,
     instruction: active
       ? "Return control to the user now. Do not keep this Codex turn open with repeated polling or unrelated local work; use a later status turn and moa_job_steer for new constraints."
@@ -26,7 +34,11 @@ export function backgroundJobHandoff(job, { event = "status" } = {}) {
       pause: `$codex-moa job pause ${jobId}`,
       cancel: `$codex-moa job cancel ${jobId}`
     } : null,
-    limitation: "Completion delivery uses the official Codex queue interface. A delivered state means the daemon accepted the message; moa_job_ack records that the captain actually handled it."
+    limitation: notificationBound
+      ? "Completion delivery uses the official Codex queue interface. A delivered state means the daemon accepted the message; handlingState=acknowledged means the captain actually handled it."
+      : job?.notification?.state === "disabled"
+        ? "Queue delivery is intentionally disabled; a native Codex supervisor must remain attached and return terminal artifacts to the captain."
+        : "This job is not bound to a Codex thread and cannot wake the captain automatically. Required notification policy should reject this condition before dispatch."
   };
 }
 

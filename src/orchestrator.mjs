@@ -9,7 +9,7 @@ import { depletedModels, providerForModel, quotaForSeats, readQuotaSnapshot, ref
 import { auditConflict, resolveCaptain } from "./lib/captain.mjs";
 import { recordEvolutionEvent } from "./lib/evolution.mjs";
 import { clearContinuityEntry, continuityEntry, makeContinuityKey, mergeContinuityStore, readContinuityStore, setContinuityEntry } from "./lib/continuity.mjs";
-import { isPersistentRuntime } from "./lib/runtime-contract.mjs";
+import { applyRuntimeResolution, isPersistentRuntime } from "./lib/runtime-contract.mjs";
 import { buildMemoryPack, loadMemory, recordEpisode } from "./lib/memory.mjs";
 import { listSeats, readSeatRegistry, seatRegistryPath, upsertSeatAtomic } from "./lib/seat-registry.mjs";
 import { captureWorktreeDiff, createWorktree, inspectWorktree, removeWorktree, writeDiffArtifact } from "./lib/worktree.mjs";
@@ -319,6 +319,14 @@ export async function runMoA(input, deps = {}) {
     }
     plan.failureRouting = failureRouting;
   }
+  for (const seat of plan.seats) applyRuntimeResolution(seat);
+  for (const node of plan.graph?.nodes ?? []) {
+    const seat = plan.seats.find((item) => item.seat === node.id);
+    if (!seat) continue;
+    node.runtimeMode = seat.runtimeMode;
+    node.runtimeTransport = seat.runtimeTransport;
+    node.controlCapability = seat.controlCapability;
+  }
   if (checkpoint) {
     const knownSeats = new Set(Object.keys(checkpoint.nodes ?? {}));
     const missing = plan.seats.filter((seat) => !knownSeats.has(seat.seat)).map((seat) => seat.seat);
@@ -461,6 +469,22 @@ export async function runMoA(input, deps = {}) {
     }
   };
   const runSeat = async (seat, layerIndex = 0, options = {}) => {
+    let lastActivityReportAt = 0;
+    let observedOutputBytes = 0;
+    const onActivity = (activity = {}) => {
+      observedOutputBytes += Number(activity.bytes ?? 0);
+      const now = Date.now();
+      if (now - lastActivityReportAt < 2_000) return;
+      lastActivityReportAt = now;
+      void reportProgress({
+        type: "seat_activity",
+        activeSeat: seat.seat,
+        layer: layerIndex,
+        activityStream: activity.stream ?? "protocol",
+        activityEvent: activity.event ?? null,
+        observedOutputBytes
+      });
+    };
     const adapter = adapterFor(seat);
     const prompt = promptForSeat(seat, {
       task: input.task,
@@ -487,7 +511,8 @@ export async function runMoA(input, deps = {}) {
         prompt,
         config,
         timeoutMs: input.timeoutMs ?? plan.budget.defaultTimeoutMs,
-        allowWrite
+        allowWrite,
+        onActivity
       });
     } catch (error) {
       result = resultFailure(seat, error);

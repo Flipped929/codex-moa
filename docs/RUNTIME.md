@@ -114,6 +114,12 @@ Each job is persisted at:
 
 The worker runs `runMoA` independently of the MCP connection. `moa_job_cancel` marks the job cancelled and writes scoped persistent-seat cancellation requests. Nodes that have not started are marked cancelled; running one-shot CLI seats are allowed to finish, while persistent seats are interrupted through their protocol or process cancel path.
 
+Background dispatch is bound to the originating Codex thread. `moa_start` resolves the thread in this order: explicit `originThreadId`, supported MCP request metadata, then the MCP process `CODEX_THREAD_ID`. Its default `notificationPolicy="required"` refuses to create an unbound job. `best-effort` retains manual status operation and `off` is intended for a native Codex supervisor that already owns completion handoff.
+
+Every job exposes a deterministic `supervisor` snapshot with worker heartbeat, last progress/activity time, active seat, current action, output activity bytes, silence duration, attention state, and a progress-derived ETA with an explicit confidence level. CLI stdout/stderr chunks and ACP/RPC protocol events refresh activity without persisting model content. A stale seat is reported as `silent`; a stale worker heartbeat is reported as `lost`.
+
+When native Codex subagents are available, codex-moa defaults background work to one lightweight native supervisor that owns only the control lifecycle while the requested GLM/Kimi/DeepSeek model remains the executor. The supervisor relays status changes, steering, cancellation, attention events, and terminal artifacts; it must not substitute its own model for the requested external work or narrate unchanged polls. Hosts without native subagents use required thread binding and `codex queue` completion instead.
+
 Async jobs reject per-seat `env` values so credentials are not persisted to disk. Put credentials in provider configuration, or use synchronous `moa_run` when seat-local environment variables are required.
 
 ### Interaction-safe handoff
@@ -126,7 +132,7 @@ Starting a detached worker is only half of the handoff. `moa_start`, single-job 
 4. The worker queues a continuation prompt to the originating thread when the job settles.
 5. Perform captain-side verification and integration in that later turn, then call `moa_job_ack`.
 
-Completion delivery uses the official `codex queue` command and is persisted in `job.json`. `notification.state="delivered"` means the daemon accepted the message, not that the captain handled it. `notification.state="acknowledged"` is the end-to-end confirmation. A failed or missing prompt remains visible and can be retried with `moa_job_notify`; `force=true` intentionally permits duplicate delivery.
+Completion delivery uses the official `codex queue` command and is persisted in `job.json`. `notification.state="delivered"` means the daemon accepted the message, not that the captain handled it. `notification.handlingState="acknowledged"` is the end-to-end confirmation. A failed or missing prompt remains visible and can be retried with `moa_job_notify`; `force=true` intentionally permits duplicate delivery.
 
 ## Interrupt and control plane
 

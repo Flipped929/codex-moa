@@ -3,13 +3,16 @@ import assert from "node:assert/strict";
 import { buildEnv, runCommand } from "../src/lib/process.mjs";
 
 test("runs commands without a shell", async () => {
+  const activity = [];
   const result = await runCommand({
     command: process.execPath,
     args: ["-e", "process.stdout.write('ok')"],
-    timeoutMs: 5000
+    timeoutMs: 5000,
+    onStdoutChunk: (chunk) => activity.push(chunk.toString("utf8"))
   });
   assert.equal(result.ok, true);
   assert.equal(result.stdout, "ok");
+  assert.deepEqual(activity, ["ok"]);
 });
 
 test("strips secrets from inherited and caller-supplied environment", () => {

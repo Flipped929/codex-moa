@@ -6,7 +6,7 @@ import { prepareZCodeHome } from "../lib/zcode-home.mjs";
 
 const SAFE_MODES = new Set(["plan", "edit", "build"]);
 
-export async function runZCodeSeat({ seat, prompt, config, timeoutMs, allowWrite = false }) {
+export async function runZCodeSeat({ seat, prompt, config, timeoutMs, allowWrite = false, onActivity }) {
   const cwd = resolveCwd(seat.cwd, config.defaultCwd);
   const { command, args: baseArgs } = commandParts(config.commands.zcode);
   let mode = SAFE_MODES.has(seat.mode) ? seat.mode : "plan";
@@ -42,7 +42,9 @@ export async function runZCodeSeat({ seat, prompt, config, timeoutMs, allowWrite
       cwd,
       timeoutMs,
       env: { HOME: zcodeHome.home },
-      stripSecretEnv: config.safety?.stripSecretEnv !== false
+      stripSecretEnv: config.safety?.stripSecretEnv !== false,
+      onStdoutChunk: (chunk) => onActivity?.({ stream: "stdout", bytes: chunk.length }),
+      onStderrChunk: (chunk) => onActivity?.({ stream: "stderr", bytes: chunk.length })
     });
     const text = extractOutput(run.stdout);
     const sessionId = extractSessionId(run.stdout) ?? seat.continuitySessionId ?? null;

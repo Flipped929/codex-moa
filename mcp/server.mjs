@@ -687,6 +687,8 @@ server.registerTool("moa_start", {
     task: z.string().min(1),
     cwd: z.string().min(1),
     taskId: z.string().optional(),
+    originThreadId: z.string().optional().describe("Originating Codex thread ID. Pass the current CODEX_THREAD_ID when request metadata does not expose it."),
+    notificationPolicy: z.enum(["required", "best-effort", "off"]).optional().default("required"),
     resume: z.boolean().optional().default(false),
     routingExperiment: z.boolean().optional().default(true),
     captainModel: z.string().optional(),
@@ -731,10 +733,10 @@ server.registerTool("moa_start", {
     })).optional(),
     assignments: z.array(assignmentSchema).optional()
   }
-}, async (input) => {
+}, async (input, extra) => {
   try {
     const taskId = input.taskId ?? createTaskId("moa-job");
-    const job = publicJob(await startJob({ input: { ...input, taskId }, taskId }));
+    const job = publicJob(await startJob({ input: { ...input, taskId }, taskId, requestExtra: extra, notificationPolicy: input.notificationPolicy }));
     return textResult({
       ...job,
       kind: "job",

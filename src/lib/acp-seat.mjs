@@ -43,7 +43,7 @@ function normalizeUsage(usage) {
 }
 
 export class AcpSeat {
-  constructor({ key, taskId, seat, harness, model, command, args, cwd, writeAllowed, timeoutMs, env = {} }) {
+  constructor({ key, taskId, seat, harness, model, command, args, cwd, writeAllowed, timeoutMs, env = {}, onActivity }) {
     this.runtime = "acp";
     this.key = key;
     this.taskId = taskId ?? null;
@@ -66,6 +66,7 @@ export class AcpSeat {
     this.cancelRequested = false;
     this.contextUsage = null;
     this.exit = null;
+    this.onActivity = onActivity;
   }
 
   async start() {
@@ -86,6 +87,7 @@ export class AcpSeat {
     const app = acp.client({ name: "codex-moa" })
       .onNotification(acp.methods.client.session.update, (ctx) => {
         const update = ctx.params.update;
+        this.onActivity?.({ stream: "protocol", event: update?.sessionUpdate ?? "session_update" });
         this.updates.push(update);
         if (update?.sessionUpdate === "usage_update") {
           this.contextUsage = {
@@ -184,7 +186,7 @@ export class AcpSeat {
 }
 
 export class ZCodeSeat {
-  constructor({ key, taskId, seat, model, command, args, cwd, writeAllowed, env = {}, selection = {} }) {
+  constructor({ key, taskId, seat, model, command, args, cwd, writeAllowed, env = {}, selection = {}, onActivity }) {
     this.runtime = "zcode-app-server";
     this.key = key;
     this.taskId = taskId ?? null;
@@ -207,6 +209,7 @@ export class ZCodeSeat {
     this.cancelRequested = false;
     this.exit = null;
     this.lastProjection = null;
+    this.onActivity = onActivity;
   }
 
   workspace() {
@@ -250,6 +253,7 @@ export class ZCodeSeat {
   }
 
   handleMessage(message) {
+    this.onActivity?.({ stream: "protocol", event: message?.type ?? "message" });
     if (message.id !== undefined && message.method) {
       void this.handleServerRequest(message);
       return;
@@ -485,7 +489,7 @@ function textFromPiMessages(messages = [], start = 0) {
 }
 
 export class PiRpcSeat {
-  constructor({ key, taskId, seat, model, command, args, cwd, writeAllowed, env = {}, sessionId = null }) {
+  constructor({ key, taskId, seat, model, command, args, cwd, writeAllowed, env = {}, sessionId = null, onActivity }) {
     this.runtime = "pi-rpc";
     this.key = key;
     this.taskId = taskId ?? null;
@@ -507,6 +511,7 @@ export class PiRpcSeat {
     this.promptActive = false;
     this.cancelRequested = false;
     this.exit = null;
+    this.onActivity = onActivity;
   }
 
   send(message) {
@@ -533,6 +538,7 @@ export class PiRpcSeat {
   }
 
   handleMessage(message) {
+    this.onActivity?.({ stream: "protocol", event: message?.type ?? "message" });
     if (message?.type === "response" && message.id && this.pending.has(String(message.id))) {
       const pending = this.pending.get(String(message.id));
       this.pending.delete(String(message.id));
@@ -630,7 +636,7 @@ export class PiRpcSeat {
 }
 
 export class CliResumeSeat {
-  constructor({ key, taskId, seat, model, harness, cwd, runner, config, timeoutMs, allowWrite }) {
+  constructor({ key, taskId, seat, model, harness, cwd, runner, config, timeoutMs, allowWrite, onActivity }) {
     this.runtime = `${harness}-resume-bridge`;
     this.key = key;
     this.taskId = taskId ?? null;
@@ -645,6 +651,7 @@ export class CliResumeSeat {
     this.sessionId = null;
     this.controller = null;
     this.promptActive = false;
+    this.onActivity = onActivity;
   }
 
   async prompt({ prompt, resumeSessionId }) {
@@ -658,7 +665,8 @@ export class CliResumeSeat {
         config: this.config,
         timeoutMs: this.timeoutMs,
         allowWrite: this.allowWrite,
-        signal: this.controller.signal
+        signal: this.controller.signal,
+        onActivity: this.onActivity
       });
       this.sessionId = result.sessionId ?? this.sessionId;
       return {
@@ -707,7 +715,7 @@ function seatKey(seat) {
   return seat.continuityKeyResolved ?? `${seat.taskId ?? "task"}:${seat.seat}:${seat.harness}:${seat.model}`;
 }
 
-async function createSeat({ seat, config, allowWrite, timeoutMs }) {
+async function createSeat({ seat, config, allowWrite, timeoutMs, onActivity }) {
   const env = {};
   let selection = null;
   if (seat.harness === "kimi") {
@@ -747,11 +755,11 @@ async function createSeat({ seat, config, allowWrite, timeoutMs }) {
     const args = [...base.args, "--provider", provider, "--model", model, "--mode", "rpc", "--tools", writeEnabled ? "read,bash,edit,write,grep,find,ls" : "read,grep,find,ls", "--approve"];
     if (seat.reasoningEffort) args.push("--thinking", seat.reasoningEffort);
     for (const skillPath of seat.skillPaths ?? []) args.push("--skill", skillPath);
-    return new PiRpcSeat({ key, taskId: seat.taskId, seat: seat.seat, model: seat.model, command: base.command, args, cwd: seat.cwd, writeAllowed: writeEnabled, env: piHome ? { PI_CODING_AGENT_DIR: piHome.home } : {}, sessionId: seat.continuitySessionId });
+    return new PiRpcSeat({ key, taskId: seat.taskId, seat: seat.seat, model: seat.model, command: base.command, args, cwd: seat.cwd, writeAllowed: writeEnabled, env: piHome ? { PI_CODING_AGENT_DIR: piHome.home } : {}, sessionId: seat.continuitySessionId, onActivity });
   }
   if (["claude", "codex"].includes(seat.harness)) {
     const { getAdapter } = await import("../adapters/index.mjs");
-    return new CliResumeSeat({ key, taskId: seat.taskId, seat, model: seat.model, harness: seat.harness, cwd: seat.cwd, runner: getAdapter(seat.harness), config, timeoutMs, allowWrite });
+    return new CliResumeSeat({ key, taskId: seat.taskId, seat, model: seat.model, harness: seat.harness, cwd: seat.cwd, runner: getAdapter(seat.harness), config, timeoutMs, allowWrite, onActivity });
   }
   const command = acpCommandFor(seat.harness, config, seat);
   if (seat.harness === "zcode") {
@@ -765,7 +773,8 @@ async function createSeat({ seat, config, allowWrite, timeoutMs }) {
       cwd: seat.cwd,
       writeAllowed: allowWrite && seat.autoApprove,
       env,
-      selection
+      selection,
+      onActivity
     });
   }
   return new AcpSeat({
@@ -779,17 +788,19 @@ async function createSeat({ seat, config, allowWrite, timeoutMs }) {
     cwd: seat.cwd,
     writeAllowed: allowWrite && seat.autoApprove,
     timeoutMs,
-    env
+    env,
+    onActivity
   });
 }
 
-export async function runAcpSeat({ seat, prompt, config, timeoutMs, allowWrite = false }) {
+export async function runAcpSeat({ seat, prompt, config, timeoutMs, allowWrite = false, onActivity }) {
   const key = seatKey(seat);
   let seatProcess = seats.get(key);
   if (!seatProcess) {
-    seatProcess = await createSeat({ seat, config, allowWrite, timeoutMs });
+    seatProcess = await createSeat({ seat, config, allowWrite, timeoutMs, onActivity });
     seats.set(key, seatProcess);
   }
+  seatProcess.onActivity = onActivity;
   let controlRequest = null;
   let polling = false;
   const interval = setInterval(async () => {

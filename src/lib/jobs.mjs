@@ -11,6 +11,9 @@ import { resolveSeatRuntime } from "./runtime-contract.mjs";
 
 const TERMINAL = new Set(["completed", "partial", "failed", "cancelled", "paused"]);
 const THREAD_ID_RE = /^[A-Za-z0-9._:-]{1,160}$/;
+const DEFAULT_HEARTBEAT_MS = 5_000;
+const DEFAULT_SILENCE_WARNING_MS = 180_000;
+const DEFAULT_HEARTBEAT_LOST_MS = 30_000;
 const WORKER_ENV_KEYS = new Set(["PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TMP", "TEMP", "LANG", "LC_ALL", "TERM", "NO_COLOR", "FORCE_COLOR", "CODEX_HOME", "CC_SWITCH_HOME"]);
 const SECRET_ENV_RE = /(API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH|COOKIE)/i;
 const execFileAsync = promisify(execFile);
@@ -90,24 +93,132 @@ export function assertJobInputSupported(input) {
   return input;
 }
 
-function normalizeThreadId(value) {
+export function normalizeThreadId(value) {
   const threadId = String(value ?? "").trim();
   return THREAD_ID_RE.test(threadId) ? threadId : null;
 }
 
-function initialNotification(originThreadId) {
+function metadataThreadId(extra = {}) {
+  const meta = extra?._meta ?? {};
+  const headers = extra?.requestInfo?.headers;
+  const candidates = [
+    meta["codex/threadId"],
+    meta["codex/thread_id"],
+    meta["openai/threadId"],
+    meta.codexThreadId,
+    meta.codex?.threadId,
+    meta.threadId,
+    meta.thread_id,
+    meta.conversationId,
+    meta.conversation_id,
+    headers?.get?.("x-codex-thread-id"),
+    headers?.["x-codex-thread-id"],
+    headers?.["X-Codex-Thread-Id"]
+  ];
+  return candidates.map(normalizeThreadId).find(Boolean) ?? null;
+}
+
+export function resolveOriginThreadBinding({ explicit, extra, env = process.env } = {}) {
+  const explicitId = normalizeThreadId(explicit);
+  if (explicitId) return { threadId: explicitId, source: "explicit" };
+  const metadataId = metadataThreadId(extra);
+  if (metadataId) return { threadId: metadataId, source: "mcp-request-meta" };
+  const environmentId = normalizeThreadId(env?.CODEX_THREAD_ID);
+  if (environmentId) return { threadId: environmentId, source: "environment" };
+  return { threadId: null, source: null };
+}
+
+function initialNotification(originThreadId, policy = "best-effort", bindingSource = null) {
+  const disabled = policy === "off";
   return {
-    state: originThreadId ? "pending" : "unavailable",
+    state: disabled ? "disabled" : originThreadId ? "pending" : "unavailable",
+    handlingState: "pending",
+    policy,
     originThreadId,
+    bindingSource,
     attempts: 0,
     lastAttemptAt: null,
     acceptedAt: null,
     acknowledgedAt: null,
-    lastError: originThreadId ? null : "No valid originating Codex thread ID was available at dispatch time."
+    lastError: disabled || originThreadId ? null : "No valid originating Codex thread ID was available at dispatch time."
   };
 }
 
-export function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`, taskId, input, originThreadId = null }) {
+function initialSupervisor(now) {
+  return {
+    state: "queued",
+    heartbeatAt: now,
+    lastProgressAt: now,
+    lastEvent: "queued",
+    currentAction: "Waiting for worker start",
+    activeSeat: null,
+    activeSince: null,
+    elapsedMs: 0,
+    silenceMs: 0,
+    estimatedRemainingMs: null,
+    etaConfidence: "none",
+    attention: null
+  };
+}
+
+function estimatedRemaining(progress, elapsedMs) {
+  const completed = Number(progress?.completed ?? 0);
+  const total = Number(progress?.total ?? 0);
+  if (completed <= 0 || total <= completed) return { value: total > 0 && completed >= total ? 0 : null, confidence: total > 0 && completed >= total ? "high" : "none" };
+  return { value: Math.max(0, Math.round((elapsedMs / completed) * (total - completed))), confidence: completed >= 2 ? "medium" : "low" };
+}
+
+function actionForProgress(progress = {}) {
+  const seat = progress.activeSeat ? ` (${progress.activeSeat})` : "";
+  const actions = {
+    running: "Preparing task graph",
+    seat_started: `Running external model seat${seat}`,
+    seat_activity: `Receiving live activity from external model${seat}`,
+    seat_finished: "Reviewing completed seat output",
+    layer_started: "Starting task-graph layer",
+    layer_finished: "Persisting stage evidence",
+    steering_applied: "Applying operator steering",
+    pausing: "Stopping active seat at a safe boundary",
+    cancelling: "Cancelling active seat",
+    completed: "Completed",
+    partial: "Completed with partial results",
+    failed: "Failed",
+    cancelled: "Cancelled",
+    paused: "Paused"
+  };
+  return actions[progress.phase] ?? String(progress.phase ?? "running").replaceAll("_", " ");
+}
+
+export function supervisorView(job, nowMs = Date.now()) {
+  const supervisor = job?.supervisor ?? initialSupervisor(job?.createdAt ?? new Date(nowMs).toISOString());
+  const heartbeatMs = Date.parse(supervisor.heartbeatAt ?? job?.updatedAt ?? job?.createdAt ?? 0);
+  const lastProgressMs = Date.parse(supervisor.lastProgressAt ?? job?.updatedAt ?? job?.createdAt ?? 0);
+  const startedMs = Date.parse(job?.startedAt ?? job?.createdAt ?? 0);
+  const elapsedMs = Math.max(0, nowMs - startedMs);
+  const silenceMs = Math.max(0, nowMs - lastProgressMs);
+  const heartbeatAgeMs = Math.max(0, nowMs - heartbeatMs);
+  const active = ["queued", "running", "cancelling"].includes(job?.status);
+  const heartbeatLost = active && heartbeatAgeMs > DEFAULT_HEARTBEAT_LOST_MS;
+  const attention = heartbeatLost ? "worker-heartbeat-lost"
+    : active && silenceMs > DEFAULT_SILENCE_WARNING_MS ? "seat-silent"
+      : supervisor.attention ?? null;
+  const eta = estimatedRemaining(job?.progress, elapsedMs);
+  return {
+    ...supervisor,
+    state: heartbeatLost ? "lost" : attention === "seat-silent" ? "silent" : (TERMINAL.has(job?.status) ? job.status : supervisor.state),
+    currentAction: actionForProgress(job?.progress),
+    activeSeat: job?.progress?.activeSeat ?? supervisor.activeSeat ?? null,
+    elapsedMs,
+    silenceMs,
+    heartbeatAgeMs,
+    estimatedRemainingMs: eta.value,
+    etaConfidence: eta.confidence,
+    attention,
+    nextHeartbeatExpectedAt: active ? new Date(heartbeatMs + DEFAULT_HEARTBEAT_MS * 2).toISOString() : null
+  };
+}
+
+export function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`, taskId, input, originThreadId = null, notificationPolicy = "best-effort", bindingSource = null }) {
   const now = new Date().toISOString();
   const normalizedThreadId = normalizeThreadId(originThreadId);
   return {
@@ -123,8 +234,9 @@ export function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${rand
     finishedAt: null,
     pid: null,
     progress: { phase: "queued", completed: 0, total: 0, activeSeat: null },
+    supervisor: initialSupervisor(now),
     control: { revision: 0, messages: [] },
-    notification: initialNotification(normalizedThreadId),
+    notification: initialNotification(normalizedThreadId, notificationPolicy, bindingSource),
     input: publicInput(input),
     resultSummary: null,
     error: null
@@ -216,6 +328,7 @@ export function publicJob(job) {
     finishedAt: job.finishedAt,
     pid: job.pid,
     progress: job.progress,
+    supervisor: supervisorView(job),
     resultSummary: job.resultSummary,
     error: job.error,
     logPath: jobLogPath(job.jobId),
@@ -246,9 +359,15 @@ async function spawnJobWorker(record) {
   return updateJob(record.jobId, { pid: child.pid, status: "queued" });
 }
 
-export async function startJob({ input, jobId, taskId, originThreadId = input?.originThreadId ?? process.env.CODEX_THREAD_ID }) {
+export async function startJob({ input, jobId, taskId, originThreadId, originThreadSource, notificationPolicy = input?.notificationPolicy ?? "required", requestExtra }) {
   assertJobInputSupported(input);
-  const record = createJobRecord({ jobId, taskId, input, originThreadId });
+  const binding = resolveOriginThreadBinding({ explicit: originThreadId ?? input?.originThreadId, extra: requestExtra });
+  const resolvedThreadId = binding.threadId;
+  const resolvedSource = originThreadSource ?? binding.source;
+  if (notificationPolicy === "required" && !resolvedThreadId) {
+    throw new Error("Background job refused: no originating Codex thread ID is available. Pass originThreadId from the current CODEX_THREAD_ID, or explicitly set notificationPolicy=best-effort/off.");
+  }
+  const record = createJobRecord({ jobId, taskId, input, originThreadId: resolvedThreadId, notificationPolicy, bindingSource: resolvedSource });
   await writeJob(record);
   await atomicWrite(jobInputPath(record.jobId), publicInput(input));
   return spawnJobWorker(record);
@@ -278,8 +397,9 @@ export async function notifyJobCompletion(jobId, { deliver = codexQueueNotificat
   if (!job) throw new Error(`Job not found: ${jobId}`);
   if (!TERMINAL.has(job.status)) throw new Error(`Job ${jobId} is ${job.status}; completion notification is only valid for terminal jobs.`);
   const notification = job.notification ?? initialNotification(null);
+  if (notification.state === "disabled") return publicJob(job);
   if (!notification.originThreadId) return publicJob(job);
-  if (!force && ["delivered", "acknowledged"].includes(notification.state)) return publicJob(job);
+  if (!force && (notification.state === "delivered" || notification.handlingState === "acknowledged" || notification.state === "acknowledged")) return publicJob(job);
 
   const attempts = Math.max(1, Math.min(3, Number(retries) || 1));
   let lastError = null;
@@ -330,7 +450,7 @@ export async function acknowledgeJobNotification(jobId) {
     ...current,
     notification: {
       ...(current.notification ?? initialNotification(null)),
-      state: "acknowledged",
+      handlingState: "acknowledged",
       acknowledgedAt: new Date().toISOString()
     }
   }));
@@ -419,7 +539,35 @@ export async function runJobWorker(jobId, deps = {}) {
   const job = await readJob(jobId);
   if (!job) throw new Error(`Job not found: ${jobId}`);
   const input = JSON.parse(await readFile(jobInputPath(jobId), "utf8"));
-  await updateJob(jobId, { status: "running", startedAt: new Date().toISOString(), progress: { phase: "running", completed: 0, total: 0, activeSeat: null } });
+  const startedAt = new Date().toISOString();
+  await updateJob(jobId, {
+    status: "running",
+    startedAt,
+    progress: { phase: "running", completed: 0, total: 0, activeSeat: null },
+    supervisor: { ...initialSupervisor(startedAt), state: "running", lastEvent: "worker_started", currentAction: "Preparing task graph" }
+  });
+
+  const heartbeatMs = Math.max(1_000, Number(deps.heartbeatMs ?? DEFAULT_HEARTBEAT_MS));
+  let heartbeatBusy = false;
+  const heartbeat = setInterval(async () => {
+    if (heartbeatBusy) return;
+    heartbeatBusy = true;
+    try {
+      await updateJob(jobId, (current) => ({
+        ...current,
+        supervisor: {
+          ...(current.supervisor ?? initialSupervisor(startedAt)),
+          heartbeatAt: new Date().toISOString(),
+          state: ["cancelling", "pausing"].includes(current.progress?.phase) ? current.progress.phase : "running"
+        }
+      }));
+    } catch {
+      // A read-only heartbeat must never terminate the model run.
+    } finally {
+      heartbeatBusy = false;
+    }
+  }, heartbeatMs);
+  heartbeat.unref?.();
 
   try {
     const result = await runMoA(input, {
@@ -437,9 +585,27 @@ export async function runJobWorker(jobId, deps = {}) {
           completed: event.completed ?? current.progress?.completed ?? 0,
           total: event.total ?? current.progress?.total ?? 0,
           activeSeat: event.activeSeat ?? null,
-          layer: event.layer ?? current.progress?.layer ?? null
+          layer: event.layer ?? current.progress?.layer ?? null,
+          activityStream: event.activityStream ?? current.progress?.activityStream ?? null,
+          activityEvent: event.activityEvent ?? current.progress?.activityEvent ?? null,
+          observedOutputBytes: event.observedOutputBytes ?? current.progress?.observedOutputBytes ?? 0
         };
-        await updateJob(jobId, { progress });
+        const now = new Date().toISOString();
+        await updateJob(jobId, (latest) => ({
+          ...latest,
+          progress,
+          supervisor: {
+            ...(latest.supervisor ?? initialSupervisor(startedAt)),
+            state: "running",
+            heartbeatAt: now,
+            lastProgressAt: now,
+            lastEvent: event.type,
+            currentAction: actionForProgress(progress),
+            activeSeat: progress.activeSeat,
+            activeSince: progress.activeSeat && progress.activeSeat !== latest.supervisor?.activeSeat ? now : latest.supervisor?.activeSince ?? null,
+            attention: null
+          }
+        }));
       }
     });
     const afterRun = await readJob(jobId);
@@ -452,6 +618,16 @@ export async function runJobWorker(jobId, deps = {}) {
       status,
       finishedAt: new Date().toISOString(),
       progress: { ...(latest?.progress ?? job.progress ?? {}), phase: status, activeSeat: null },
+      supervisor: {
+        ...(latest?.supervisor ?? initialSupervisor(startedAt)),
+        state: status,
+        heartbeatAt: new Date().toISOString(),
+        lastProgressAt: new Date().toISOString(),
+        lastEvent: status,
+        currentAction: actionForProgress({ phase: status }),
+        activeSeat: null,
+        attention: null
+      },
       resultSummary: {
         taskId: result.taskId,
         level: result.level,
@@ -469,9 +645,21 @@ export async function runJobWorker(jobId, deps = {}) {
       status: interruptedStatus,
       finishedAt: new Date().toISOString(),
       progress: { phase: interruptedStatus, activeSeat: null },
+      supervisor: {
+        ...(interrupted?.supervisor ?? initialSupervisor(startedAt)),
+        state: interruptedStatus,
+        heartbeatAt: new Date().toISOString(),
+        lastProgressAt: new Date().toISOString(),
+        lastEvent: interruptedStatus,
+        currentAction: actionForProgress({ phase: interruptedStatus }),
+        activeSeat: null,
+        attention: interruptedStatus === "failed" ? "worker-failed" : null
+      },
       error: interruptedStatus === "failed" ? (error?.stack ?? String(error)) : null
     });
     return notifyJobCompletion(jobId, { deliver: deps.notifyCompletion });
+  } finally {
+    clearInterval(heartbeat);
   }
 }
 

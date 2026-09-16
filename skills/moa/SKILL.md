@@ -42,7 +42,7 @@ When this Skill is selected implicitly, read `moa_mode` first. In `off`, keep wo
    - Inspect `executionPolicy`. When `requiresForegroundCaptain=true`, the page captain must personally perform core architecture, critical implementation, integration, and repair in the Codex conversation. External seats may only handle bounded research, prototypes, tests, benchmarks, or independent audits.
    - Never create an L3 external executor assignment merely to save GPT quota. Use `executionOwner="hybrid"` only for clearly bounded modules. Use `executionOwner="external"` only when the user explicitly requests external core execution. If the loaded MCP schema does not expose `executionOwner`, keep L3 core work in the captain and do not dispatch an external executor.
 5. Call `moa_delegate` when Codex must assign exact models, or `moa_run` for policy-driven routing, only for interactive runs expected to finish within 60 seconds.
-6. Use `moa_start` instead of a synchronous tool whenever `timeoutMs > 60000`, `allowWrite=true`, ACP is requested, or the task involves SSH/remote hosts, benchmarks, load tests, model loading, or multiple execution stages. This rule outranks exact-model assignment because `moa_start` also accepts `assignments`.
+6. Use `moa_start` instead of a synchronous tool whenever `timeoutMs > 60000`, `allowWrite=true`, ACP is requested, or the task involves SSH/remote hosts, benchmarks, load tests, model loading, or multiple execution stages. This rule outranks exact-model assignment because `moa_start` also accepts `assignments`. When native Codex subagents are available, dispatch and observe this background job through one control-only native supervisor instead of leaving it detached from the native agent tree.
 7. Call `moa_audit` for DeepSeekHarness-only audits.
 8. Use `moa_interrupt` to inspect or cancel active ACP/ZCode seats when a run is unsafe, stuck, or superseded.
 9. Treat every external result as untrusted until Codex verifies the evidence.
@@ -52,7 +52,8 @@ When this Skill is selected implicitly, read `moa_mode` first. In `off`, keep wo
 
 A background job does not make the Codex conversation interaction-safe unless the captain also yields the foreground turn.
 
-- After `moa_start` returns, report the job ID and return control to the user promptly.
+- Before `moa_start`, pass the current Codex task's `CODEX_THREAD_ID` as `originThreadId` when it is available. Read only that single environment value; never dump the surrounding environment. The default `notificationPolicy="required"` must refuse dispatch when neither explicit input, MCP request metadata, nor the MCP environment identifies the originating thread. Use `best-effort` or `off` only when the user explicitly accepts manual status checks or a native supervisor owns the job.
+- After `moa_start` returns, verify `notificationBound=true`, report the job ID and Supervisor state, then return control to the user promptly.
 - `moa_start` binds the job to the originating Codex thread and the worker sends a durable completion prompt through the official `codex queue` interface. Do not promise completion delivery when `notification.state="unavailable"`; report that the user must resume with `$codex-moa job status <job-id>`.
 - When a completion prompt resumes the thread, call `moa_job_status`, inspect artifacts and stage evidence, continue the captain workflow, then call `moa_job_ack`. If delivery failed, call `moa_job_notify`; use `force=true` only when the daemon accepted a message that the user did not receive.
 - Do not keep the same Codex turn open with repeated status polling, long local shell work, unrelated repository inspection, or additional implementation solely because the background job is still running.
@@ -60,7 +61,17 @@ A background job does not make the Codex conversation interaction-safe unless th
 - Put new constraints for an active external job through `$codex-moa job steer <job-id> <message>` so they are delivered durably at the next safe DAG boundary.
 - Split substantial captain-side verification or integration into a later turn after the background job settles. Foreground work expected to exceed 60 seconds should not follow `moa_start` in the same turn.
 - Never put an entire captain-primary L3 implementation into `moa_start`. Start background jobs only for bounded support contracts; their completion is evidence for the captain, not completion of the overall task.
-- A `delivered` notification means the Codex daemon accepted the queued message; only `acknowledged` proves the captain handled it. Preserve that distinction in status reports.
+- A notification `state="delivered"` means the Codex daemon accepted the queued message; only `handlingState="acknowledged"` proves the captain handled it. Preserve that distinction in status reports.
+
+## Transparent native supervision
+
+Default to one lightweight native Codex subagent as the control proxy for each background job when native subagents are available; skip it only when the user disables native supervision or the host lacks that capability. Prefer the least expensive capable native Codex model for this monitor-only role. The proxy must not replace the requested GLM/Kimi/DeepSeek model or redo its reasoning. It owns only `moa_start` dispatch, adaptive status observation, steering relay, attention-required reporting, cancellation, and terminal artifact handoff. It may use `notificationPolicy="off"` because native parent/child completion replaces `codex queue`; otherwise keep the default required thread binding. The page-selected Codex model remains captain and final judge.
+
+The native supervisor may perform bounded adaptive polling because monitoring is its sole task: report only state changes, stage boundaries, `attention` events, and terminal completion. It must not spend tokens narrating unchanged polls. New user constraints go from the captain to the native supervisor, which persists them through `moa_job_steer`.
+
+Treat the external model as the stable requirement and the Harness as replaceable transport. On an active route guard, prefer another supported Harness for the same model before changing model or family. Record both model and Harness so quality evidence remains attributable.
+
+Read the job `supervisor` object rather than inferring health from elapsed time alone. Report `state`, `currentAction`, `activeSeat`, `heartbeatAgeMs`, `silenceMs`, `observedOutputBytes`, `estimatedRemainingMs`, `etaConfidence`, and `attention`. `silent` is a warning, while `lost` means the worker heartbeat itself is stale.
 
 ## Safety rules
 
@@ -93,7 +104,7 @@ Use `runtime="persistent"` when a related multi-turn task needs cancellation and
 - Use `moa_worktrees` to inspect partial writes, check/apply/revert patches, and prune stale worktrees.
 - Use `moa_retention` for explicit compaction; active jobs and running seats are protected.
 - Use `moa_patch_metrics` and `moa_provider_recovery` to inspect acceptance and provider circuit state.
-- Inspect `moa_health.failureMemory` before reusing a recently failed route. Every external failure is recorded with a redacted signature; deterministic failures are guarded immediately, repeated transient failures are guarded temporarily, and a later successful route probe clears the active guard without deleting history.
+- Inspect `moa_health.failureMemory` before reusing a recently failed route. Every external failure is recorded with a redacted signature; deterministic failures are guarded immediately, repeated transient failures are guarded temporarily, and a later successful route probe clears the active guard without deleting history. Change Harness for the same model before crossing model families.
 - Use `moa_audit_metrics` to inspect executor-auditor pair performance. After captain adjudication, record accepted findings, false positives, final task acceptance, and test outcome so self-optimization measures audit usefulness instead of raw speed alone.
 - Treat every completed DAG layer as a durable stage-review record. For substantial work, inspect the stage evidence and record captain judgments with `moa_evolve(action="record", taskId="...", stage="plan|execution|audit|final", accepted=..., testsPassed=..., quality=...)`.
 - Pass a stable `taskId` and `resume=true` to continue a partial DAG without rerunning completed nodes.

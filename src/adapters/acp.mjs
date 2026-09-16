@@ -1,9 +1,9 @@
 import { runAcpSeat } from "../lib/acp-seat.mjs";
 import { createResult } from "./base.mjs";
 
-export async function runAcpAdapter({ seat, prompt, config, timeoutMs, allowWrite = false }) {
+export async function runAcpAdapter({ seat, prompt, config, timeoutMs, allowWrite = false, onActivity }) {
   const startedAt = Date.now();
-  const result = await runAcpSeat({ seat, prompt, config, timeoutMs, allowWrite });
+  const result = await runAcpSeat({ seat, prompt, config, timeoutMs, allowWrite, onActivity });
   const status = result.stopReason === "cancelled" ? "cancelled"
     : result.stopReason === "error" ? "failed"
       : result.text ? "done" : "failed";

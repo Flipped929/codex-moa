@@ -49,6 +49,23 @@ test("repeated transient failures guard the route and automatic routing changes 
   assert.equal(seats[0].harness, "pi");
 });
 
+test("model-first failure routing changes Harness before changing model", () => {
+  const now = Date.now();
+  const summary = summarizeFailureMemory([1, 2].map((index) => ({
+    time: new Date(now - index * 1000).toISOString(),
+    model: "DeepSeek-flash",
+    harness: "dsh",
+    kind: "timeout",
+    signature: "same-timeout"
+  })), { now });
+  const seats = [{ seat: "auditor", role: "auditor", auditMode: "gate", model: "DeepSeek-flash", harness: "dsh", modelTier: "fast", family: "deepseek" }];
+  const routed = applyFailureAvoidance(seats, { summary, modelsConfig: models });
+  assert.equal(routed.blocked.length, 0);
+  assert.equal(routed.adjustments[0].action, "changed_harness_same_model");
+  assert.equal(seats[0].model, "DeepSeek-flash");
+  assert.equal(seats[0].harness, "pi");
+});
+
 test("one transient failure is recorded but does not prematurely guard the route", () => {
   const now = Date.now();
   const summary = summarizeFailureMemory([{ time: new Date(now - 1000).toISOString(), model: "kimi-2.8", harness: "pi", kind: "timeout", signature: "once" }], { now });

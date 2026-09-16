@@ -35,6 +35,9 @@ test("MCP server exposes expected tools", async () => {
     const tools = await client.listTools();
     const names = tools.tools.map((tool) => tool.name).sort();
     assert.deepEqual(names, ["moa_audit", "moa_audit_metrics", "moa_capabilities", "moa_captain", "moa_captain_usage", "moa_ccswitch", "moa_compat", "moa_context", "moa_delegate", "moa_doctor", "moa_evolve", "moa_health", "moa_interrupt", "moa_job_ack", "moa_job_cancel", "moa_job_notify", "moa_job_pause", "moa_job_resume", "moa_job_status", "moa_job_steer", "moa_job_wait", "moa_memory", "moa_mode", "moa_models", "moa_patch_metrics", "moa_plan", "moa_provider_recovery", "moa_quota", "moa_retention", "moa_run", "moa_schedule", "moa_seats", "moa_start", "moa_worktrees"]);
+    const startTool = tools.tools.find((tool) => tool.name === "moa_start");
+    assert.ok(startTool.inputSchema.properties.originThreadId);
+    assert.deepEqual(startTool.inputSchema.properties.notificationPolicy.enum, ["required", "best-effort", "off"]);
     const mode = await client.callTool({ name: "moa_mode", arguments: { action: "status" } });
     assert.equal(JSON.parse(mode.content[0].text).mode, "auto");
     const result = await client.callTool({
@@ -86,7 +89,10 @@ test("MCP server exposes expected tools", async () => {
     assert.ok(Array.isArray(JSON.parse(worktrees.content[0].text).worktrees));
     const jobs = await client.callTool({ name: "moa_job_status", arguments: {} });
     assert.ok(Array.isArray(JSON.parse(jobs.content[0].text).jobs));
-    const started = await client.callTool({ name: "moa_start", arguments: { task: "explain this function", cwd: process.cwd(), stakes: "low", respectQuota: false, routingExperiment: false, contextPack: false } });
+    const refused = await client.callTool({ name: "moa_start", arguments: { task: "explain this function", cwd: process.cwd(), stakes: "low", respectQuota: false, routingExperiment: false, contextPack: false } });
+    assert.equal(refused.isError, true);
+    assert.match(refused.content[0].text, /originating Codex thread ID/i);
+    const started = await client.callTool({ name: "moa_start", arguments: { task: "explain this function", cwd: process.cwd(), stakes: "low", respectQuota: false, routingExperiment: false, contextPack: false, notificationPolicy: "off" } });
     const startedPayload = JSON.parse(started.content[0].text);
     const jobId = startedPayload.jobId;
     assert.equal(startedPayload.interaction.captainShouldYield, true);

@@ -3,7 +3,7 @@ import { runCommand } from "../lib/process.mjs";
 import { extractCodexOutput, extractSessionId, extractUsage } from "../lib/parser.mjs";
 import { prepareCodexHome } from "../lib/cli-homes.mjs";
 
-export async function runCodexSeat({ seat, prompt, config, timeoutMs, allowWrite = false, signal }) {
+export async function runCodexSeat({ seat, prompt, config, timeoutMs, allowWrite = false, signal, onActivity }) {
   const cwd = resolveCwd(seat.cwd, config.defaultCwd);
   const { command, args: baseArgs } = commandParts(config.commands.codex);
   const provider = seat.codex?.provider;
@@ -43,7 +43,9 @@ export async function runCodexSeat({ seat, prompt, config, timeoutMs, allowWrite
     env: { CODEX_HOME: runtime.home, CODEX_MOA_PROVIDER_API_KEY: runtime.providerApiKey },
     stripSecretEnv: config.safety?.stripSecretEnv !== false,
     allowSecretExtraEnv: true,
-    signal
+    signal,
+    onStdoutChunk: (chunk) => onActivity?.({ stream: "stdout", bytes: chunk.length }),
+    onStderrChunk: (chunk) => onActivity?.({ stream: "stderr", bytes: chunk.length })
   });
   const text = extractCodexOutput(run.stdout);
   return createResult({

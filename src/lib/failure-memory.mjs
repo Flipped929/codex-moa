@@ -191,18 +191,20 @@ export function applyFailureAvoidance(seats, { summary, modelsConfig, captain = 
     const active = guarded(summary, seat.model, seat.harness);
     if (!active) continue;
     const current = resolveModel(seat.model, modelsConfig);
+    const alternateHarness = (current.supportedHarnesses ?? [current.harness])
+      .find((harness) => harness !== seat.harness && !guarded(summary, current.id, harness));
+    if (alternateHarness) {
+      const from = `${seat.model}@${seat.harness}`;
+      seat.originalHarness ??= seat.harness;
+      seat.harness = alternateHarness;
+      seat.failureAdjusted = true;
+      adjustments.push({ seat: seat.seat, action: "changed_harness_same_model", from, to: `${seat.model}@${seat.harness}`, guard: active });
+      continue;
+    }
     if (seat.auditMode === "shadow") {
-      const alternateHarness = (current.supportedHarnesses ?? [current.harness]).find((harness) => harness !== seat.harness && !guarded(summary, current.id, harness));
-      if (alternateHarness) {
-        const from = `${seat.model}@${seat.harness}`;
-        seat.harness = alternateHarness;
-        seat.failureAdjusted = true;
-        adjustments.push({ seat: seat.seat, action: "changed_harness", from, to: `${seat.model}@${seat.harness}`, guard: active });
-      } else {
-        seat.skipDispatch = true;
-        seat.skipReason = `active failure guard for ${seat.model}@${seat.harness}`;
-        adjustments.push({ seat: seat.seat, action: "skipped_shadow", from: `${seat.model}@${seat.harness}`, guard: active });
-      }
+      seat.skipDispatch = true;
+      seat.skipReason = `active failure guard for ${seat.model}@${seat.harness}`;
+      adjustments.push({ seat: seat.seat, action: "skipped_shadow", from: `${seat.model}@${seat.harness}`, guard: active });
       continue;
     }
     const pairedExecutor = seats.find((item) => item.seat === seat.pairedExecutor) ?? seats.find((item) => item.role === "executor");

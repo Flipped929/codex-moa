@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.23.2
+
+- Add a native Codex monitor-only control plane for background work so the captain receives heartbeats, progress, silence/loss detection, ETA estimates, completion, and failure signals without replacing the requested GLM, Kimi, or DeepSeek executor.
+- Fail closed before job creation when required originating-thread notification binding cannot be resolved, while supporting explicit `required`, `best-effort`, and `off` notification policies for native parent/child supervision.
+- Separate terminal notification delivery state from captain acknowledgement so a handled result can no longer masquerade as a successfully delivered continuation.
+- Stream live CLI and persistent-protocol activity into supervisor snapshots, including active seat, current action, observed output, heartbeat age, and attention state.
+- Prefer switching Harness transport for the same requested model after a guarded route failure, then fall back across models or families only when necessary.
+
 ## 0.23.1
 
 - Add a protocol-neutral persistent runtime contract across KimiCode, DeepSeekHarness, ZCode, Pi, Claude Code, and Codex CLI while retaining `runtime="acp"` as a compatibility alias.

@@ -4,7 +4,7 @@ import { extractClaudeOutput, extractSessionId, extractUsage } from "../lib/pars
 import { prepareClaudeHome } from "../lib/cli-homes.mjs";
 import { randomUUID } from "node:crypto";
 
-export async function runClaudeSeat({ seat, prompt, config, timeoutMs, allowWrite = false, signal }) {
+export async function runClaudeSeat({ seat, prompt, config, timeoutMs, allowWrite = false, signal, onActivity }) {
   const cwd = resolveCwd(seat.cwd, config.defaultCwd);
   const { command, args: baseArgs } = commandParts(config.commands.claude);
   const provider = seat.claude?.provider;
@@ -43,7 +43,9 @@ export async function runClaudeSeat({ seat, prompt, config, timeoutMs, allowWrit
     timeoutMs,
     env: { CLAUDE_CONFIG_DIR: runtime.home },
     stripSecretEnv: config.safety?.stripSecretEnv !== false,
-    signal
+    signal,
+    onStdoutChunk: (chunk) => onActivity?.({ stream: "stdout", bytes: chunk.length }),
+    onStderrChunk: (chunk) => onActivity?.({ stream: "stderr", bytes: chunk.length })
   });
   const text = extractClaudeOutput(run.stdout);
   const sessionId = extractSessionId(run.stdout) ?? requestedSessionId;

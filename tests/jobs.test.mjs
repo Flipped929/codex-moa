@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { acknowledgeJobNotification, assertJobInputSupported, buildJobWorkerEnv, consumeJobSteering, createJobRecord, jobInputPath, listJobs, notifyJobCompletion, pauseJob, readJob, requestJobCancellation, runJobWorker, steerJob, writeJob } from "../src/lib/jobs.mjs";
+import { acknowledgeJobNotification, assertJobInputSupported, buildJobWorkerEnv, consumeJobSteering, createJobRecord, jobInputPath, listJobs, notifyJobCompletion, pauseJob, readJob, requestJobCancellation, resolveOriginThreadBinding, runJobWorker, steerJob, supervisorView, writeJob } from "../src/lib/jobs.mjs";
 
 async function fixture(name, input, root) {
   const jobId = `job-test-${name}`;
@@ -28,6 +28,29 @@ test("background workers inherit only an explicit environment allowlist", () => 
   assert.equal(env.CODEX_MOA_BLACKBOARD, "/tmp/moa");
   assert.equal(env.RANDOM_VALUE, undefined);
   assert.equal(env.OPENAI_API_KEY, undefined);
+});
+
+test("binds a background job to explicit, MCP metadata, or environment thread context", () => {
+  assert.deepEqual(resolveOriginThreadBinding({ explicit: "thread-explicit", extra: { _meta: { threadId: "thread-meta" } }, env: { CODEX_THREAD_ID: "thread-env" } }), { threadId: "thread-explicit", source: "explicit" });
+  assert.deepEqual(resolveOriginThreadBinding({ extra: { _meta: { "codex/threadId": "thread-meta" } }, env: { CODEX_THREAD_ID: "thread-env" } }), { threadId: "thread-meta", source: "mcp-request-meta" });
+  assert.deepEqual(resolveOriginThreadBinding({ extra: {}, env: { CODEX_THREAD_ID: "thread-env" } }), { threadId: "thread-env", source: "environment" });
+  assert.deepEqual(resolveOriginThreadBinding({ extra: {}, env: {} }), { threadId: null, source: null });
+});
+
+test("supervisor reports heartbeat loss and progress-based ETA", () => {
+  const createdAt = "2026-09-17T00:00:00.000Z";
+  const job = createJobRecord({ jobId: "job-test-supervisor", taskId: "task-supervisor", input: { task: "observe" } });
+  job.status = "running";
+  job.createdAt = createdAt;
+  job.startedAt = createdAt;
+  job.progress = { phase: "seat_started", completed: 1, total: 3, activeSeat: "glm-executor" };
+  job.supervisor = { ...job.supervisor, heartbeatAt: createdAt, lastProgressAt: createdAt, activeSeat: "glm-executor" };
+  const view = supervisorView(job, Date.parse(createdAt) + 40_000);
+  assert.equal(view.state, "lost");
+  assert.equal(view.attention, "worker-heartbeat-lost");
+  assert.equal(view.activeSeat, "glm-executor");
+  assert.equal(view.estimatedRemainingMs, 80_000);
+  assert.equal(view.etaConfidence, "low");
 });
 
 test("runs and persists an async job worker result", async () => {
@@ -84,7 +107,8 @@ test("binds completion to the origin thread, persists queue acceptance, and requ
     assert.equal(notified.notification.attempts, 1);
 
     const acknowledged = await acknowledgeJobNotification(jobId);
-    assert.equal(acknowledged.notification.state, "acknowledged");
+    assert.equal(acknowledged.notification.state, "delivered");
+    assert.equal(acknowledged.notification.handlingState, "acknowledged");
     assert.ok(acknowledged.notification.acknowledgedAt);
   } finally {
     if (previousJobHome === undefined) delete process.env.CODEX_MOA_JOB_HOME;
