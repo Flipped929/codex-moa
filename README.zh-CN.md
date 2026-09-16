@@ -90,7 +90,8 @@ flowchart TB
 - Pi、Claude Code、Codex CLI、KimiCode、ZCode、DeepSeekHarness adapter。
 - `moa_capabilities` 声明能力矩阵和 60 秒内的只读文本/工具/图片实测。
 - `moa_captain_usage` 保存由 Codex 读取的 GPT 额度快照，并据此动态调整建议的外部分工比例；非 GPT 主控不会套用该策略。
-- `auto` 模式下，已确认的 GPT/OpenAI 主控会把适合的简单执行交给快速外部席位，自身保留规划、阶段证据复核、整合和最终答复；复杂外部路线按质量优先、成本和速度次优进行比较。
+- `auto` 模式下，已确认的 GPT/OpenAI 主控会把适合的简单和边界明确的执行交给外部席位。L3 最高复杂度实现由页面主控亲自负责架构、关键实现、集成和修复；外部路线只承担限定支持，并按质量优先、成本和速度次优进行比较。
+- 编排模式与执行归属分离，支持 `executionOwner=auto|captain|hybrid|external`。L3 默认归主控；意外配置的外部核心执行席位会在 Harness 启动前被拦截。
 - 持久记录模型/Harness 的去敏失败指纹；确定性失败或重复瞬态失败会触发临时保护，自动任务绕开已知失败路线，成功恢复后解除保护但保留历史。
 - 成本账本按“模型 × Harness”记录完成率、耗时和输出 TPS。自动偏好至少需要 3 个样本且先通过 75% 完成率门槛，TPS 只占次要权重。
 - 自动 L2/L3 计划采用 GLM/Kimi 异族订阅主审，并让 DeepSeek 按峰谷价抽样或全量并行影子审计。影子失败不会阻塞任务，但其发现、TPS、成本、关键路径延迟及后续采纳情况都会记录到 `moa_audit_metrics`。
@@ -114,6 +115,8 @@ flowchart TB
 - 真实 ACP smoke test。
 
 外部写操作默认关闭。只有同时设置 `allowWrite=true` 和 seat 级 `autoApprove` 时，seat 才具备写权限。
+
+最高复杂度任务优先选择 GPT/OpenAI 页面模型。Codex MOA 可以提出切换建议，但绝不会自动更换页面模型或思考强度。GPT 额度、订阅余额、峰谷价格、TPS 和历史完成率只调整外部支持比例与路线，不得转移 L3 核心执行权。
 
 ## 环境要求
 

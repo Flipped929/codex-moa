@@ -69,6 +69,8 @@ export function captainAllocation(captain, usage) {
     remainingPercent: remaining,
     externalTargetPercent,
     captainTargetPercent: 100 - externalTargetPercent,
+    qualityFloor: "GPT quota may change the amount of support work delegated, but it must not transfer L3 core architecture, critical implementation, integration, or repair away from the page captain.",
+    coreOwnershipMutable: false,
     observedAt: usage.observedAt,
     resetsAt: primary.resetsAt,
     guidance: tier === "balanced"

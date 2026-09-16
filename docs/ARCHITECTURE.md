@@ -24,6 +24,8 @@ Codex captain
 - Verify evidence.
 - Apply the final patch or write the final answer.
 
+For L3 implementation, these are execution duties, not only review duties: the page-selected captain owns architecture, critical implementation, integration, and repair. External seats may research, prototype a bounded component, test, benchmark, or audit. `executionOwner="hybrid"` is an explicit bounded exception; `executionOwner="external"` is reserved for an explicit user request. Neither quota pressure nor route telemetry can silently cross this ownership boundary.
+
 ## External responsibilities
 
 - Pi: default Kimi/GLM execution and optional DeepSeek route.
@@ -33,7 +35,7 @@ Codex captain
 - ZCode: native GLM compatibility fallback.
 - DeepSeekHarness: independent audit and verification.
 
-Automatic L2/L3 plans form an audit fan-out after execution. A complementary GLM/Kimi subscription auditor is the gate; a sampled DeepSeek auditor is a non-gating shadow. Both run in the same DAG layer. High-risk L3 tasks always include both. DeepSeek Harness selection is a deterministic, reversible experiment across Codex CLI, Pi, and DSH.
+Automatic L2 plans form an audit fan-out after external execution. A complementary GLM/Kimi subscription auditor is the gate; a sampled DeepSeek auditor is a non-gating shadow. Both run in the same DAG layer. L3 captain-primary plans instead use external seats as architecture and audit evidence around foreground captain execution; they do not equate completion of a background support job with completion of the task. DeepSeek Harness selection is a deterministic, reversible experiment across Codex CLI, Pi, and DSH.
 
 ## CC Switch authority
 

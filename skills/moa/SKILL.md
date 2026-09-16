@@ -31,7 +31,7 @@ Only the English command words above are canonical. Do not advertise or interpre
 
 Never combine `optimize`, approval, and application in one implicit step. Repeated optimization runs must reuse an active proposal with the same policy patch instead of creating duplicates.
 
-When this Skill is selected implicitly, read `moa_mode` first. In `off`, keep work in the Codex captain. In `auto`, a confirmed GPT/OpenAI captain delegates suitable L0 execution to one fast external seat while retaining planning, verification, integration, and the final answer; an opaque or non-OpenAI captain keeps L0 locally. Route L1-L3 by capability. In `force`, ensure at least one external seat.
+When this Skill is selected implicitly, read `moa_mode` first. In `off`, keep work in the Codex captain. In `auto`, a confirmed GPT/OpenAI captain delegates suitable L0 execution to one fast external seat while retaining planning, verification, integration, and the final answer; an opaque or non-OpenAI captain keeps L0 locally. L1 is normally external, L2 is hybrid, and L3 implementation is captain-primary. In `force`, ensure at least one external support seat, but do not transfer L3 core ownership.
 
 ## Mandatory workflow
 
@@ -39,6 +39,8 @@ When this Skill is selected implicitly, read `moa_mode` first. In `off`, keep wo
 2. Call `moa_quota` or `moa_health` before high-cost dispatch when quota, provider health, or recent cost may affect model choice. When the captain is GPT/OpenAI, read the current Codex account limits and update `moa_captain_usage` before planning; the normalized remaining percentage reserves scarce GPT capacity for planning, adjudication, integration, and the final answer.
 3. Call `moa_plan` before any external dispatch.
 4. Inspect the plan and confirm the selected models and Harness routes match the task.
+   - Inspect `executionPolicy`. When `requiresForegroundCaptain=true`, the page captain must personally perform core architecture, critical implementation, integration, and repair in the Codex conversation. External seats may only handle bounded research, prototypes, tests, benchmarks, or independent audits.
+   - Never create an L3 external executor assignment merely to save GPT quota. Use `executionOwner="hybrid"` only for clearly bounded modules. Use `executionOwner="external"` only when the user explicitly requests external core execution. If the loaded MCP schema does not expose `executionOwner`, keep L3 core work in the captain and do not dispatch an external executor.
 5. Call `moa_delegate` when Codex must assign exact models, or `moa_run` for policy-driven routing, only for interactive runs expected to finish within 60 seconds.
 6. Use `moa_start` instead of a synchronous tool whenever `timeoutMs > 60000`, `allowWrite=true`, ACP is requested, or the task involves SSH/remote hosts, benchmarks, load tests, model loading, or multiple execution stages. This rule outranks exact-model assignment because `moa_start` also accepts `assignments`.
 7. Call `moa_audit` for DeepSeekHarness-only audits.
@@ -57,6 +59,7 @@ A background job does not make the Codex conversation interaction-safe unless th
 - If one immediate observation is necessary, use at most one `moa_job_wait` call of 10 seconds or less, then yield when the job remains active.
 - Put new constraints for an active external job through `$codex-moa job steer <job-id> <message>` so they are delivered durably at the next safe DAG boundary.
 - Split substantial captain-side verification or integration into a later turn after the background job settles. Foreground work expected to exceed 60 seconds should not follow `moa_start` in the same turn.
+- Never put an entire captain-primary L3 implementation into `moa_start`. Start background jobs only for bounded support contracts; their completion is evidence for the captain, not completion of the overall task.
 - A `delivered` notification means the Codex daemon accepted the queued message; only `acknowledged` proves the captain handled it. Preserve that distinction in status reports.
 
 ## Safety rules
@@ -84,6 +87,7 @@ Use `runtime="acp"` when a related multi-turn task needs a persistent process an
 - Use `moa_seats` to inspect seat state and worktrees.
 - Use `moa_health` for provider health, cost totals, memory, checkpoints, and routing experiments.
 - Set `budget` limits for long or high-cost runs; unstarted DAG nodes stop when a limit is exceeded.
+- GPT quota, provider price, TPS, and subscription balance may change support-task allocation, but they must never transfer L3 core ownership away from the page captain.
 - Automatic routing avoids `critical`/`inactive` providers. Explicit assignments are never silently rerouted.
 - Use `moa_job_status`, `moa_job_steer`, `moa_job_pause`, `moa_job_resume`, `moa_job_cancel`, `moa_job_notify`, and `moa_job_ack` for long-running work. Keep `moa_job_wait` at 10 seconds or less, never loop it in one turn, and return control to the user between observations.
 - Use `moa_worktrees` to inspect partial writes, check/apply/revert patches, and prune stale worktrees.
@@ -159,9 +163,10 @@ Accept `kimi-k2.8` as a user-facing alias for canonical `kimi-2.8`.
 - `GLM-5.3`: deep implementation, cross-file refactoring, debugging, test design, and repair through Pi. ZCode is an explicit compatibility fallback only.
 - `GLM-5.3-flash`: routine implementation, mechanical edits, test execution, and throughput-sensitive batch work.
 - `DeepSeek-flash`: independent audit, security review, failure analysis, adversarial verification, and difficult coding when its provider balance and price window are favorable.
-- Automatic L2/L3 implementation plans use a cross-family GLM/Kimi subscription audit as the gate. DeepSeek runs as a parallel non-gating shadow audit at a deterministic peak/off-peak sample rate for L2 and at 100% for L3. Shadow failure is observable but does not fail the task; a shadow block requires captain adjudication.
+- Automatic L2 and explicitly hybrid/external L3 implementation plans use a cross-family GLM/Kimi subscription audit as the gate. DeepSeek runs as a parallel non-gating shadow audit at a deterministic peak/off-peak sample rate for L2 and at 100% for delegated L3 execution. Captain-primary L3 uses bounded architecture/audit support around the captain's foreground work instead of pretending an external execution DAG owns the task. Shadow failure is observable but does not fail the task; a shadow block requires captain adjudication.
+- Automatic L3 implementation is captain-primary. The page captain owns architecture, critical code, integration, and repair; Kimi/GLM support bounded research, prototypes, tests, and benchmarks, while DeepSeek provides independent audit. A full external L3 executor is opt-in, never quota-driven.
 - With a confirmed GPT/OpenAI captain in `auto`, delegate suitable simple execution to a fast GLM/Kimi subscription route. GPT still defines the contract, verifies evidence, resolves conflicts, integrates, and writes the final answer. DeepSeek remains price/quota-aware rather than becoming the default paid executor.
-- Complex implementation may also run on capable external seats. Compare routes within the same task level using completion, captain acceptance, tests, and quality first; use known cost, latency, and TPS only as tie-breakers. Routing changes remain proposal-first.
+- L2 implementation may run bounded modules on capable external seats. L3 external work must be decomposed into support contracts unless the user explicitly selects external core execution. Compare routes within the same task level using completion, captain acceptance, tests, and quality first; use known cost, latency, and TPS only as tie-breakers. Routing changes remain proposal-first.
 - DeepSeek shadow audits run a reversible Harness experiment across Codex CLI, Pi, and DSH. Do not infer model quality from one Harness failure.
 - Pi is the default execution route for both Kimi and GLM, including automatic routing, quota balancing, and explicit Skills. KimiCode and ZCode remain explicit compatibility fallbacks. DeepSeekHarness primarily handles DeepSeek audits and remains a multi-provider fallback.
 - CLI upgrades are detect-only. `moa_doctor(checkLatest=true)` may report a newer version, but codex-moa never upgrades Pi, Claude Code, or Codex CLI; CC Switch or the user owns installation changes.

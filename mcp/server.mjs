@@ -40,6 +40,7 @@ import { reconcileAuditPairing } from "../src/lib/provider-health.mjs";
 const MODEL_IDS = ["kimi-k3", "kimi-2.8", "kimi-k2.8", "GLM-5.3", "GLM-5.3-flash", "DeepSeek-flash"];
 const modelSchema = z.enum(MODEL_IDS);
 const orchestrationModeSchema = z.enum(["off", "auto", "force"]);
+const executionOwnerSchema = z.enum(["auto", "captain", "hybrid", "external"]);
 const roleSchema = z.enum(["executor", "architect", "reviewer", "auditor", "vision", "researcher"]);
 const reasoningEffortSchema = z.enum(["off", "low", "medium", "high", "xhigh", "max"]);
 const budgetSchema = z.object({
@@ -607,6 +608,7 @@ server.registerTool("moa_plan", {
     task: z.string().min(1).describe("Task goal and acceptance criteria."),
     captainModel: z.string().optional().describe("Codex main model currently selected by the user."),
     orchestrationMode: orchestrationModeSchema.optional(),
+    executionOwner: executionOwnerSchema.optional().default("auto").describe("Core execution ownership. L3 implementation defaults to captain; hybrid/external must reflect explicit task scoping or user intent."),
     continuityKey: z.string().optional(),
     memoryKey: z.string().optional(),
     stakes: z.enum(["low", "medium", "high"]).optional().default("medium"),
@@ -688,6 +690,7 @@ server.registerTool("moa_start", {
     routingExperiment: z.boolean().optional().default(true),
     captainModel: z.string().optional(),
     orchestrationMode: orchestrationModeSchema.optional(),
+    executionOwner: executionOwnerSchema.optional().default("auto"),
     continuityKey: z.string().optional(),
     memoryKey: z.string().optional(),
     stakes: z.enum(["low", "medium", "high"]).optional().default("medium"),
@@ -860,6 +863,7 @@ server.registerTool("moa_run", {
     routingExperiment: z.boolean().optional().default(true),
     captainModel: z.string().optional().describe("Codex main model currently selected by the user."),
     orchestrationMode: orchestrationModeSchema.optional(),
+    executionOwner: executionOwnerSchema.optional().default("auto"),
     continuityKey: z.string().optional(),
     memoryKey: z.string().optional(),
     stakes: z.enum(["low", "medium", "high"]).optional().default("medium"),
@@ -940,6 +944,7 @@ server.registerTool("moa_delegate", {
     routingExperiment: z.boolean().optional().default(true),
     captainModel: z.string().optional(),
     orchestrationMode: orchestrationModeSchema.optional(),
+    executionOwner: executionOwnerSchema.optional().default("auto"),
     allowWrite: z.boolean().optional().default(false),
     respectQuota: z.boolean().optional().default(true),
     allowDepleted: z.boolean().optional().default(false),

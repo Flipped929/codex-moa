@@ -255,6 +255,12 @@ export async function runMoA(input, deps = {}) {
     captainAllocation: allocation,
     routePerformance: summarizeCostLedger(ledger).routes
   });
+  if (plan.executionPolicy?.dispatchBlocked) {
+    const error = new Error(`[${plan.executionPolicy.blockCode}] ${plan.executionPolicy.instruction} Remove external executor/build assignments, or explicitly select executionOwner=hybrid for bounded modules or executionOwner=external only when the user requested external core execution.`);
+    error.code = plan.executionPolicy.blockCode;
+    error.executionPolicy = plan.executionPolicy;
+    throw error;
+  }
   let healthRouting = null;
   let providerHealth = null;
   if (input.respectHealth !== false && !input.assignments?.length && !input.seats?.length) {

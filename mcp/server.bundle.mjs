@@ -29144,17 +29144,19 @@ function planMoA(input2 = {}, deps = {}) {
   const explicitSeats = normalizeSeats(input2.seats);
   const orchestrationMode = input2.orchestrationMode ?? "auto";
   if (!["off", "auto", "force"].includes(orchestrationMode)) throw new Error(`Invalid orchestrationMode: ${orchestrationMode}`);
-  let level = "L1";
-  if (explicitAssignments) level = "explicit";
-  else if (!explicitSeats && orchestrationMode === "off") level = "L0";
-  else if (stakes === "high" || HIGH_RISK_RE.test(task)) level = "L3";
-  else if (stakes === "medium" || COMPLEX_RE.test(task)) level = "L2";
-  else if (SIMPLE_RE.test(task)) level = "L0";
-  const classifiedLevel = level;
+  const requestedExecutionOwner = input2.executionOwner ?? "auto";
+  if (!["auto", "captain", "hybrid", "external"].includes(requestedExecutionOwner)) throw new Error(`Invalid executionOwner: ${requestedExecutionOwner}`);
+  let classifiedLevel = "L1";
+  if (stakes === "high" || HIGH_RISK_RE.test(task)) classifiedLevel = "L3";
+  else if (stakes === "medium" || COMPLEX_RE.test(task)) classifiedLevel = "L2";
+  else if (SIMPLE_RE.test(task)) classifiedLevel = "L0";
+  if ((mode === "audit" || mode === "review") && classifiedLevel !== "L3") classifiedLevel = "L2";
+  let level = explicitAssignments ? "explicit" : !explicitSeats && orchestrationMode === "off" ? "L0" : classifiedLevel;
   const delegateSimpleForOpenAiCaptain = !explicitAssignments && !explicitSeats && orchestrationMode === "auto" && level === "L0" && policy.routing?.delegateSimpleForOpenAiCaptain !== false && input2.captain?.family === "openai";
   if (delegateSimpleForOpenAiCaptain) level = "L1";
   if (!explicitAssignments && !explicitSeats && orchestrationMode === "force" && level === "L0") level = "L1";
-  if (!explicitAssignments && orchestrationMode !== "off" && (mode === "audit" || mode === "review")) level = level === "L3" ? "L3" : "L2";
+  const l3CaptainPrimary = classifiedLevel === "L3" && mode === "implement" && policy.routing?.l3CaptainPrimary !== false;
+  const executionOwner = requestedExecutionOwner !== "auto" ? requestedExecutionOwner : l3CaptainPrimary ? "captain" : orchestrationMode === "off" && !explicitAssignments ? "captain" : classifiedLevel === "L2" || classifiedLevel === "L3" ? "hybrid" : level === "L0" ? "captain" : "external";
   let plannedSeats;
   if (explicitAssignments) {
     plannedSeats = explicitAssignments.map((assignment, index) => applyRoleDefaults(createExplicitSeat(assignment, index, models), roles));
@@ -29163,6 +29165,7 @@ function planMoA(input2 = {}, deps = {}) {
     if (level === "L0") seatNames = [];
     else if (level === "L1") seatNames = ["pi-executor-fast"];
     else if (level === "L2") seatNames = ["pi-glm-executor-deep", "dsh-auditor-fast"];
+    else if (l3CaptainPrimary && executionOwner === "captain") seatNames = ["kimi-architect", "dsh-auditor-deep"];
     else seatNames = ["pi-glm-executor-deep", "kimi-architect", "dsh-auditor-deep"];
     if (vision && !seatNames.includes("kimi-vision")) seatNames.push("kimi-vision");
     if (level === "L2" && mode === "review" && policy.routing?.preferFastForMediumReview && seatNames[0] === "pi-glm-executor-deep") {
@@ -29247,6 +29250,22 @@ function planMoA(input2 = {}, deps = {}) {
     roles
   });
   const performanceSignals = routePerformanceSignals(plannedSeats, deps.routePerformance);
+  const externalCoreSeats = plannedSeats.filter((seat) => seat.role === "executor" || ["edit", "build"].includes(seat.mode));
+  const dispatchBlocked = l3CaptainPrimary && executionOwner === "captain" && externalCoreSeats.length > 0;
+  const recommendGptCaptain = l3CaptainPrimary && input2.captain?.family && !["openai", "unknown"].includes(input2.captain.family);
+  const executionPolicy = {
+    owner: executionOwner,
+    requestedOwner: requestedExecutionOwner,
+    classifiedLevel,
+    captainPrimary: l3CaptainPrimary && executionOwner === "captain",
+    requiresForegroundCaptain: l3CaptainPrimary && executionOwner === "captain",
+    quotaMayChangeCoreOwnership: false,
+    externalCoreSeats: externalCoreSeats.map((seat) => seat.seat),
+    dispatchBlocked,
+    blockCode: dispatchBlocked ? "CAPTAIN_PRIMARY_REQUIRED" : null,
+    instruction: l3CaptainPrimary && executionOwner === "captain" ? "The page-selected captain owns the architecture, critical implementation, integration, and repair. External seats are support-only; do not treat their background completion as task completion." : executionOwner === "hybrid" ? "External executors may implement bounded modules, but the page-selected captain owns critical architecture, integration, and final repair." : executionOwner === "external" ? "External seats own execution only because external core execution was explicitly selected; the captain still verifies and integrates." : "The page-selected captain keeps the work in the current Codex conversation.",
+    recommendation: recommendGptCaptain ? "For highest-quality L3 execution, use a GPT/OpenAI page captain. Codex MOA will not switch the page model automatically." : input2.captain?.family === "unknown" && l3CaptainPrimary ? "The page model is opaque. Keep core execution in the captain; if it is not GPT, consider switching the page model before L3 implementation." : null
+  };
   for (const seat of plannedSeats) {
     const requested = seat.reasoningEffort ?? input2.reasoningEffort ?? null;
     seat.reasoningRequested = requested;
@@ -29309,8 +29328,11 @@ function planMoA(input2 = {}, deps = {}) {
       simpleDelegated: delegateSimpleForOpenAiCaptain,
       classifiedLevel,
       effectiveLevel: level,
-      rationale: delegateSimpleForOpenAiCaptain ? "Confirmed OpenAI/GPT captain keeps planning, verification, integration, and final answer while a fast external seat handles routine execution." : null
+      executionOwner,
+      coreExecutionDelegated: externalCoreSeats.length > 0,
+      rationale: delegateSimpleForOpenAiCaptain ? "Confirmed OpenAI/GPT captain keeps planning, verification, integration, and final answer while a fast external seat handles routine execution." : executionPolicy.instruction
     },
+    executionPolicy,
     captainAllocation: deps.captainAllocation ?? { active: false, reason: "captain usage was not supplied" },
     performanceSignals,
     seats: plannedSeats,
@@ -29325,6 +29347,7 @@ function planMoA(input2 = {}, deps = {}) {
     rationale: [
       `classified as ${level}`,
       delegateSimpleForOpenAiCaptain ? "GPT captain delegated routine execution and retained quality control" : null,
+      l3CaptainPrimary && executionOwner === "captain" ? "L3 core execution retained by the page-selected captain" : null,
       `orchestration mode: ${orchestrationMode}`,
       `${plannedSeats.length} external seat(s)`,
       plannedSeats.some((seat) => seat.model) ? `models: ${plannedSeats.map((seat) => seat.model).join(", ")}` : "no external model",
@@ -29345,7 +29368,7 @@ var init_router = __esm({
     init_limits();
     init_task_graph();
     init_roles();
-    HIGH_RISK_RE = /(security|auth|crypto|migration|architecture|payment|credential|deploy|rollback|数据库|架构|安全|支付|迁移|密钥)/i;
+    HIGH_RISK_RE = /(security|auth|crypto|migration|architecture|payment|credential|deploy|rollback|real[- ]?time|multi[- ]?model|cascade|hardware|production|safety|数据库|架构|安全|支付|迁移|密钥|实时|多模型|级联|硬件|生产)/i;
     COMPLEX_RE = /(refactor|implement|fix|debug|test|migrate|performance|并发|重构|实现|修复|调试|测试|性能)/i;
     SIMPLE_RE = /^(explain|summarize|format|what is|how do i|解释|总结|格式化|是什么|怎么写)/i;
   }
@@ -37611,6 +37634,8 @@ function captainAllocation(captain, usage) {
     remainingPercent: remaining,
     externalTargetPercent,
     captainTargetPercent: 100 - externalTargetPercent,
+    qualityFloor: "GPT quota may change the amount of support work delegated, but it must not transfer L3 core architecture, critical implementation, integration, or repair away from the page captain.",
+    coreOwnershipMutable: false,
     observedAt: usage.observedAt,
     resetsAt: primary.resetsAt,
     guidance: tier === "balanced" ? "Keep GPT on planning, adjudication, integration, and the final answer; delegate substantial execution." : "Reserve GPT for global planning, evidence adjudication, conflict resolution, integration, and the final answer; delegate execution and first-pass review aggressively."
@@ -38082,6 +38107,12 @@ async function runMoA(input2, deps = {}) {
     captainAllocation: allocation,
     routePerformance: summarizeCostLedger(ledger).routes
   });
+  if (plan.executionPolicy?.dispatchBlocked) {
+    const error62 = new Error(`[${plan.executionPolicy.blockCode}] ${plan.executionPolicy.instruction} Remove external executor/build assignments, or explicitly select executionOwner=hybrid for bounded modules or executionOwner=external only when the user requested external core execution.`);
+    error62.code = plan.executionPolicy.blockCode;
+    error62.executionPolicy = plan.executionPolicy;
+    throw error62;
+  }
   let healthRouting = null;
   let providerHealth = null;
   if (input2.respectHealth !== false && !input2.assignments?.length && !input2.seats?.length) {
@@ -49715,6 +49746,7 @@ init_provider_health();
 var MODEL_IDS = ["kimi-k3", "kimi-2.8", "kimi-k2.8", "GLM-5.3", "GLM-5.3-flash", "DeepSeek-flash"];
 var modelSchema = _enum2(MODEL_IDS);
 var orchestrationModeSchema = _enum2(["off", "auto", "force"]);
+var executionOwnerSchema = _enum2(["auto", "captain", "hybrid", "external"]);
 var roleSchema = _enum2(["executor", "architect", "reviewer", "auditor", "vision", "researcher"]);
 var reasoningEffortSchema = _enum2(["off", "low", "medium", "high", "xhigh", "max"]);
 var budgetSchema = object2({
@@ -50255,6 +50287,7 @@ server.registerTool("moa_plan", {
     task: string2().min(1).describe("Task goal and acceptance criteria."),
     captainModel: string2().optional().describe("Codex main model currently selected by the user."),
     orchestrationMode: orchestrationModeSchema.optional(),
+    executionOwner: executionOwnerSchema.optional().default("auto").describe("Core execution ownership. L3 implementation defaults to captain; hybrid/external must reflect explicit task scoping or user intent."),
     continuityKey: string2().optional(),
     memoryKey: string2().optional(),
     stakes: _enum2(["low", "medium", "high"]).optional().default("medium"),
@@ -50335,6 +50368,7 @@ server.registerTool("moa_start", {
     routingExperiment: boolean2().optional().default(true),
     captainModel: string2().optional(),
     orchestrationMode: orchestrationModeSchema.optional(),
+    executionOwner: executionOwnerSchema.optional().default("auto"),
     continuityKey: string2().optional(),
     memoryKey: string2().optional(),
     stakes: _enum2(["low", "medium", "high"]).optional().default("medium"),
@@ -50508,6 +50542,7 @@ server.registerTool("moa_run", {
     routingExperiment: boolean2().optional().default(true),
     captainModel: string2().optional().describe("Codex main model currently selected by the user."),
     orchestrationMode: orchestrationModeSchema.optional(),
+    executionOwner: executionOwnerSchema.optional().default("auto"),
     continuityKey: string2().optional(),
     memoryKey: string2().optional(),
     stakes: _enum2(["low", "medium", "high"]).optional().default("medium"),
@@ -50586,6 +50621,7 @@ server.registerTool("moa_delegate", {
     routingExperiment: boolean2().optional().default(true),
     captainModel: string2().optional(),
     orchestrationMode: orchestrationModeSchema.optional(),
+    executionOwner: executionOwnerSchema.optional().default("auto"),
     allowWrite: boolean2().optional().default(false),
     respectQuota: boolean2().optional().default(true),
     allowDepleted: boolean2().optional().default(false),

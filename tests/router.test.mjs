@@ -84,8 +84,40 @@ test("complex task uses a complementary subscription audit gate", () => {
   assert.equal(plan.seats[1].auditMode, "gate");
 });
 
-test("high-risk task runs subscription gate and DeepSeek shadow in parallel", () => {
-  const plan = planMoA({ task: "review authentication migration", stakes: "high" }, { models, scheduleState });
+test("L3 implementation keeps core execution in the page captain", () => {
+  const plan = planMoA({ task: "implement a multi-model real-time safety cascade", stakes: "high", captain: { family: "openai", model: "gpt-6-astra" } }, { models, scheduleState });
+  assert.equal(plan.level, "L3");
+  assert.deepEqual(plan.seats.map((seat) => seat.seat), ["kimi-architect", "dsh-auditor-deep"]);
+  assert.equal(plan.seats.some((seat) => seat.role === "executor"), false);
+  assert.equal(plan.executionPolicy.owner, "captain");
+  assert.equal(plan.executionPolicy.requiresForegroundCaptain, true);
+  assert.equal(plan.executionPolicy.quotaMayChangeCoreOwnership, false);
+  assert.equal(plan.executionPolicy.dispatchBlocked, false);
+});
+
+test("explicit L3 executor assignments are blocked unless core delegation is deliberate", () => {
+  const blocked = planMoA({
+    task: "implement a multi-model real-time safety cascade",
+    stakes: "high",
+    assignments: [{ model: "GLM-5.3", role: "executor", mode: "build" }]
+  }, { models, scheduleState });
+  assert.equal(blocked.level, "explicit");
+  assert.equal(blocked.executionPolicy.owner, "captain");
+  assert.equal(blocked.executionPolicy.dispatchBlocked, true);
+  assert.equal(blocked.executionPolicy.blockCode, "CAPTAIN_PRIMARY_REQUIRED");
+
+  const hybrid = planMoA({
+    task: "implement a bounded module for a multi-model real-time safety cascade",
+    stakes: "high",
+    executionOwner: "hybrid",
+    assignments: [{ model: "GLM-5.3", role: "executor", mode: "build" }]
+  }, { models, scheduleState });
+  assert.equal(hybrid.executionPolicy.owner, "hybrid");
+  assert.equal(hybrid.executionPolicy.dispatchBlocked, false);
+});
+
+test("deliberate hybrid L3 routing retains subscription gate and DeepSeek shadow", () => {
+  const plan = planMoA({ task: "review authentication migration", stakes: "high", executionOwner: "hybrid" }, { models, scheduleState });
   assert.equal(plan.level, "L3");
   assert.deepEqual(plan.seats.map((seat) => seat.seat), ["pi-glm-executor-deep", "kimi-architect", "cross-family-auditor-gate", "deepseek-auditor-shadow"]);
   assert.deepEqual(plan.seats.slice(0, 2).map((seat) => seat.harness), ["pi", "pi"]);
@@ -93,6 +125,13 @@ test("high-risk task runs subscription gate and DeepSeek shadow in parallel", ()
   assert.equal(plan.seats[3].auditMode, "shadow");
   assert.equal(plan.seats[3].blocking, false);
   assert.deepEqual(plan.graph.layers.at(-1), ["cross-family-auditor-gate", "deepseek-auditor-shadow"]);
+});
+
+test("L3 with a known non-GPT captain recommends GPT without switching models", () => {
+  const plan = planMoA({ task: "implement a production safety architecture", stakes: "high", captain: { family: "moonshot", model: "kimi-k3" } }, { models, scheduleState });
+  assert.equal(plan.executionPolicy.owner, "captain");
+  assert.match(plan.executionPolicy.recommendation, /GPT\/OpenAI/);
+  assert.equal(plan.captain.model, "kimi-k3");
 });
 
 test("vision flag adds Kimi vision seat", () => {

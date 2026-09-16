@@ -37,6 +37,7 @@
   },
   "routing": {
     "delegateSimpleForOpenAiCaptain": true,
+    "l3CaptainPrimary": true,
     "preferFastForMediumReview": true,
     "quotaLowThreshold": 10,
     "balanceSubscriptions": true,

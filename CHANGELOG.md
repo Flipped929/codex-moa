@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.23.0
+
+- Make the page-selected captain the primary executor for L3 implementation: it owns architecture, critical implementation, integration, and repair while external seats provide bounded architecture, research, testing, benchmarking, and audit support.
+- Add explicit `executionOwner=auto|captain|hybrid|external` routing. L3 defaults to `captain`; external core execution is rejected before any Harness starts unless `hybrid` or `external` was deliberately selected.
+- Keep GPT quota, provider balance, price, TPS, and completion evidence as support-routing signals without allowing them to transfer L3 core ownership.
+- Recommend a GPT page captain for L3 when the selected model is known to be non-GPT, without silently changing the page model or its reasoning effort.
+- Preserve compatibility with already-open sessions: the Skill avoids new MCP arguments against older servers, and compatible installation retains every prior plugin cache directory.
+
 ## 0.22.2
 
 - Bind background jobs to the originating Codex thread and deliver terminal-state continuation prompts through the official `codex queue` interface.

@@ -215,6 +215,8 @@ Persistent JSON stores use an exclusive lock file plus atomic rename. Seat regis
 
 `moa_plan` now returns a DAG with nodes, edges, and execution layers. Architect/research seats precede executors; auditors/reviewers depend on executors.
 
+L3 implementation is deliberately not represented as a complete background DAG when `executionPolicy.owner` is `captain`. The foreground page captain performs the core work, while any returned graph covers bounded support only. Callers must not announce task completion merely because those support nodes reached a terminal state. If an explicit executor is combined with captain-owned L3 work, orchestration fails with `CAPTAIN_PRIMARY_REQUIRED` before any external process starts.
+
 ## Role registry
 
 Built-in role defaults live in `roles/`. User overrides live in:

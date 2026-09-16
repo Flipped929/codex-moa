@@ -67,3 +67,39 @@ test("blocks downstream DAG nodes when a task budget is exceeded", async () => {
     Object.assign(process.env, previous);
   }
 });
+
+test("refuses external core execution for L3 unless ownership is explicitly overridden", async () => {
+  const root = await mkdtemp(join(tmpdir(), "codex-moa-captain-primary-"));
+  const previous = { ...process.env };
+  process.env.CODEX_MOA_COST_LEDGER = join(root, "cost.jsonl");
+  process.env.CODEX_MOA_FAILURE_MEMORY = join(root, "failures.jsonl");
+  process.env.CODEX_MOA_ROUTING_EXPERIMENT_PATH = join(root, "routing.json");
+  process.env.CODEX_MOA_EVOLUTION_HOME = join(root, "evolution");
+  process.env.CODEX_MOA_CONTINUITY_PATH = join(root, "continuity.json");
+  const calls = [];
+  const config = { blackboardDir: join(root, "blackboard"), defaultCwd: root, maxOutputChars: 1000, quota: { refreshOnRun: false }, safety: { stripSecretEnv: true } };
+  try {
+    await assert.rejects(() => runMoA({
+      taskId: "captain-primary-task",
+      task: "Implement a production multi-model real-time safety cascade",
+      cwd: root,
+      stakes: "high",
+      assignments: [{ seat: "executor", model: "GLM-5.3-flash", role: "executor", mode: "build" }],
+      worktree: false,
+      respectQuota: false,
+      respectHealth: false,
+      routingExperiment: false,
+      contextPack: false
+    }, {
+      config,
+      models,
+      schedule: {},
+      policy,
+      adapterFor: () => async ({ seat }) => { calls.push(seat.seat); }
+    }), /CAPTAIN_PRIMARY_REQUIRED/);
+    assert.deepEqual(calls, []);
+  } finally {
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];
+    Object.assign(process.env, previous);
+  }
+});

@@ -19,6 +19,8 @@ MCP stdio does not receive the current Codex session model by default, so explic
 
 When the captain is explicitly confirmed as GPT/OpenAI and mode is `auto`, routine L0 execution is delegated to a fast external seat. This preserves GPT capacity for the parts where its higher capability matters: task contracts, staged evidence review, adjudication, integration, and the final answer. An opaque captain is never guessed from CC Switch or global configuration.
 
+For L3 implementation, the page-selected captain is also the primary executor. It owns architecture, critical implementation, integration, and repair. External seats are support-only unless `executionOwner="hybrid"` scopes a bounded module or the user explicitly requests `executionOwner="external"`. GPT quota may affect support volume, never core ownership. When a known non-GPT page captain receives an L3 task, Codex MOA recommends switching the page model to GPT but never changes it automatically.
+
 ## Usage
 
 Inspect the resolved captain:

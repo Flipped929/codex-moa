@@ -23,7 +23,8 @@ Codex MOA turns Codex into the captain of a heterogeneous multi-model runtime:
 - Detects CLI versions and optional latest releases without performing automatic upgrades.
 - Exposes declared and bounded live capability checks through `moa_capabilities`.
 - Tracks normalized GPT captain quota through `moa_captain_usage` and recommends a dynamic external-work share without ever replacing the page-selected captain.
-- In `auto`, a confirmed GPT/OpenAI captain delegates suitable routine execution while retaining planning, staged evidence review, integration, and the final answer; complex external routes are compared by quality before cost and speed.
+- In `auto`, a confirmed GPT/OpenAI captain delegates suitable routine and bounded execution. For L3 implementation, the page captain personally owns architecture, critical implementation, integration, and repair; external routes provide scoped support and are compared by quality before cost and speed.
+- Separates orchestration mode from execution ownership with `executionOwner=auto|captain|hybrid|external`. L3 defaults to `captain`, and accidental external core assignments are blocked before a Harness starts.
 - Persists redacted model/Harness failure signatures, temporarily guards deterministic or repeated failures, and routes automatic work away from known-bad paths until recovery.
 - Records completion rate, latency, and output TPS per model/Harness route. Automatic preference requires at least three samples and a 75% completion gate; TPS remains a secondary tie-breaker.
 - Uses complementary GLM/Kimi subscription audits as gates and samples DeepSeek as a parallel non-gating shadow auditor for L2, with mandatory dual audit for L3. `moa_audit_metrics` records pair quality, Harness reliability, critical-path latency, cost, and captain adjudication.
@@ -103,6 +104,8 @@ This repository currently implements the MVP control plane:
 - Node test suite.
 
 External writes are disabled by default. A seat cannot write unless `allowWrite` is true and the seat explicitly sets `autoApprove`.
+
+For highest-complexity work, use a GPT/OpenAI page model when available. Codex MOA may recommend that choice, but it never changes the page-selected model or reasoning effort. GPT quota, subscription balance, provider pricing, TPS, and completion history tune external support; they cannot transfer L3 core ownership.
 
 ## Prerequisites
 

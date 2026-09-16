@@ -20,4 +20,6 @@ test("protects scarce GPT quota without replacing the captain", () => {
   const allocation = captainAllocation({ family: "openai" }, usage);
   assert.equal(allocation.tier, "protect");
   assert.equal(allocation.captainTargetPercent, 15);
+  assert.equal(allocation.coreOwnershipMutable, false);
+  assert.match(allocation.qualityFloor, /must not transfer L3 core/);
 });
