@@ -53,7 +53,7 @@ moa_memory(action="distill", memoryKey="...")
 
 Deduplicates decisions, facts, files, tests, failed attempts, and questions, and retains the latest 20 episodes.
 
-## ACP persistent runtime
+## Persistent agent runtime
 
 Seats can opt into ACP with:
 
@@ -66,10 +66,15 @@ Seats can opt into ACP with:
 | KimiCode | Native ACP `kimi acp` | `session/cancel` |
 | DSH | Native ACP `dsh --profile acp` | `session/cancel` |
 | ZCode | ZCode Protocol `app-server`, bridged to the ACP seat contract | `session/stop` |
+| Pi | Native JSONL RPC, bridged to the persistent seat contract | `abort` |
+| Claude Code | Streaming CLI plus persisted session resume bridge | process cancel |
+| Codex CLI | JSONL exec plus persisted session resume bridge | process cancel |
 
 ZCode UI `start-plan` providers require GUI captcha and are not headless-safe. Configure `zcode.headlessProvider` in `config/local.json` to select an API-key provider for codex-moa while leaving the UI provider unchanged. codex-moa also runs ZCode in an isolated home (`~/.codex-moa/zcode-home`) and symlinks shared credentials, so its headless CLI config does not overwrite the user TUI/GUI provider selection.
 
 The process pool is kept in memory; session ids are persisted through `continuityKey` so a later Codex run can resume after the process is recreated.
+
+`runtime="persistent"` is the protocol-neutral spelling. The legacy `runtime="acp"` value remains supported and requests the same persistent control contract. Each Harness resolves to its native transport (`native-acp`, `pi-rpc`, `zcode-app-server`, `claude-stream-resume`, or `codex-exec-resume`) and reports its actual steering capability instead of claiming every transport speaks ACP on the wire.
 
 Run the real smoke test:
 
@@ -107,7 +112,7 @@ Each job is persisted at:
   worker.log
 ```
 
-The worker runs `runMoA` independently of the MCP connection. `moa_job_cancel` marks the job cancelled and writes scoped ACP cancellation requests. Nodes that have not started are marked cancelled; running CLI seats are allowed to finish, while ACP/ZCode seats are interrupted through their protocol cancel path.
+The worker runs `runMoA` independently of the MCP connection. `moa_job_cancel` marks the job cancelled and writes scoped persistent-seat cancellation requests. Nodes that have not started are marked cancelled; running one-shot CLI seats are allowed to finish, while persistent seats are interrupted through their protocol or process cancel path.
 
 Async jobs reject per-seat `env` values so credentials are not persisted to disk. Put credentials in provider configuration, or use synchronous `moa_run` when seat-local environment variables are required.
 

@@ -27736,7 +27736,11 @@ function runCommand({
   timeoutMs = 3e5,
   maxOutputBytes = 8 * 1024 * 1024,
   stripSecretEnv = true,
-  allowSecretExtraEnv = false
+  allowSecretExtraEnv = false,
+  signal,
+  onSpawn,
+  onStdoutChunk,
+  onStderrChunk
 }) {
   return new Promise((resolve30) => {
     const startedAt = Date.now();
@@ -27753,6 +27757,7 @@ function runCommand({
         shell: false,
         stdio: ["pipe", "pipe", "pipe"]
       });
+      onSpawn?.(child);
     } catch (error62) {
       return resolve30({
         ok: false,
@@ -27770,14 +27775,25 @@ function runCommand({
     };
     child.stdout.on("data", (chunk) => {
       stdout = append2(stdout, chunk);
+      onStdoutChunk?.(chunk);
     });
     child.stderr.on("data", (chunk) => {
       stderr = append2(stderr, chunk);
+      onStderrChunk?.(chunk);
     });
+    let aborted2 = false;
+    const abort = () => {
+      aborted2 = true;
+      killTree(child, "SIGTERM");
+      setTimeout(() => killTree(child, "SIGKILL"), 3e3).unref?.();
+    };
+    if (signal?.aborted) abort();
+    else signal?.addEventListener?.("abort", abort, { once: true });
     child.on("error", (error62) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener?.("abort", abort);
       resolve30({ ok: false, code: null, signal: null, stdout, stderr: String(error62?.message ?? error62), timedOut, durationMs: Date.now() - startedAt });
     });
     const timer = setTimeout(() => {
@@ -27785,11 +27801,12 @@ function runCommand({
       killTree(child, "SIGTERM");
       setTimeout(() => killTree(child, "SIGKILL"), 3e3).unref?.();
     }, Math.max(1, timeoutMs));
-    child.on("close", (code, signal) => {
+    child.on("close", (code, signal2) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve30({ ok: code === 0 && !timedOut, code, signal, stdout, stderr, timedOut, durationMs: Date.now() - startedAt });
+      signal2?.removeEventListener?.("abort", abort);
+      resolve30({ ok: code === 0 && !timedOut && !aborted2, code, signal: signal2, stdout, stderr: aborted2 ? [stderr, "Process cancelled"].filter(Boolean).join("\n") : stderr, timedOut, aborted: aborted2, durationMs: Date.now() - startedAt });
     });
     if (input2 !== void 0) child.stdin.end(String(input2));
     else child.stdin.end();
@@ -28877,6 +28894,9 @@ function buildTaskGraph(seats2 = []) {
     role: seat.role,
     model: seat.model,
     runtime: seat.runtime ?? "cli",
+    runtimeMode: seat.runtimeMode ?? null,
+    runtimeTransport: seat.runtimeTransport ?? null,
+    controlCapability: seat.controlCapability ?? "boundary",
     auditMode: seat.auditMode ?? null,
     blocking: seat.blocking !== false,
     pairedExecutor: seat.pairedExecutor ?? null,
@@ -28957,6 +28977,65 @@ var init_roles = __esm({
   "src/lib/roles.mjs"() {
     roleRoot = resolve3(dirname3(fileURLToPath2(import.meta.url)), "..", "..", "roles");
     ALLOWED_KEYS = ["description", "mode", "modelTier", "runtime", "reasoningEffort", "contextBudget", "outputBudget"];
+  }
+});
+
+// src/lib/runtime-contract.mjs
+function runtimeCapabilities(harness) {
+  const persistent = PERSISTENT_TRANSPORTS[harness] ?? null;
+  return {
+    harness,
+    modes: persistent ? ["oneshot", "persistent"] : ["oneshot"],
+    transports: ["cli", ...persistent ? [persistent.transport] : []],
+    persistent: Boolean(persistent),
+    streaming: persistent?.streaming === true,
+    // The transports above may support native steering, but job steering is
+    // currently delivered at orchestration boundaries. Keep this capability
+    // honest until the job control loop forwards messages to active seats.
+    steer: "boundary",
+    protocolSteer: persistent?.protocolSteer === true,
+    cancel: persistent ? "active-process" : "boundary",
+    resume: persistent?.resume === true,
+    compact: persistent?.compact === true
+  };
+}
+function resolveSeatRuntime(seat = {}) {
+  const requested = seat.runtime ?? "cli";
+  const mode = requested === "acp" || requested === "persistent" ? "persistent" : requested === "oneshot" || requested === "cli" ? "oneshot" : requested === "auto" ? seat.continuityKey ? "persistent" : "oneshot" : null;
+  if (!mode) throw new Error(`Unsupported runtime: ${requested}`);
+  const capabilities = runtimeCapabilities(seat.harness);
+  if (mode === "persistent" && !capabilities.persistent) {
+    throw new Error(`No persistent runtime configured for harness: ${seat.harness}`);
+  }
+  return {
+    requested,
+    mode,
+    transport: mode === "persistent" ? capabilities.transports.at(-1) : "cli",
+    capabilities
+  };
+}
+function applyRuntimeResolution(seat) {
+  const resolved = resolveSeatRuntime(seat);
+  seat.runtimeRequested = resolved.requested;
+  seat.runtimeMode = resolved.mode;
+  seat.runtimeTransport = resolved.transport;
+  seat.controlCapability = resolved.capabilities.steer;
+  return resolved;
+}
+function isPersistentRuntime(seat = {}) {
+  return resolveSeatRuntime(seat).mode === "persistent";
+}
+var PERSISTENT_TRANSPORTS;
+var init_runtime_contract = __esm({
+  "src/lib/runtime-contract.mjs"() {
+    PERSISTENT_TRANSPORTS = Object.freeze({
+      kimi: { transport: "native-acp", streaming: true, protocolSteer: true, resume: true, compact: false },
+      dsh: { transport: "native-acp", streaming: true, protocolSteer: true, resume: true, compact: false },
+      zcode: { transport: "zcode-app-server", streaming: false, steer: "boundary", resume: true, compact: false },
+      pi: { transport: "pi-rpc", streaming: true, protocolSteer: true, resume: true, compact: true },
+      claude: { transport: "claude-stream-resume", streaming: false, steer: "boundary", resume: true, compact: true },
+      codex: { transport: "codex-exec-resume", streaming: false, steer: "boundary", resume: true, compact: false }
+    });
   }
 });
 
@@ -29267,6 +29346,7 @@ function planMoA(input2 = {}, deps = {}) {
     recommendation: recommendGptCaptain ? "For highest-quality L3 execution, use a GPT/OpenAI page captain. Codex MOA will not switch the page model automatically." : input2.captain?.family === "unknown" && l3CaptainPrimary ? "The page model is opaque. Keep core execution in the captain; if it is not GPT, consider switching the page model before L3 implementation." : null
   };
   for (const seat of plannedSeats) {
+    applyRuntimeResolution(seat);
     const requested = seat.reasoningEffort ?? input2.reasoningEffort ?? null;
     seat.reasoningRequested = requested;
     if (requested) {
@@ -29368,6 +29448,7 @@ var init_router = __esm({
     init_limits();
     init_task_graph();
     init_roles();
+    init_runtime_contract();
     HIGH_RISK_RE = /(security|auth|crypto|migration|architecture|payment|credential|deploy|rollback|real[- ]?time|multi[- ]?model|cascade|hardware|production|safety|数据库|架构|安全|支付|迁移|密钥|实时|多模型|级联|硬件|生产)/i;
     COMPLEX_RE = /(refactor|implement|fix|debug|test|migrate|performance|并发|重构|实现|修复|调试|测试|性能)/i;
     SIMPLE_RE = /^(explain|summarize|format|what is|how do i|解释|总结|格式化|是什么|怎么写)/i;
@@ -32530,7 +32611,7 @@ var init_pi_home = __esm({
 });
 
 // src/adapters/pi.mjs
-async function runPiSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false }) {
+async function runPiSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false, signal }) {
   const cwd = resolveCwd(seat.cwd, config2.defaultCwd);
   const { command, args: baseArgs } = commandParts(config2.commands.pi);
   const provider = seat.pi?.provider;
@@ -32567,7 +32648,8 @@ async function runPiSeat({ seat, prompt, config: config2, timeoutMs, allowWrite 
     cwd,
     timeoutMs,
     env: piHome ? { PI_CODING_AGENT_DIR: piHome.home } : {},
-    stripSecretEnv: config2.safety?.stripSecretEnv !== false
+    stripSecretEnv: config2.safety?.stripSecretEnv !== false,
+    signal
   });
   const text = extractPiOutput(run.stdout);
   const piError = extractPiError(run.stdout);
@@ -32760,7 +32842,8 @@ var init_cli_homes = __esm({
 });
 
 // src/adapters/claude.mjs
-async function runClaudeSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false }) {
+import { randomUUID as randomUUID9 } from "node:crypto";
+async function runClaudeSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false, signal }) {
   const cwd = resolveCwd(seat.cwd, config2.defaultCwd);
   const { command, args: baseArgs } = commandParts(config2.commands.claude);
   const provider = seat.claude?.provider;
@@ -32791,8 +32874,11 @@ async function runClaudeSeat({ seat, prompt, config: config2, timeoutMs, allowWr
   ];
   if (!writeEnabled) args.push("--restricted", "--tools", "Read,Grep,Glob");
   if (seat.maxTurns) args.push("--max-turns", String(seat.maxTurns));
-  if (!seat.continuitySessionId) args.push("--no-session-persistence");
-  else args.push("--resume", seat.continuitySessionId);
+  const persistent = seat.runtimeMode === "persistent" || seat.runtime === "acp" || seat.runtime === "persistent";
+  const requestedSessionId = seat.continuitySessionId ?? (persistent ? randomUUID9() : null);
+  if (seat.continuitySessionId) args.push("--resume", seat.continuitySessionId);
+  else if (requestedSessionId) args.push("--session-id", requestedSessionId);
+  else args.push("--no-session-persistence");
   for (const skillPath of runtime.projectedSkills) args.push("--add-dir", skillPath);
   args.push(prompt);
   const run = await runCommand({
@@ -32801,10 +32887,11 @@ async function runClaudeSeat({ seat, prompt, config: config2, timeoutMs, allowWr
     cwd,
     timeoutMs,
     env: { CLAUDE_CONFIG_DIR: runtime.home },
-    stripSecretEnv: config2.safety?.stripSecretEnv !== false
+    stripSecretEnv: config2.safety?.stripSecretEnv !== false,
+    signal
   });
   const text = extractClaudeOutput(run.stdout);
-  const sessionId = extractSessionId(run.stdout) ?? seat.continuitySessionId ?? null;
+  const sessionId = extractSessionId(run.stdout) ?? requestedSessionId;
   return createResult({
     seat,
     run,
@@ -32834,7 +32921,7 @@ var init_claude = __esm({
 });
 
 // src/adapters/codex.mjs
-async function runCodexSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false }) {
+async function runCodexSeat({ seat, prompt, config: config2, timeoutMs, allowWrite = false, signal }) {
   const cwd = resolveCwd(seat.cwd, config2.defaultCwd);
   const { command, args: baseArgs } = commandParts(config2.commands.codex);
   const provider = seat.codex?.provider;
@@ -32842,24 +32929,31 @@ async function runCodexSeat({ seat, prompt, config: config2, timeoutMs, allowWri
   if (!provider) throw new Error(`Codex CLI provider is not configured for model ${seat.model}`);
   const runtime = await prepareCodexHome(config2, provider, seat.skillPaths ?? []);
   const writeEnabled = allowWrite && seat.autoApprove && seat.mode !== "plan";
+  const persistent = seat.runtimeMode === "persistent" || seat.runtime === "acp" || seat.runtime === "persistent";
   const args = [
     ...baseArgs,
     "--ask-for-approval",
     "never",
-    "exec",
-    "--json",
-    "--ephemeral",
-    "--strict-config",
-    "--model",
-    model,
     "--sandbox",
     writeEnabled ? "workspace-write" : "read-only",
     "--cd",
     cwd,
     "--config",
     `model_reasoning_effort="${seat.reasoningEffort ?? "high"}"`,
-    "-"
+    "exec"
   ];
+  if (seat.continuitySessionId) {
+    args.push("resume", "--json", "--strict-config", "--model", model, seat.continuitySessionId, "-");
+  } else {
+    args.push(
+      "--json",
+      ...persistent ? [] : ["--ephemeral"],
+      "--strict-config",
+      "--model",
+      model,
+      "-"
+    );
+  }
   const skillNotice = runtime.projectedSkills.length > 0 ? `
 
 Only these explicitly selected Skills are available under CODEX_HOME/skills: ${runtime.projectedSkills.map((path) => path.split("/").pop()).join(", ")}.` : "";
@@ -32871,7 +32965,8 @@ Only these explicitly selected Skills are available under CODEX_HOME/skills: ${r
     timeoutMs,
     env: { CODEX_HOME: runtime.home, CODEX_MOA_PROVIDER_API_KEY: runtime.providerApiKey },
     stripSecretEnv: config2.safety?.stripSecretEnv !== false,
-    allowSecretExtraEnv: true
+    allowSecretExtraEnv: true,
+    signal
   });
   const text = extractCodexOutput(run.stdout);
   return createResult({
@@ -32889,7 +32984,7 @@ Only these explicitly selected Skills are available under CODEX_HOME/skills: ${r
       loadedSkills: seat.skillPaths ?? [],
       sessionId: extractSessionId(run.stdout),
       usage: extractUsage(run.stdout),
-      continuitySupport: "ephemeral"
+      continuitySupport: persistent ? "codex-exec-resume" : "ephemeral"
     }
   });
 }
@@ -32903,6 +32998,10 @@ var init_codex = __esm({
 });
 
 // src/adapters/index.mjs
+var adapters_exports = {};
+__export(adapters_exports, {
+  getAdapter: () => getAdapter
+});
 function getAdapter(harness) {
   if (harness === "kimi") return runKimiSeat;
   if (harness === "zcode") return runZCodeSeat;
@@ -36697,7 +36796,7 @@ var init_acp = __esm({
 });
 
 // src/lib/control-store.mjs
-import { randomUUID as randomUUID9 } from "node:crypto";
+import { randomUUID as randomUUID10 } from "node:crypto";
 import { homedir as homedir19 } from "node:os";
 import { resolve as resolve20 } from "node:path";
 function expandHome18(value) {
@@ -36734,7 +36833,7 @@ async function requestCancellation({ taskId = null, seat = null, key = null, rea
   await updateStore(controlStorePath(), (store) => {
     const now = Date.now();
     request = {
-      id: `ctl-${now.toString(36)}-${randomUUID9().slice(0, 8)}`,
+      id: `ctl-${now.toString(36)}-${randomUUID10().slice(0, 8)}`,
       action: "cancel",
       taskId,
       seat,
@@ -36803,6 +36902,7 @@ var init_control_store = __esm({
 
 // src/lib/acp-seat.mjs
 import { spawn as spawn2 } from "node:child_process";
+import { randomUUID as randomUUID11 } from "node:crypto";
 import { Readable, Writable } from "node:stream";
 function killTree2(child, signal = "SIGTERM") {
   if (!child?.pid) return;
@@ -36830,6 +36930,21 @@ function normalizeUsage2(usage) {
     contextUsed: usage.contextUsed ?? usage.used ?? null,
     contextWindow: usage.contextWindow ?? usage.size ?? null
   };
+}
+function usageFromPiMessages(messages = []) {
+  let usage = null;
+  for (const message of messages) {
+    if (message?.role !== "assistant" || !message?.usage) continue;
+    const value = normalizeUsage2(message.usage);
+    if (value) usage = value;
+  }
+  return usage;
+}
+function textFromPiMessages(messages = [], start = 0) {
+  return messages.slice(start).filter((message) => message?.role === "assistant").flatMap((message) => {
+    if (typeof message.content === "string") return [message.content];
+    return (message.content ?? []).filter((part) => part?.type === "text").map((part) => part.text ?? "");
+  }).filter(Boolean).join("\n").trim();
 }
 function acpCommandFor(harness, config2, seat = {}) {
   const explicit = config2.acp?.commands?.[harness];
@@ -36879,8 +36994,25 @@ async function createSeat({ seat, config: config2, allowWrite, timeoutMs }) {
       config: { ...config2, zcode: { ...config2.zcode ?? {}, cliConfig: zcodeHome.cliConfigPath } }
     });
   }
-  const command = acpCommandFor(seat.harness, config2, seat);
   const key = seatKey(seat);
+  if (seat.harness === "pi") {
+    const piHome = config2.pi?.syncCcSwitchProviders === false ? null : await preparePiHome(config2);
+    const provider = seat.pi?.provider;
+    const model = seat.pi?.model ?? seat.providerModel ?? seat.model;
+    if (!provider) throw new Error(`Pi provider is not configured for model ${seat.model}`);
+    if (piHome && !piHome.providerIds.includes(provider)) throw new Error(`CC Switch Pi provider is not configured: ${provider}`);
+    const base = commandParts(config2.commands.pi);
+    const writeEnabled = allowWrite && seat.autoApprove && seat.mode !== "plan";
+    const args = [...base.args, "--provider", provider, "--model", model, "--mode", "rpc", "--tools", writeEnabled ? "read,bash,edit,write,grep,find,ls" : "read,grep,find,ls", "--approve"];
+    if (seat.reasoningEffort) args.push("--thinking", seat.reasoningEffort);
+    for (const skillPath of seat.skillPaths ?? []) args.push("--skill", skillPath);
+    return new PiRpcSeat({ key, taskId: seat.taskId, seat: seat.seat, model: seat.model, command: base.command, args, cwd: seat.cwd, writeAllowed: writeEnabled, env: piHome ? { PI_CODING_AGENT_DIR: piHome.home } : {}, sessionId: seat.continuitySessionId });
+  }
+  if (["claude", "codex"].includes(seat.harness)) {
+    const { getAdapter: getAdapter2 } = await Promise.resolve().then(() => (init_adapters(), adapters_exports));
+    return new CliResumeSeat({ key, taskId: seat.taskId, seat, model: seat.model, harness: seat.harness, cwd: seat.cwd, runner: getAdapter2(seat.harness), config: config2, timeoutMs, allowWrite });
+  }
+  const command = acpCommandFor(seat.harness, config2, seat);
   if (seat.harness === "zcode") {
     return new ZCodeSeat({
       key,
@@ -36934,14 +37066,14 @@ async function runAcpSeat({ seat, prompt, config: config2, timeoutMs, allowWrite
     const result = await Promise.race([
       seatProcess.prompt({ prompt, resumeSessionId: seat.continuitySessionId }),
       new Promise((_, reject) => {
-        timeoutHandle = setTimeout(() => reject(new Error(`ACP seat timed out after ${timeoutMs}ms`)), timeoutMs);
+        timeoutHandle = setTimeout(() => reject(new Error(`Persistent seat timed out after ${timeoutMs}ms`)), timeoutMs);
         timeoutHandle.unref?.();
       })
     ]);
     if (controlRequest) {
       await resolveControlRequest(controlRequest.id, { status: "fulfilled", detail: { taskId: seat.taskId, seat: seat.seat, result: result.stopReason } });
     }
-    return result;
+    return { ...result, runtime: seatProcess.runtime };
   } catch (error62) {
     seatProcess.stop();
     seats.delete(key);
@@ -36958,7 +37090,7 @@ async function cancelAcpSeats(filter = {}) {
     if (filter.key && key !== filter.key) continue;
     if (filter.taskId && seat.taskId !== filter.taskId) continue;
     if (filter.seat && seat.seat !== filter.seat) continue;
-    if (!seat.child) continue;
+    if (!seat.child && !seat.promptActive) continue;
     let cancelled = false;
     let error62 = null;
     try {
@@ -36987,7 +37119,7 @@ function listAcpSeats() {
     lastProjection: seat.lastProjection ?? null
   }));
 }
-var seats, DEFAULT_POLL_MS, AcpSeat, ZCodeSeat;
+var seats, DEFAULT_POLL_MS, AcpSeat, ZCodeSeat, PiRpcSeat, CliResumeSeat;
 var init_acp_seat = __esm({
   "src/lib/acp-seat.mjs"() {
     init_acp();
@@ -36997,6 +37129,7 @@ var init_acp_seat = __esm({
     init_zcode_model();
     init_zcode_home();
     init_control_store();
+    init_pi_home();
     seats = /* @__PURE__ */ new Map();
     DEFAULT_POLL_MS = 500;
     AcpSeat = class {
@@ -37397,6 +37530,201 @@ var init_acp_seat = __esm({
         this.pending.clear();
       }
     };
+    PiRpcSeat = class {
+      constructor({ key, taskId, seat, model, command, args, cwd, writeAllowed, env = {}, sessionId = null }) {
+        this.runtime = "pi-rpc";
+        this.key = key;
+        this.taskId = taskId ?? null;
+        this.seat = seat;
+        this.harness = "pi";
+        this.model = model;
+        this.command = command;
+        this.args = args;
+        this.cwd = cwd;
+        this.writeAllowed = writeAllowed;
+        this.env = env;
+        this.sessionId = sessionId;
+        this.child = null;
+        this.buffer = "";
+        this.pending = /* @__PURE__ */ new Map();
+        this.nextRequestId = 1;
+        this.turnWaiters = [];
+        this.startedAt = null;
+        this.promptActive = false;
+        this.cancelRequested = false;
+        this.exit = null;
+      }
+      send(message) {
+        if (!this.child?.stdin?.writable) throw new Error("Pi RPC process is not writable");
+        this.child.stdin.write(`${JSON.stringify(message)}
+`);
+      }
+      request(type, params = {}, timeoutMs = 3e4) {
+        const id2 = `moa-${this.nextRequestId++}`;
+        return new Promise((resolve30, reject) => {
+          const timer = setTimeout(() => {
+            this.pending.delete(id2);
+            reject(new Error(`Pi RPC request timed out: ${type}`));
+          }, timeoutMs);
+          this.pending.set(id2, { resolve: resolve30, reject, timer, type });
+          try {
+            this.send({ id: id2, type, ...params });
+          } catch (error62) {
+            clearTimeout(timer);
+            this.pending.delete(id2);
+            reject(error62);
+          }
+        });
+      }
+      handleMessage(message) {
+        if (message?.type === "response" && message.id && this.pending.has(String(message.id))) {
+          const pending = this.pending.get(String(message.id));
+          this.pending.delete(String(message.id));
+          clearTimeout(pending.timer);
+          if (message.success === false) pending.reject(new Error(message.error ?? `Pi RPC ${pending.type} failed`));
+          else pending.resolve(message.data ?? message);
+          return;
+        }
+        if (["agent_end", "agent_settled"].includes(message?.type)) {
+          const waiters = this.turnWaiters.splice(0);
+          for (const resolve30 of waiters) resolve30(message);
+        }
+      }
+      async start(resumeSessionId) {
+        if (this.child?.stdin?.writable) return;
+        this.sessionId = resumeSessionId ?? this.sessionId ?? randomUUID11();
+        this.child = spawn2(this.command, [...this.args, "--session-id", this.sessionId], {
+          cwd: this.cwd,
+          env: buildEnv(this.env, true),
+          detached: process.platform !== "win32",
+          stdio: ["pipe", "pipe", "inherit"]
+        });
+        this.startedAt = (/* @__PURE__ */ new Date()).toISOString();
+        this.child.stdout.on("data", (chunk) => {
+          this.buffer += chunk.toString("utf8");
+          let index;
+          while ((index = this.buffer.indexOf("\n")) >= 0) {
+            const line = this.buffer.slice(0, index);
+            this.buffer = this.buffer.slice(index + 1);
+            if (!line.trim()) continue;
+            try {
+              this.handleMessage(JSON.parse(line));
+            } catch {
+            }
+          }
+        });
+        this.child.once("exit", (code, signal) => {
+          this.exit = { code, signal, at: (/* @__PURE__ */ new Date()).toISOString() };
+          for (const pending of this.pending.values()) {
+            clearTimeout(pending.timer);
+            pending.reject(new Error(`Pi RPC process exited before responding to ${pending.type}`));
+          }
+          this.pending.clear();
+          const waiters = this.turnWaiters.splice(0);
+          for (const resolve30 of waiters) resolve30({ type: "agent_end", reason: "process_exit" });
+        });
+        const state = await this.request("get_state", {}, 3e4);
+        this.sessionId = state?.sessionId ?? this.sessionId;
+      }
+      async prompt({ prompt, resumeSessionId }) {
+        this.cancelRequested = false;
+        await this.start(resumeSessionId);
+        const before = await this.request("get_messages");
+        const initialCount = (before?.messages ?? []).length;
+        this.promptActive = true;
+        try {
+          const settled = new Promise((resolve30) => this.turnWaiters.push(resolve30));
+          await this.request("prompt", { message: prompt });
+          await settled;
+          const state = await this.request("get_state");
+          const after = await this.request("get_messages");
+          const messages = after?.messages ?? [];
+          return {
+            sessionId: state?.sessionId ?? this.sessionId,
+            text: textFromPiMessages(messages, initialCount),
+            stopReason: this.cancelRequested ? "cancelled" : "end_turn",
+            usage: usageFromPiMessages(messages.slice(initialCount)),
+            contextUsage: null
+          };
+        } finally {
+          this.promptActive = false;
+        }
+      }
+      async cancel() {
+        this.cancelRequested = true;
+        if (!this.child?.stdin?.writable) return false;
+        await this.request("clear_queue").catch(() => {
+        });
+        await this.request("abort", {}, 1e4).catch(() => {
+        });
+        return true;
+      }
+      stop() {
+        this.promptActive = false;
+        const error62 = new Error("Pi RPC seat stopped");
+        for (const pending of this.pending.values()) {
+          clearTimeout(pending.timer);
+          pending.reject(error62);
+        }
+        const waiters = this.turnWaiters.splice(0);
+        for (const resolve30 of waiters) resolve30({ type: "agent_end", reason: "seat_stopped" });
+        killTree2(this.child);
+        this.child = null;
+        this.pending.clear();
+      }
+    };
+    CliResumeSeat = class {
+      constructor({ key, taskId, seat, model, harness, cwd, runner, config: config2, timeoutMs, allowWrite }) {
+        this.runtime = `${harness}-resume-bridge`;
+        this.key = key;
+        this.taskId = taskId ?? null;
+        this.seat = seat;
+        this.model = model;
+        this.harness = harness;
+        this.cwd = cwd;
+        this.runner = runner;
+        this.config = config2;
+        this.timeoutMs = timeoutMs;
+        this.allowWrite = allowWrite;
+        this.sessionId = null;
+        this.controller = null;
+        this.promptActive = false;
+      }
+      async prompt({ prompt, resumeSessionId }) {
+        this.sessionId = resumeSessionId ?? this.sessionId;
+        this.controller = new AbortController();
+        this.promptActive = true;
+        try {
+          const result = await this.runner({
+            seat: { ...this.seat, continuitySessionId: this.sessionId, runtimeMode: "persistent" },
+            prompt,
+            config: this.config,
+            timeoutMs: this.timeoutMs,
+            allowWrite: this.allowWrite,
+            signal: this.controller.signal
+          });
+          this.sessionId = result.sessionId ?? this.sessionId;
+          return {
+            sessionId: this.sessionId,
+            text: result.summary ?? "",
+            stopReason: this.controller.signal.aborted ? "cancelled" : result.status === "done" ? "end_turn" : "error",
+            usage: result.usage ?? null,
+            contextUsage: null
+          };
+        } finally {
+          this.promptActive = false;
+          this.controller = null;
+        }
+      }
+      async cancel() {
+        this.controller?.abort();
+        return Boolean(this.controller);
+      }
+      stop() {
+        this.controller?.abort();
+        this.controller = null;
+      }
+    };
   }
 });
 
@@ -37421,10 +37749,10 @@ async function runAcpAdapter({ seat, prompt, config: config2, timeoutMs, allowWr
     extra: {
       status,
       sessionId: result.sessionId,
-      continuitySupport: "acp-process",
+      continuitySupport: result.runtime ?? "acp-process",
       stopReason: result.stopReason,
       usage: result.usage ?? null,
-      modelSelection: "acp-session",
+      modelSelection: result.runtime ?? "persistent-session",
       reasoningEffort: seat.reasoningEffort,
       reasoningSelection: "acp-session-config"
     }
@@ -37440,7 +37768,7 @@ var init_acp2 = __esm({
 // src/lib/task-checkpoint.mjs
 import { existsSync as existsSync15 } from "node:fs";
 import { chmod as chmod14, mkdir as mkdir15, readFile as readFile12, rename as rename9, writeFile as writeFile11 } from "node:fs/promises";
-import { randomUUID as randomUUID10 } from "node:crypto";
+import { randomUUID as randomUUID12 } from "node:crypto";
 import { join as join14 } from "node:path";
 function checkpointPath(root) {
   return join14(root, "checkpoint.json");
@@ -37535,7 +37863,7 @@ async function readCheckpoint(root) {
 async function writeCheckpoint(root, checkpoint) {
   checkpoint.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
   const path = checkpointPath(root);
-  const temporary = `${path}.${randomUUID10()}.tmp`;
+  const temporary = `${path}.${randomUUID12()}.tmp`;
   await mkdir15(root, { recursive: true });
   await writeFile11(temporary, `${JSON.stringify(checkpoint, null, 2)}
 `, { mode: 384 });
@@ -37568,7 +37896,7 @@ var init_task_checkpoint = __esm({
 // src/lib/captain-usage.mjs
 import { existsSync as existsSync16 } from "node:fs";
 import { chmod as chmod15, mkdir as mkdir16, readFile as readFile13, rename as rename10, writeFile as writeFile12 } from "node:fs/promises";
-import { randomUUID as randomUUID11 } from "node:crypto";
+import { randomUUID as randomUUID13 } from "node:crypto";
 import { homedir as homedir20 } from "node:os";
 import { dirname as dirname14, resolve as resolve21 } from "node:path";
 function expandHome19(value) {
@@ -37602,7 +37930,7 @@ function normalizeCaptainUsage(input2 = {}) {
 async function writeCaptainUsage(input2, path = captainUsagePath()) {
   const value = normalizeCaptainUsage(input2);
   await mkdir16(dirname14(path), { recursive: true, mode: 448 });
-  const temporary = `${path}.${randomUUID11()}.tmp`;
+  const temporary = `${path}.${randomUUID13()}.tmp`;
   await writeFile12(temporary, `${JSON.stringify(value, null, 2)}
 `, { mode: 384 });
   await rename10(temporary, path);
@@ -38025,6 +38353,9 @@ async function updateRegistrySeat(taskId, seat, patch) {
     model: seat.model,
     role: seat.role,
     runtime: seat.runtime ?? "cli",
+    runtimeMode: seat.runtimeMode ?? null,
+    runtimeTransport: seat.runtimeTransport ?? null,
+    controlCapability: seat.controlCapability ?? "boundary",
     reasoningEffort: seat.reasoningEffort,
     contextBudget: seat.contextBudget,
     outputBudget: seat.outputBudget,
@@ -38065,7 +38396,7 @@ async function runMoA(input2, deps = {}) {
   const models = deps.models ?? loadEffectiveModels();
   const schedule = deps.schedule ?? loadSchedule();
   const pricing = deps.pricing ?? loadPricing();
-  const adapterFor = deps.adapterFor ?? ((seat) => seat.runtime === "acp" ? runAcpAdapter : getAdapter(seat.harness));
+  const adapterFor = deps.adapterFor ?? ((seat) => isPersistentRuntime(seat) ? runAcpAdapter : getAdapter(seat.harness));
   const createWorktreeFn = deps.createWorktree ?? createWorktree;
   const captureDiff = deps.captureWorktreeDiff ?? captureWorktreeDiff;
   const captain = await resolveCaptain({ captainModel: input2.captainModel });
@@ -38182,7 +38513,7 @@ async function runMoA(input2, deps = {}) {
     input: sanitizeInput(input2),
     plan: {
       level: plan.level,
-      seats: plan.seats.map((seat) => ({ seat: seat.seat, model: seat.model, harness: seat.harness, role: seat.role, runtime: seat.runtime ?? "cli", auditMode: seat.auditMode ?? null, pairedExecutor: seat.pairedExecutor ?? null })),
+      seats: plan.seats.map((seat) => ({ seat: seat.seat, model: seat.model, harness: seat.harness, role: seat.role, runtime: seat.runtime ?? "cli", runtimeMode: seat.runtimeMode ?? null, runtimeTransport: seat.runtimeTransport ?? null, controlCapability: seat.controlCapability ?? "boundary", auditMode: seat.auditMode ?? null, pairedExecutor: seat.pairedExecutor ?? null })),
       auditStrategy: plan.auditStrategy ?? null,
       failureRouting: plan.failureRouting ?? null,
       routingExperiment: plan.routingExperiment ?? null
@@ -38316,7 +38647,7 @@ ${steeringContext.join("\n")}` : null,
 ${memoryPack}` : null
       ].filter(Boolean).join("\n\n")
     });
-    appendEvent(eventsPath, { type: "seat_started", seat: seat.seat, harness: seat.harness, model: seat.model, runtime: seat.runtime ?? "cli" });
+    appendEvent(eventsPath, { type: "seat_started", seat: seat.seat, harness: seat.harness, model: seat.model, runtime: seat.runtime ?? "cli", runtimeMode: seat.runtimeMode ?? null, runtimeTransport: seat.runtimeTransport ?? null, controlCapability: seat.controlCapability ?? "boundary" });
     updateCheckpointNode(checkpoint, seat.seat, { status: "running", startedAt: (/* @__PURE__ */ new Date()).toISOString(), worktreePath: seat.worktree?.path ?? null, originalCwd: seat.originalCwd ?? null });
     await writeCheckpoint(workspace.dirs.root, checkpoint);
     await reportProgress({ type: "seat_started", activeSeat: seat.seat, layer: layerIndex });
@@ -38837,6 +39168,7 @@ var init_orchestrator = __esm({
     init_captain();
     init_evolution();
     init_continuity();
+    init_runtime_contract();
     init_memory();
     init_seat_registry();
     init_worktree();
@@ -48668,9 +49000,9 @@ ${piHelp.stderr}`
       kimi: "cli-session-resume + acp-session-resume",
       zcode: "cli-session-resume + app-server bridge",
       dsh: "acp-session-resume",
-      pi: "cli-session-id",
-      claude: "cli-resume",
-      codex: "ephemeral"
+      pi: "rpc protocol steer/abort/compact + cli-session-id",
+      claude: "stream-json-resume bridge",
+      codex: "exec-resume bridge + app-server available"
     },
     zcodeSelections,
     checks: {
@@ -48718,9 +49050,10 @@ import { join as join18, resolve as resolve27 } from "node:path";
 // src/lib/jobs.mjs
 init_control_store();
 init_config();
+init_runtime_contract();
 import { existsSync as existsSync19 } from "node:fs";
 import { chmod as chmod16, mkdir as mkdir17, open as open3, readFile as readFile14, readdir as readdir2, rename as rename11, stat as stat3, unlink as unlink2, writeFile as writeFile13 } from "node:fs/promises";
-import { randomUUID as randomUUID12 } from "node:crypto";
+import { randomUUID as randomUUID14 } from "node:crypto";
 import { homedir as homedir24 } from "node:os";
 import { dirname as dirname15, join as join17, resolve as resolve25 } from "node:path";
 import { execFile } from "node:child_process";
@@ -48782,6 +49115,18 @@ function assertJobInputSupported(input2) {
       }
     }
   }
+  const config2 = loadConfig();
+  for (const collection of [input2?.seats, input2?.assignments]) {
+    if (!Array.isArray(collection)) continue;
+    for (const seat of collection) {
+      if (!["acp", "persistent"].includes(seat?.runtime)) continue;
+      if (!seat.harness) continue;
+      resolveSeatRuntime(seat);
+      if (!config2.commands?.[seat.harness]) {
+        throw new Error(`Persistent runtime preflight failed: command is not configured for harness ${seat.harness}`);
+      }
+    }
+  }
   return input2;
 }
 function normalizeThreadId(value) {
@@ -48799,7 +49144,7 @@ function initialNotification(originThreadId) {
     lastError: originThreadId ? null : "No valid originating Codex thread ID was available at dispatch time."
   };
 }
-function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${randomUUID12().slice(0, 8)}`, taskId, input: input2, originThreadId = null }) {
+function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${randomUUID14().slice(0, 8)}`, taskId, input: input2, originThreadId = null }) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const normalizedThreadId = normalizeThreadId(originThreadId);
   return {
@@ -48824,7 +49169,7 @@ function createJobRecord({ jobId = `job-${Date.now().toString(36)}-${randomUUID1
 }
 async function atomicWrite(path, value) {
   await mkdir17(dirname15(path), { recursive: true });
-  const temporary = `${path}.${randomUUID12()}.tmp`;
+  const temporary = `${path}.${randomUUID14()}.tmp`;
   await writeFile13(temporary, `${JSON.stringify(value, null, 2)}
 `, { mode: 384 });
   await rename11(temporary, path);
@@ -49025,7 +49370,7 @@ async function steerJob(jobId, message) {
   const job = await readJob(jobId);
   if (!job) throw new Error(`Job not found: ${jobId}`);
   if (TERMINAL.has(job.status)) throw new Error(`Job ${jobId} is ${job.status}; resume a paused job or start a new job.`);
-  const entry = { id: `msg-${randomUUID12().slice(0, 12)}`, message: String(message).trim(), status: "pending", createdAt: (/* @__PURE__ */ new Date()).toISOString(), deliveredAt: null };
+  const entry = { id: `msg-${randomUUID14().slice(0, 12)}`, message: String(message).trim(), status: "pending", createdAt: (/* @__PURE__ */ new Date()).toISOString(), deliveredAt: null };
   const updated = await updateJob(jobId, (current) => ({
     ...current,
     control: { revision: Number(current.control?.revision ?? 0) + 1, messages: [...current.control?.messages ?? [], entry] }
@@ -49332,7 +49677,7 @@ function backgroundRequirement(input2 = {}) {
   if (Number(input2.timeoutMs ?? 0) > INTERACTIVE_LIMIT_MS) reasons.push(`timeoutMs exceeds ${INTERACTIVE_LIMIT_MS}`);
   if (input2.allowWrite === true) reasons.push("write-enabled execution");
   if (LONG_TASK_RE.test(String(input2.task ?? ""))) reasons.push("task is likely long-running or remote");
-  if ((input2.assignments ?? input2.seats ?? []).some((seat) => seat?.runtime === "acp")) reasons.push("persistent ACP runtime");
+  if ((input2.assignments ?? input2.seats ?? []).some((seat) => ["acp", "persistent"].includes(seat?.runtime))) reasons.push("persistent agent runtime");
   return reasons.length > 0 ? {
     code: "BACKGROUND_REQUIRED",
     message: "This run must use moa_start so the Codex turn stays steerable.",
@@ -49358,7 +49703,7 @@ init_worktree();
 init_seat_registry();
 import { existsSync as existsSync22 } from "node:fs";
 import { chmod as chmod18, mkdir as mkdir19, readdir as readdir4, readFile as readFile17, rename as rename12, rm as rm3, stat as stat5, writeFile as writeFile14 } from "node:fs/promises";
-import { randomUUID as randomUUID13 } from "node:crypto";
+import { randomUUID as randomUUID15 } from "node:crypto";
 import { homedir as homedir27 } from "node:os";
 import { basename as basename3, dirname as dirname17, join as join19, resolve as resolve28, sep as sep2 } from "node:path";
 init_cost_ledger();
@@ -49405,7 +49750,7 @@ async function readJsonl2(path) {
 }
 async function writeJsonlAtomic(path, entries) {
   await mkdir19(dirname17(path), { recursive: true });
-  const temporary = `${path}.${randomUUID13()}.tmp`;
+  const temporary = `${path}.${randomUUID15()}.tmp`;
   await writeFile14(temporary, entries.map((entry) => JSON.stringify(entry)).join("\n") + (entries.length ? "\n" : ""), { mode: 384 });
   await rename12(temporary, path);
   await chmod18(path, 384).catch(() => {
@@ -49586,7 +49931,7 @@ async function applyRetention({ config: config2 = {}, dryRun = true, now = Date.
           if (Array.isArray(experiment.history) && experiment.history.length > max) experiment.history = experiment.history.slice(-max);
         }
         await mkdir19(dirname17(path), { recursive: true });
-        const temporary = `${path}.${randomUUID13()}.tmp`;
+        const temporary = `${path}.${randomUUID15()}.tmp`;
         await writeFile14(temporary, `${JSON.stringify(state, null, 2)}
 `, { mode: 384 });
         await rename12(temporary, path);
@@ -49613,6 +49958,7 @@ init_models();
 init_reasoning();
 init_ccswitch();
 init_adapters();
+init_runtime_contract();
 import { mkdtemp as mkdtemp2, rm as rm4, writeFile as writeFile15 } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
 import { join as join20 } from "node:path";
@@ -49683,6 +50029,7 @@ async function capabilityMatrix() {
       capabilities: model.capabilities ?? [],
       reasoning: model.reasoning,
       limits: model.limits,
+      runtime: Object.fromEntries((model.supportedHarnesses ?? [model.harness]).map((harness) => [harness, runtimeCapabilities(harness)])),
       routes: Object.fromEntries((model.supportedHarnesses ?? [model.harness]).filter((harness) => ["pi", "claude", "codex"].includes(harness)).map((harness) => [harness, routeMetadata(model, harness, snapshot)]))
     }))
   };
@@ -49749,6 +50096,7 @@ var orchestrationModeSchema = _enum2(["off", "auto", "force"]);
 var executionOwnerSchema = _enum2(["auto", "captain", "hybrid", "external"]);
 var roleSchema = _enum2(["executor", "architect", "reviewer", "auditor", "vision", "researcher"]);
 var reasoningEffortSchema = _enum2(["off", "low", "medium", "high", "xhigh", "max"]);
+var runtimeSchema = _enum2(["cli", "acp", "auto", "persistent", "oneshot"]);
 var budgetSchema = object2({
   enforce: boolean2().optional(),
   maxTokens: number2().int().positive().optional(),
@@ -49761,7 +50109,7 @@ var assignmentSchema = object2({
   harness: _enum2(["kimi", "zcode", "dsh", "pi", "claude", "codex"]).optional(),
   role: roleSchema.optional().default("executor"),
   mode: _enum2(["plan", "edit", "build"]).optional(),
-  runtime: _enum2(["cli", "acp"]).optional().default("cli"),
+  runtime: runtimeSchema.optional().default("cli"),
   reasoningEffort: reasoningEffortSchema.optional(),
   contextBudget: number2().int().positive().optional(),
   outputBudget: number2().int().positive().optional(),
@@ -50298,7 +50646,7 @@ server.registerTool("moa_plan", {
       seat: string2(),
       model: modelSchema.optional(),
       modelTier: _enum2(["fast", "deep"]).optional(),
-      runtime: _enum2(["cli", "acp"]).optional().default("cli"),
+      runtime: runtimeSchema.optional().default("cli"),
       reasoningEffort: reasoningEffortSchema.optional(),
       contextBudget: number2().int().positive().optional(),
       outputBudget: number2().int().positive().optional(),
@@ -50390,7 +50738,7 @@ server.registerTool("moa_start", {
       seat: string2(),
       model: modelSchema.optional(),
       modelTier: _enum2(["fast", "deep"]).optional(),
-      runtime: _enum2(["cli", "acp"]).optional().default("cli"),
+      runtime: runtimeSchema.optional().default("cli"),
       reasoningEffort: reasoningEffortSchema.optional(),
       contextBudget: number2().int().positive().optional(),
       outputBudget: number2().int().positive().optional(),
@@ -50560,7 +50908,7 @@ server.registerTool("moa_run", {
       seat: string2(),
       model: modelSchema.optional(),
       modelTier: _enum2(["fast", "deep"]).optional(),
-      runtime: _enum2(["cli", "acp"]).optional().default("cli"),
+      runtime: runtimeSchema.optional().default("cli"),
       reasoningEffort: reasoningEffortSchema.optional(),
       contextBudget: number2().int().positive().optional(),
       outputBudget: number2().int().positive().optional(),

@@ -1,6 +1,6 @@
 {
   "name": "codex-moa",
-  "version": "0.23.0+codex.20260916150526",
+  "version": "0.23.1+codex.20260917014306",
   "description": "Codex-orchestrated mixture of agents for Pi, Claude Code, Codex CLI, KimiCode, ZCode, and DeepSeekHarness.",
   "author": {
     "name": "Flipped929"

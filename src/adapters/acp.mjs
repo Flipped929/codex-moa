@@ -23,10 +23,10 @@ export async function runAcpAdapter({ seat, prompt, config, timeoutMs, allowWrit
     extra: {
       status,
       sessionId: result.sessionId,
-      continuitySupport: "acp-process",
+      continuitySupport: result.runtime ?? "acp-process",
       stopReason: result.stopReason,
       usage: result.usage ?? null,
-      modelSelection: "acp-session",
+      modelSelection: result.runtime ?? "persistent-session",
       reasoningEffort: seat.reasoningEffort,
       reasoningSelection: "acp-session-config"
     }

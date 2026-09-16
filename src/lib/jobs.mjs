@@ -6,7 +6,8 @@ import { dirname, join, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { requestCancellation } from "./control-store.mjs";
-import { pluginRoot } from "./config.mjs";
+import { loadConfig, pluginRoot } from "./config.mjs";
+import { resolveSeatRuntime } from "./runtime-contract.mjs";
 
 const TERMINAL = new Set(["completed", "partial", "failed", "cancelled", "paused"]);
 const THREAD_ID_RE = /^[A-Za-z0-9._:-]{1,160}$/;
@@ -71,6 +72,18 @@ export function assertJobInputSupported(input) {
     for (const seat of collection) {
       if (seat?.env && Object.keys(seat.env).length > 0) {
         throw new Error("Async jobs do not persist per-seat env values. Use synchronous moa_run or provider configuration for credentials.");
+      }
+    }
+  }
+  const config = loadConfig();
+  for (const collection of [input?.seats, input?.assignments]) {
+    if (!Array.isArray(collection)) continue;
+    for (const seat of collection) {
+      if (!["acp", "persistent"].includes(seat?.runtime)) continue;
+      if (!seat.harness) continue;
+      resolveSeatRuntime(seat);
+      if (!config.commands?.[seat.harness]) {
+        throw new Error(`Persistent runtime preflight failed: command is not configured for harness ${seat.harness}`);
       }
     }
   }

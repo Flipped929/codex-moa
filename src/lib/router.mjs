@@ -7,6 +7,7 @@ import { budgetForTask } from "./limits.mjs";
 import { buildTaskGraph } from "./task-graph.mjs";
 import { applyRoleDefaults, loadRoles } from "./roles.mjs";
 import { createHash } from "node:crypto";
+import { applyRuntimeResolution } from "./runtime-contract.mjs";
 
 const HIGH_RISK_RE = /(security|auth|crypto|migration|architecture|payment|credential|deploy|rollback|real[- ]?time|multi[- ]?model|cascade|hardware|production|safety|数据库|架构|安全|支付|迁移|密钥|实时|多模型|级联|硬件|生产)/i;
 const COMPLEX_RE = /(refactor|implement|fix|debug|test|migrate|performance|并发|重构|实现|修复|调试|测试|性能)/i;
@@ -362,6 +363,7 @@ export function planMoA(input = {}, deps = {}) {
   };
 
   for (const seat of plannedSeats) {
+    applyRuntimeResolution(seat);
     const requested = seat.reasoningEffort ?? input.reasoningEffort ?? null;
     seat.reasoningRequested = requested;
     if (requested) {

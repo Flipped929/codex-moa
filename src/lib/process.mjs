@@ -30,7 +30,11 @@ export function runCommand({
   timeoutMs = 300000,
   maxOutputBytes = 8 * 1024 * 1024,
   stripSecretEnv = true,
-  allowSecretExtraEnv = false
+  allowSecretExtraEnv = false,
+  signal,
+  onSpawn,
+  onStdoutChunk,
+  onStderrChunk
 }) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
@@ -47,6 +51,7 @@ export function runCommand({
         shell: false,
         stdio: ["pipe", "pipe", "pipe"]
       });
+      onSpawn?.(child);
     } catch (error) {
       return resolve({
         ok: false,
@@ -64,12 +69,21 @@ export function runCommand({
       return Buffer.byteLength(next, "utf8") <= maxOutputBytes ? next : next.slice(0, maxOutputBytes);
     };
 
-    child.stdout.on("data", (chunk) => { stdout = append(stdout, chunk); });
-    child.stderr.on("data", (chunk) => { stderr = append(stderr, chunk); });
+    child.stdout.on("data", (chunk) => { stdout = append(stdout, chunk); onStdoutChunk?.(chunk); });
+    child.stderr.on("data", (chunk) => { stderr = append(stderr, chunk); onStderrChunk?.(chunk); });
+    let aborted = false;
+    const abort = () => {
+      aborted = true;
+      killTree(child, "SIGTERM");
+      setTimeout(() => killTree(child, "SIGKILL"), 3000).unref?.();
+    };
+    if (signal?.aborted) abort();
+    else signal?.addEventListener?.("abort", abort, { once: true });
     child.on("error", (error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener?.("abort", abort);
       resolve({ ok: false, code: null, signal: null, stdout, stderr: String(error?.message ?? error), timedOut, durationMs: Date.now() - startedAt });
     });
 
@@ -83,7 +97,8 @@ export function runCommand({
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve({ ok: code === 0 && !timedOut, code, signal, stdout, stderr, timedOut, durationMs: Date.now() - startedAt });
+      signal?.removeEventListener?.("abort", abort);
+      resolve({ ok: code === 0 && !timedOut && !aborted, code, signal, stdout, stderr: aborted ? [stderr, "Process cancelled"].filter(Boolean).join("\n") : stderr, timedOut, aborted, durationMs: Date.now() - startedAt });
     });
 
     if (input !== undefined) child.stdin.end(String(input));

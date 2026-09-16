@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import { buildEnv } from "./process.mjs";
@@ -7,6 +8,7 @@ import { prepareDshHome } from "./dsh-home.mjs";
 import { syncZCodeSelection } from "./zcode-model.mjs";
 import { prepareZCodeHome } from "./zcode-home.mjs";
 import { pendingCancellationFor, resolveControlRequest } from "./control-store.mjs";
+import { preparePiHome } from "./pi-home.mjs";
 
 const seats = new Map();
 const DEFAULT_POLL_MS = 500;
@@ -465,6 +467,224 @@ export class ZCodeSeat {
   }
 }
 
+function usageFromPiMessages(messages = []) {
+  let usage = null;
+  for (const message of messages) {
+    if (message?.role !== "assistant" || !message?.usage) continue;
+    const value = normalizeUsage(message.usage);
+    if (value) usage = value;
+  }
+  return usage;
+}
+
+function textFromPiMessages(messages = [], start = 0) {
+  return messages.slice(start).filter((message) => message?.role === "assistant").flatMap((message) => {
+    if (typeof message.content === "string") return [message.content];
+    return (message.content ?? []).filter((part) => part?.type === "text").map((part) => part.text ?? "");
+  }).filter(Boolean).join("\n").trim();
+}
+
+export class PiRpcSeat {
+  constructor({ key, taskId, seat, model, command, args, cwd, writeAllowed, env = {}, sessionId = null }) {
+    this.runtime = "pi-rpc";
+    this.key = key;
+    this.taskId = taskId ?? null;
+    this.seat = seat;
+    this.harness = "pi";
+    this.model = model;
+    this.command = command;
+    this.args = args;
+    this.cwd = cwd;
+    this.writeAllowed = writeAllowed;
+    this.env = env;
+    this.sessionId = sessionId;
+    this.child = null;
+    this.buffer = "";
+    this.pending = new Map();
+    this.nextRequestId = 1;
+    this.turnWaiters = [];
+    this.startedAt = null;
+    this.promptActive = false;
+    this.cancelRequested = false;
+    this.exit = null;
+  }
+
+  send(message) {
+    if (!this.child?.stdin?.writable) throw new Error("Pi RPC process is not writable");
+    this.child.stdin.write(`${JSON.stringify(message)}\n`);
+  }
+
+  request(type, params = {}, timeoutMs = 30000) {
+    const id = `moa-${this.nextRequestId++}`;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`Pi RPC request timed out: ${type}`));
+      }, timeoutMs);
+      this.pending.set(id, { resolve, reject, timer, type });
+      try {
+        this.send({ id, type, ...params });
+      } catch (error) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(error);
+      }
+    });
+  }
+
+  handleMessage(message) {
+    if (message?.type === "response" && message.id && this.pending.has(String(message.id))) {
+      const pending = this.pending.get(String(message.id));
+      this.pending.delete(String(message.id));
+      clearTimeout(pending.timer);
+      if (message.success === false) pending.reject(new Error(message.error ?? `Pi RPC ${pending.type} failed`));
+      else pending.resolve(message.data ?? message);
+      return;
+    }
+    if (["agent_end", "agent_settled"].includes(message?.type)) {
+      const waiters = this.turnWaiters.splice(0);
+      for (const resolve of waiters) resolve(message);
+    }
+  }
+
+  async start(resumeSessionId) {
+    if (this.child?.stdin?.writable) return;
+    this.sessionId = resumeSessionId ?? this.sessionId ?? randomUUID();
+    this.child = spawn(this.command, [...this.args, "--session-id", this.sessionId], {
+      cwd: this.cwd,
+      env: buildEnv(this.env, true),
+      detached: process.platform !== "win32",
+      stdio: ["pipe", "pipe", "inherit"]
+    });
+    this.startedAt = new Date().toISOString();
+    this.child.stdout.on("data", (chunk) => {
+      this.buffer += chunk.toString("utf8");
+      let index;
+      while ((index = this.buffer.indexOf("\n")) >= 0) {
+        const line = this.buffer.slice(0, index);
+        this.buffer = this.buffer.slice(index + 1);
+        if (!line.trim()) continue;
+        try { this.handleMessage(JSON.parse(line)); } catch {}
+      }
+    });
+    this.child.once("exit", (code, signal) => {
+      this.exit = { code, signal, at: new Date().toISOString() };
+      for (const pending of this.pending.values()) {
+        clearTimeout(pending.timer);
+        pending.reject(new Error(`Pi RPC process exited before responding to ${pending.type}`));
+      }
+      this.pending.clear();
+      const waiters = this.turnWaiters.splice(0);
+      for (const resolve of waiters) resolve({ type: "agent_end", reason: "process_exit" });
+    });
+    const state = await this.request("get_state", {}, 30000);
+    this.sessionId = state?.sessionId ?? this.sessionId;
+  }
+
+  async prompt({ prompt, resumeSessionId }) {
+    this.cancelRequested = false;
+    await this.start(resumeSessionId);
+    const before = await this.request("get_messages");
+    const initialCount = (before?.messages ?? []).length;
+    this.promptActive = true;
+    try {
+      const settled = new Promise((resolve) => this.turnWaiters.push(resolve));
+      await this.request("prompt", { message: prompt });
+      await settled;
+      const state = await this.request("get_state");
+      const after = await this.request("get_messages");
+      const messages = after?.messages ?? [];
+      return {
+        sessionId: state?.sessionId ?? this.sessionId,
+        text: textFromPiMessages(messages, initialCount),
+        stopReason: this.cancelRequested ? "cancelled" : "end_turn",
+        usage: usageFromPiMessages(messages.slice(initialCount)),
+        contextUsage: null
+      };
+    } finally {
+      this.promptActive = false;
+    }
+  }
+
+  async cancel() {
+    this.cancelRequested = true;
+    if (!this.child?.stdin?.writable) return false;
+    await this.request("clear_queue").catch(() => {});
+    await this.request("abort", {}, 10000).catch(() => {});
+    return true;
+  }
+
+  stop() {
+    this.promptActive = false;
+    const error = new Error("Pi RPC seat stopped");
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    const waiters = this.turnWaiters.splice(0);
+    for (const resolve of waiters) resolve({ type: "agent_end", reason: "seat_stopped" });
+    killTree(this.child);
+    this.child = null;
+    this.pending.clear();
+  }
+}
+
+export class CliResumeSeat {
+  constructor({ key, taskId, seat, model, harness, cwd, runner, config, timeoutMs, allowWrite }) {
+    this.runtime = `${harness}-resume-bridge`;
+    this.key = key;
+    this.taskId = taskId ?? null;
+    this.seat = seat;
+    this.model = model;
+    this.harness = harness;
+    this.cwd = cwd;
+    this.runner = runner;
+    this.config = config;
+    this.timeoutMs = timeoutMs;
+    this.allowWrite = allowWrite;
+    this.sessionId = null;
+    this.controller = null;
+    this.promptActive = false;
+  }
+
+  async prompt({ prompt, resumeSessionId }) {
+    this.sessionId = resumeSessionId ?? this.sessionId;
+    this.controller = new AbortController();
+    this.promptActive = true;
+    try {
+      const result = await this.runner({
+        seat: { ...this.seat, continuitySessionId: this.sessionId, runtimeMode: "persistent" },
+        prompt,
+        config: this.config,
+        timeoutMs: this.timeoutMs,
+        allowWrite: this.allowWrite,
+        signal: this.controller.signal
+      });
+      this.sessionId = result.sessionId ?? this.sessionId;
+      return {
+        sessionId: this.sessionId,
+        text: result.summary ?? "",
+        stopReason: this.controller.signal.aborted ? "cancelled" : result.status === "done" ? "end_turn" : "error",
+        usage: result.usage ?? null,
+        contextUsage: null
+      };
+    } finally {
+      this.promptActive = false;
+      this.controller = null;
+    }
+  }
+
+  async cancel() {
+    this.controller?.abort();
+    return Boolean(this.controller);
+  }
+
+  stop() {
+    this.controller?.abort();
+    this.controller = null;
+  }
+}
+
 export function acpCommandFor(harness, config, seat = {}) {
   const explicit = config.acp?.commands?.[harness];
   if (explicit) return commandParts(explicit);
@@ -515,8 +735,25 @@ async function createSeat({ seat, config, allowWrite, timeoutMs }) {
       config: { ...config, zcode: { ...(config.zcode ?? {}), cliConfig: zcodeHome.cliConfigPath } }
     });
   }
-  const command = acpCommandFor(seat.harness, config, seat);
   const key = seatKey(seat);
+  if (seat.harness === "pi") {
+    const piHome = config.pi?.syncCcSwitchProviders === false ? null : await preparePiHome(config);
+    const provider = seat.pi?.provider;
+    const model = seat.pi?.model ?? seat.providerModel ?? seat.model;
+    if (!provider) throw new Error(`Pi provider is not configured for model ${seat.model}`);
+    if (piHome && !piHome.providerIds.includes(provider)) throw new Error(`CC Switch Pi provider is not configured: ${provider}`);
+    const base = commandParts(config.commands.pi);
+    const writeEnabled = allowWrite && seat.autoApprove && seat.mode !== "plan";
+    const args = [...base.args, "--provider", provider, "--model", model, "--mode", "rpc", "--tools", writeEnabled ? "read,bash,edit,write,grep,find,ls" : "read,grep,find,ls", "--approve"];
+    if (seat.reasoningEffort) args.push("--thinking", seat.reasoningEffort);
+    for (const skillPath of seat.skillPaths ?? []) args.push("--skill", skillPath);
+    return new PiRpcSeat({ key, taskId: seat.taskId, seat: seat.seat, model: seat.model, command: base.command, args, cwd: seat.cwd, writeAllowed: writeEnabled, env: piHome ? { PI_CODING_AGENT_DIR: piHome.home } : {}, sessionId: seat.continuitySessionId });
+  }
+  if (["claude", "codex"].includes(seat.harness)) {
+    const { getAdapter } = await import("../adapters/index.mjs");
+    return new CliResumeSeat({ key, taskId: seat.taskId, seat, model: seat.model, harness: seat.harness, cwd: seat.cwd, runner: getAdapter(seat.harness), config, timeoutMs, allowWrite });
+  }
+  const command = acpCommandFor(seat.harness, config, seat);
   if (seat.harness === "zcode") {
     return new ZCodeSeat({
       key,
@@ -571,14 +808,14 @@ export async function runAcpSeat({ seat, prompt, config, timeoutMs, allowWrite =
     const result = await Promise.race([
       seatProcess.prompt({ prompt, resumeSessionId: seat.continuitySessionId }),
       new Promise((_, reject) => {
-        timeoutHandle = setTimeout(() => reject(new Error(`ACP seat timed out after ${timeoutMs}ms`)), timeoutMs);
+        timeoutHandle = setTimeout(() => reject(new Error(`Persistent seat timed out after ${timeoutMs}ms`)), timeoutMs);
         timeoutHandle.unref?.();
       })
     ]);
     if (controlRequest) {
       await resolveControlRequest(controlRequest.id, { status: "fulfilled", detail: { taskId: seat.taskId, seat: seat.seat, result: result.stopReason } });
     }
-    return result;
+    return { ...result, runtime: seatProcess.runtime };
   } catch (error) {
     seatProcess.stop();
     seats.delete(key);
@@ -596,7 +833,7 @@ export async function cancelAcpSeats(filter = {}) {
     if (filter.key && key !== filter.key) continue;
     if (filter.taskId && seat.taskId !== filter.taskId) continue;
     if (filter.seat && seat.seat !== filter.seat) continue;
-    if (!seat.child) continue;
+    if (!seat.child && !seat.promptActive) continue;
     let cancelled = false;
     let error = null;
     try {

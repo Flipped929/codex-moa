@@ -17,6 +17,11 @@ test("rejects async jobs that try to persist per-seat env secrets", () => {
   assert.throws(() => assertJobInputSupported({ seats: [{ env: { SECRET: "value" } }] }), /do not persist per-seat env/i);
 });
 
+test("preflights persistent Harness requests before creating a background job", () => {
+  assert.doesNotThrow(() => assertJobInputSupported({ assignments: [{ harness: "pi", runtime: "persistent" }] }));
+  assert.throws(() => assertJobInputSupported({ assignments: [{ harness: "unknown", runtime: "persistent" }] }), /No persistent runtime configured/);
+});
+
 test("background workers inherit only an explicit environment allowlist", () => {
   const env = buildJobWorkerEnv({ PATH: "/bin", LANG: "en_US.UTF-8", RANDOM_VALUE: "no", OPENAI_API_KEY: "secret", CODEX_MOA_BLACKBOARD: "/tmp/moa" });
   assert.equal(env.PATH, "/bin");

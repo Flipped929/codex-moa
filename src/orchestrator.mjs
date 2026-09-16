@@ -9,6 +9,7 @@ import { depletedModels, providerForModel, quotaForSeats, readQuotaSnapshot, ref
 import { auditConflict, resolveCaptain } from "./lib/captain.mjs";
 import { recordEvolutionEvent } from "./lib/evolution.mjs";
 import { clearContinuityEntry, continuityEntry, makeContinuityKey, mergeContinuityStore, readContinuityStore, setContinuityEntry } from "./lib/continuity.mjs";
+import { isPersistentRuntime } from "./lib/runtime-contract.mjs";
 import { buildMemoryPack, loadMemory, recordEpisode } from "./lib/memory.mjs";
 import { listSeats, readSeatRegistry, seatRegistryPath, upsertSeatAtomic } from "./lib/seat-registry.mjs";
 import { captureWorktreeDiff, createWorktree, inspectWorktree, removeWorktree, writeDiffArtifact } from "./lib/worktree.mjs";
@@ -162,6 +163,9 @@ async function updateRegistrySeat(taskId, seat, patch) {
     model: seat.model,
     role: seat.role,
     runtime: seat.runtime ?? "cli",
+    runtimeMode: seat.runtimeMode ?? null,
+    runtimeTransport: seat.runtimeTransport ?? null,
+    controlCapability: seat.controlCapability ?? "boundary",
     reasoningEffort: seat.reasoningEffort,
     contextBudget: seat.contextBudget,
     outputBudget: seat.outputBudget,
@@ -207,7 +211,7 @@ export async function runMoA(input, deps = {}) {
   const models = deps.models ?? loadEffectiveModels();
   const schedule = deps.schedule ?? loadSchedule();
   const pricing = deps.pricing ?? loadPricing();
-  const adapterFor = deps.adapterFor ?? ((seat) => seat.runtime === "acp" ? runAcpAdapter : getAdapter(seat.harness));
+  const adapterFor = deps.adapterFor ?? ((seat) => isPersistentRuntime(seat) ? runAcpAdapter : getAdapter(seat.harness));
   const createWorktreeFn = deps.createWorktree ?? createWorktree;
   const captureDiff = deps.captureWorktreeDiff ?? captureWorktreeDiff;
   const captain = await resolveCaptain({ captainModel: input.captainModel });
@@ -332,7 +336,7 @@ export async function runMoA(input, deps = {}) {
     input: sanitizeInput(input),
     plan: {
       level: plan.level,
-      seats: plan.seats.map((seat) => ({ seat: seat.seat, model: seat.model, harness: seat.harness, role: seat.role, runtime: seat.runtime ?? "cli", auditMode: seat.auditMode ?? null, pairedExecutor: seat.pairedExecutor ?? null })),
+      seats: plan.seats.map((seat) => ({ seat: seat.seat, model: seat.model, harness: seat.harness, role: seat.role, runtime: seat.runtime ?? "cli", runtimeMode: seat.runtimeMode ?? null, runtimeTransport: seat.runtimeTransport ?? null, controlCapability: seat.controlCapability ?? "boundary", auditMode: seat.auditMode ?? null, pairedExecutor: seat.pairedExecutor ?? null })),
       auditStrategy: plan.auditStrategy ?? null,
       failureRouting: plan.failureRouting ?? null,
       routingExperiment: plan.routingExperiment ?? null
@@ -470,7 +474,7 @@ export async function runMoA(input, deps = {}) {
         memoryPack ? `## Prior memory (may be stale; verify against current workspace)\n${memoryPack}` : null
       ].filter(Boolean).join("\n\n")
     });
-    appendEvent(eventsPath, { type: "seat_started", seat: seat.seat, harness: seat.harness, model: seat.model, runtime: seat.runtime ?? "cli" });
+    appendEvent(eventsPath, { type: "seat_started", seat: seat.seat, harness: seat.harness, model: seat.model, runtime: seat.runtime ?? "cli", runtimeMode: seat.runtimeMode ?? null, runtimeTransport: seat.runtimeTransport ?? null, controlCapability: seat.controlCapability ?? "boundary" });
     updateCheckpointNode(checkpoint, seat.seat, { status: "running", startedAt: new Date().toISOString(), worktreePath: seat.worktree?.path ?? null, originalCwd: seat.originalCwd ?? null });
     await writeCheckpoint(workspace.dirs.root, checkpoint);
     await reportProgress({ type: "seat_started", activeSeat: seat.seat, layer: layerIndex });

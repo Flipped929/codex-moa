@@ -79,7 +79,7 @@ Reasoning effort is part of model assignment. Priority is explicit `reasoningEff
 
 ## Persistent runtime
 
-Use `runtime="acp"` when a related multi-turn task needs a persistent process and real session resume. CLI runtime remains the default fallback.
+Use `runtime="persistent"` when a related multi-turn task needs cancellation and real session resume. The legacy `runtime="acp"` spelling is an alias. KimiCode and DSH use native ACP, ZCode uses its app-server bridge, Pi uses its JSONL RPC bridge, and Claude Code/Codex CLI use cancellable session-resume bridges. One-shot CLI remains the default fallback.
 
 ## Runtime governance
 
@@ -111,8 +111,8 @@ Use `moa_memory` for continuing work and important decisions. Record decisions, 
 - Keep balanced budgets unless the task genuinely needs `limitMode="max"`.
 - For multi-turn or continuing work, pass a stable `continuityKey`.
 - Reuse a continuity session only with the same seat, model, and workspace.
-- Native ACP harnesses support `session/resume`; ZCode is bridged through its app-server and uses `session/resume`/`session/stop`.
-- Use `runtime="acp"` when real same-process continuity or mid-run cancellation matters.
+- The persistent runtime contract is available for every supported Harness. Inspect `runtimeTransport` and `controlCapability`; do not infer that every transport speaks native ACP or supports immediate steer.
+- Use `runtime="persistent"` when real continuity or mid-run cancellation matters. Use legacy `runtime="acp"` only for compatibility.
 
 ## Self-evolution gate
 

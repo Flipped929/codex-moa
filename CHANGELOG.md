@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.23.1
+
+- Add a protocol-neutral persistent runtime contract across KimiCode, DeepSeekHarness, ZCode, Pi, Claude Code, and Codex CLI while retaining `runtime="acp"` as a compatibility alias.
+- Bridge Pi through JSONL RPC and Claude Code/Codex CLI through cancellable session-resume adapters, fixing Pi jobs that previously failed with `No ACP command configured for harness: pi`.
+- Preflight explicit persistent Harness assignments before creating background jobs so unsupported configurations fail before a misleading queued job is recorded.
+- Report each seat's resolved runtime mode, transport, job-level control boundary, and native protocol steering support without claiming that every Harness speaks ACP on the wire.
+- Extend cancellation, capability probes, documentation, and regression coverage for the unified persistent runtime.
+
 ## 0.23.0
 
 - Make the page-selected captain the primary executor for L3 implementation: it owns architecture, critical implementation, integration, and repair while external seats provide bounded architecture, research, testing, benchmarking, and audit support.

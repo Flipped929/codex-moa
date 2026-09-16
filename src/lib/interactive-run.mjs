@@ -35,7 +35,7 @@ export function backgroundRequirement(input = {}) {
   if (Number(input.timeoutMs ?? 0) > INTERACTIVE_LIMIT_MS) reasons.push(`timeoutMs exceeds ${INTERACTIVE_LIMIT_MS}`);
   if (input.allowWrite === true) reasons.push("write-enabled execution");
   if (LONG_TASK_RE.test(String(input.task ?? ""))) reasons.push("task is likely long-running or remote");
-  if ((input.assignments ?? input.seats ?? []).some((seat) => seat?.runtime === "acp")) reasons.push("persistent ACP runtime");
+  if ((input.assignments ?? input.seats ?? []).some((seat) => ["acp", "persistent"].includes(seat?.runtime))) reasons.push("persistent agent runtime");
   return reasons.length > 0 ? {
     code: "BACKGROUND_REQUIRED",
     message: "This run must use moa_start so the Codex turn stays steerable.",

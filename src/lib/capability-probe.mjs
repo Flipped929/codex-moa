@@ -8,6 +8,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
+import { runtimeCapabilities } from "./runtime-contract.mjs";
 
 function routeMetadata(model, harness, snapshot) {
   const route = model[harness];
@@ -79,6 +80,7 @@ export async function capabilityMatrix() {
       capabilities: model.capabilities ?? [],
       reasoning: model.reasoning,
       limits: model.limits,
+      runtime: Object.fromEntries((model.supportedHarnesses ?? [model.harness]).map((harness) => [harness, runtimeCapabilities(harness)])),
       routes: Object.fromEntries((model.supportedHarnesses ?? [model.harness])
         .filter((harness) => ["pi", "claude", "codex"].includes(harness))
         .map((harness) => [harness, routeMetadata(model, harness, snapshot)]))

@@ -16,6 +16,15 @@ function seat(name) {
   return { seat: name, taskId: "acp-test", harness: "kimi", model: "kimi-2.8", providerModel: "kimi-code/kimi-for-coding", role: "executor", mode: "plan", runtime: "acp", cwd: process.cwd(), autoApprove: false };
 }
 
+function piConfig() {
+  return {
+    defaultCwd: process.cwd(),
+    pi: { syncCcSwitchProviders: false },
+    commands: { pi: { command: process.execPath, args: [resolve("tests/fixtures/fake-pi-rpc.mjs")] } },
+    safety: { stripSecretEnv: false }
+  };
+}
+
 test("runs an ACP prompt and extracts usage", async () => {
   try {
     const result = await runAcpSeat({ seat: seat("fake-normal"), prompt: "hello", config: config(), timeoutMs: 5000, allowWrite: false });
@@ -47,6 +56,36 @@ test("cancels an in-flight ACP prompt", async () => {
   } finally {
     if (previous === undefined) delete process.env.FAKE_ACP_HANG;
     else process.env.FAKE_ACP_HANG = previous;
+    await stopAcpSeats();
+  }
+});
+
+test("bridges Pi RPC into the persistent seat contract", async () => {
+  try {
+    const result = await runAcpSeat({
+      seat: {
+        seat: "pi-rpc",
+        taskId: "pi-rpc-test",
+        harness: "pi",
+        model: "GLM-5.3",
+        pi: { provider: "zai", model: "glm-5.3" },
+        role: "executor",
+        mode: "plan",
+        runtime: "acp",
+        cwd: process.cwd(),
+        autoApprove: false
+      },
+      prompt: "hello",
+      config: piConfig(),
+      timeoutMs: 5000,
+      allowWrite: false
+    });
+    assert.equal(result.text, "FAKE_PI_RPC_OK");
+    assert.equal(result.stopReason, "end_turn");
+    assert.equal(result.usage.totalTokens, 7);
+    assert.ok(result.sessionId);
+    assert.equal(listAcpSeats().find((entry) => entry.seat === "pi-rpc")?.runtime, "pi-rpc");
+  } finally {
     await stopAcpSeats();
   }
 });

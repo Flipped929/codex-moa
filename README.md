@@ -360,9 +360,9 @@ moa_worktrees(action="prune", cwd="/repo", dryRun=true)
 
 Worktree inspection includes tracked and untracked files, conflict markers, binary diff size, and `partialWrite` when a failed/cancelled seat left changes.
 
-## Persistent ACP runtime
+## Persistent agent runtime
 
-Seats can opt into persistent ACP processes with `runtime="acp"` for KimiCode and DSH. ZCode does not expose ACP natively, so codex-moa bridges the ZCode Protocol `app-server` into the same seat contract.
+Seats can opt into the protocol-neutral persistent contract with `runtime="persistent"`; `runtime="acp"` remains a compatibility alias. KimiCode and DSH use native ACP, ZCode uses its app-server bridge, Pi uses JSONL RPC, Claude Code uses streaming session resume, and Codex CLI uses exec session resume. Capability output identifies the real transport, native protocol steering support, and the currently exposed job-level steering boundary.
 
 ```bash
 npm run acp:smoke -- --harness all --json

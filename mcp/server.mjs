@@ -43,6 +43,7 @@ const orchestrationModeSchema = z.enum(["off", "auto", "force"]);
 const executionOwnerSchema = z.enum(["auto", "captain", "hybrid", "external"]);
 const roleSchema = z.enum(["executor", "architect", "reviewer", "auditor", "vision", "researcher"]);
 const reasoningEffortSchema = z.enum(["off", "low", "medium", "high", "xhigh", "max"]);
+const runtimeSchema = z.enum(["cli", "acp", "auto", "persistent", "oneshot"]);
 const budgetSchema = z.object({
   enforce: z.boolean().optional(),
   maxTokens: z.number().int().positive().optional(),
@@ -55,7 +56,7 @@ const assignmentSchema = z.object({
   harness: z.enum(["kimi", "zcode", "dsh", "pi", "claude", "codex"]).optional(),
   role: roleSchema.optional().default("executor"),
   mode: z.enum(["plan", "edit", "build"]).optional(),
-  runtime: z.enum(["cli", "acp"]).optional().default("cli"),
+  runtime: runtimeSchema.optional().default("cli"),
   reasoningEffort: reasoningEffortSchema.optional(),
   contextBudget: z.number().int().positive().optional(),
   outputBudget: z.number().int().positive().optional(),
@@ -619,7 +620,7 @@ server.registerTool("moa_plan", {
       seat: z.string(),
       model: modelSchema.optional(),
       modelTier: z.enum(["fast", "deep"]).optional(),
-      runtime: z.enum(["cli", "acp"]).optional().default("cli"),
+      runtime: runtimeSchema.optional().default("cli"),
       reasoningEffort: reasoningEffortSchema.optional(),
       contextBudget: z.number().int().positive().optional(),
       outputBudget: z.number().int().positive().optional(),
@@ -712,7 +713,7 @@ server.registerTool("moa_start", {
       seat: z.string(),
       model: modelSchema.optional(),
       modelTier: z.enum(["fast", "deep"]).optional(),
-      runtime: z.enum(["cli", "acp"]).optional().default("cli"),
+      runtime: runtimeSchema.optional().default("cli"),
       reasoningEffort: reasoningEffortSchema.optional(),
       contextBudget: z.number().int().positive().optional(),
       outputBudget: z.number().int().positive().optional(),
@@ -881,7 +882,7 @@ server.registerTool("moa_run", {
       seat: z.string(),
       model: modelSchema.optional(),
       modelTier: z.enum(["fast", "deep"]).optional(),
-      runtime: z.enum(["cli", "acp"]).optional().default("cli"),
+      runtime: runtimeSchema.optional().default("cli"),
       reasoningEffort: reasoningEffortSchema.optional(),
       contextBudget: z.number().int().positive().optional(),
       outputBudget: z.number().int().positive().optional(),

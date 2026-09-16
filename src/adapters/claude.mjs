@@ -2,8 +2,9 @@ import { commandParts, createResult, resolveCwd } from "./base.mjs";
 import { runCommand } from "../lib/process.mjs";
 import { extractClaudeOutput, extractSessionId, extractUsage } from "../lib/parser.mjs";
 import { prepareClaudeHome } from "../lib/cli-homes.mjs";
+import { randomUUID } from "node:crypto";
 
-export async function runClaudeSeat({ seat, prompt, config, timeoutMs, allowWrite = false }) {
+export async function runClaudeSeat({ seat, prompt, config, timeoutMs, allowWrite = false, signal }) {
   const cwd = resolveCwd(seat.cwd, config.defaultCwd);
   const { command, args: baseArgs } = commandParts(config.commands.claude);
   const provider = seat.claude?.provider;
@@ -27,8 +28,11 @@ export async function runClaudeSeat({ seat, prompt, config, timeoutMs, allowWrit
   ];
   if (!writeEnabled) args.push("--restricted", "--tools", "Read,Grep,Glob");
   if (seat.maxTurns) args.push("--max-turns", String(seat.maxTurns));
-  if (!seat.continuitySessionId) args.push("--no-session-persistence");
-  else args.push("--resume", seat.continuitySessionId);
+  const persistent = seat.runtimeMode === "persistent" || seat.runtime === "acp" || seat.runtime === "persistent";
+  const requestedSessionId = seat.continuitySessionId ?? (persistent ? randomUUID() : null);
+  if (seat.continuitySessionId) args.push("--resume", seat.continuitySessionId);
+  else if (requestedSessionId) args.push("--session-id", requestedSessionId);
+  else args.push("--no-session-persistence");
   for (const skillPath of runtime.projectedSkills) args.push("--add-dir", skillPath);
   args.push(prompt);
 
@@ -38,10 +42,11 @@ export async function runClaudeSeat({ seat, prompt, config, timeoutMs, allowWrit
     cwd,
     timeoutMs,
     env: { CLAUDE_CONFIG_DIR: runtime.home },
-    stripSecretEnv: config.safety?.stripSecretEnv !== false
+    stripSecretEnv: config.safety?.stripSecretEnv !== false,
+    signal
   });
   const text = extractClaudeOutput(run.stdout);
-  const sessionId = extractSessionId(run.stdout) ?? seat.continuitySessionId ?? null;
+  const sessionId = extractSessionId(run.stdout) ?? requestedSessionId;
   return createResult({
     seat,
     run,

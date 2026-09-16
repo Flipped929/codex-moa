@@ -175,9 +175,9 @@ export async function doctor({ checkLatest = false } = {}) {
       kimi: "cli-session-resume + acp-session-resume",
       zcode: "cli-session-resume + app-server bridge",
       dsh: "acp-session-resume",
-      pi: "cli-session-id",
-      claude: "cli-resume",
-      codex: "ephemeral"
+      pi: "rpc protocol steer/abort/compact + cli-session-id",
+      claude: "stream-json-resume bridge",
+      codex: "exec-resume bridge + app-server available"
     },
     zcodeSelections,
     checks: {

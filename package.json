@@ -1,6 +1,6 @@
 {
   "name": "codex-moa",
-  "version": "0.23.0",
+  "version": "0.23.1",
   "description": "Codex orchestrated mixture-of-agents for Pi, Claude Code, Codex CLI, KimiCode, ZCode, and DeepSeekHarness",
   "type": "module",
   "private": true,

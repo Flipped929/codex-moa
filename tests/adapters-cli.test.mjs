@@ -69,3 +69,49 @@ test("Codex CLI adapter uses isolated CODEX_HOME and a read-only sandbox", async
   assert.equal(args[args.indexOf("--sandbox") + 1], "read-only");
   assert.equal(args[args.indexOf("--ask-for-approval") + 1], "never");
 });
+
+test("Claude persistent bridge creates a resumable session", async () => {
+  const result = await runClaudeSeat({
+    seat: {
+      seat: "claude-persistent",
+      harness: "claude",
+      model: "kimi-k3",
+      claude: { provider: "kimi", model: "k3[1M]" },
+      role: "reviewer",
+      mode: "plan",
+      runtimeMode: "persistent"
+    },
+    prompt: "inspect only",
+    config: await testConfig(),
+    timeoutMs: 5000,
+    allowWrite: false
+  });
+  const args = JSON.parse(result.summary);
+  assert.ok(args.includes("--session-id"));
+  assert.equal(args.includes("--no-session-persistence"), false);
+  assert.ok(result.sessionId);
+});
+
+test("Codex persistent bridge resumes the requested session", async () => {
+  const result = await runCodexSeat({
+    seat: {
+      seat: "codex-persistent",
+      harness: "codex",
+      model: "DeepSeek-flash",
+      codex: { provider: "deepseek", model: "deepseek-flash" },
+      role: "reviewer",
+      mode: "plan",
+      runtimeMode: "persistent",
+      continuitySessionId: "12345678-1234-1234-1234-123456789abc"
+    },
+    prompt: "inspect only",
+    config: await testConfig(),
+    timeoutMs: 5000,
+    allowWrite: false
+  });
+  const args = JSON.parse(result.summary);
+  assert.ok(args.includes("resume"));
+  assert.ok(args.includes("12345678-1234-1234-1234-123456789abc"));
+  assert.equal(args.includes("--ephemeral"), false);
+  assert.equal(result.continuitySupport, "codex-exec-resume");
+});
