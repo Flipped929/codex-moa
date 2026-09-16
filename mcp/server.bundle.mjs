@@ -27798,7 +27798,7 @@ function runCommand({
 var SECRET_ENV_RE;
 var init_process = __esm({
   "src/lib/process.mjs"() {
-    SECRET_ENV_RE = /(API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH)/i;
+    SECRET_ENV_RE = /(^|[_-])(API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS?|AUTH|AUTHORIZATION)([_-]|$)/i;
   }
 });
 

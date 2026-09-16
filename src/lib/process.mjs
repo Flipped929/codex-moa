@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-const SECRET_ENV_RE = /(API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH)/i;
+const SECRET_ENV_RE = /(^|[_-])(API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS?|AUTH|AUTHORIZATION)([_-]|$)/i;
 export function buildEnv(extra = {}, stripSecretEnv = true, allowSecretExtraEnv = false) {
   const base = stripSecretEnv
     ? Object.fromEntries(Object.entries(process.env).filter(([key]) => !SECRET_ENV_RE.test(key)))

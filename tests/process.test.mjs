@@ -25,3 +25,18 @@ test("strips secrets from inherited and caller-supplied environment", () => {
     else process.env.TEST_API_KEY = previous;
   }
 });
+
+test("preserves Git author identity while stripping exact auth fields", () => {
+  const env = buildEnv({
+    GIT_AUTHOR_NAME: "Codex MOA",
+    GIT_AUTHOR_EMAIL: "codex-moa@localhost",
+    GIT_COMMITTER_NAME: "Codex MOA",
+    AUTH_TOKEN: "secret",
+    HTTP_AUTHORIZATION: "secret"
+  }, true);
+  assert.equal(env.GIT_AUTHOR_NAME, "Codex MOA");
+  assert.equal(env.GIT_AUTHOR_EMAIL, "codex-moa@localhost");
+  assert.equal(env.GIT_COMMITTER_NAME, "Codex MOA");
+  assert.equal(env.AUTH_TOKEN, undefined);
+  assert.equal(env.HTTP_AUTHORIZATION, undefined);
+});
